@@ -20,6 +20,7 @@ from DSL.Q2D import Post2DSL
 from vector_db_manager import get_vector_db
 from pre_cond_manager import PreconditionsManager
 from config_loader import load_config_from_file
+from collector import Collector
 
 
 
@@ -350,10 +351,10 @@ class FunctionProcessor:
     
 
     def run_analysis(self):
-        """Execute main analysis workflow"""
+        """Execute main generation workflow"""
         # Start overall timing
         self.start_time = time.time()
-        self.logger.info(f"\n🚀 Starting analysis of function: {self.config.function_name}")
+        self.logger.info(f"\n🚀 Starting generation of function: {self.config.function_name}")
         
         # Initialize entry function
         self.logger.info("\nFUNCTION INITIALIZATION")
@@ -403,6 +404,10 @@ class FunctionProcessor:
         # End overall timing and output statistics
         self.end_time = time.time()
         self._log_overall_timing()
+
+        # Collect correct results
+        if self.config.collect and self.first_pass['satisfy'] is not None:
+            self._collect_results(main_func.file_path)
         
 
     def _handle_existing_function(self, func: FunctionInfo):
@@ -561,6 +566,20 @@ class FunctionProcessor:
 
         verifier = SpecVerifier(self.config,self.logger)
         verifier.run(self.config.function_name)   # Pass complete path
+
+    def _collect_results(self,input_file_path:str):
+        self.logger.info("collecting results")
+       
+        output_file_path = self.config.output_path
+
+        with open(input_file_path, 'r', encoding='utf-8') as f:
+            input_code = f.read()
+        with open(output_file_path, 'r', encoding='utf-8') as f:
+            output_code = f.read()
+
+        collector = Collector()
+
+        collector.add_specification_to_file(input_code,output_code,'add.json')
 
 
       

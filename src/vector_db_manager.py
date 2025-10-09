@@ -48,17 +48,18 @@ class VectorDBManager:
         
         try:
             if db_path and os.path.exists(db_path):
+                # Load database instance from existing ChromaDB file
+                self._vector_db = LangChainVectorDB(persist_directory)
+                self._db_path = db_path
+                self._persist_directory = persist_directory
+                print(f"✅ Vector database loaded successfully")
+                
+            else:
                 # Initialize database using specified JSON file
                 self._vector_db = process_json_to_langchain_db(db_path, persist_directory, mode='init')
                 self._db_path = db_path
                 self._persist_directory = persist_directory
                 print(f"✅ Vector database initialized successfully")
-            else:
-                # Create empty database instance
-                self._vector_db = LangChainVectorDB(persist_directory)
-                self._db_path = db_path
-                self._persist_directory = persist_directory
-                print(f"✅ Empty vector database instance created successfully")
                 
         except Exception as e:
             print(f"❌ Vector database initialization failed: {str(e)}")

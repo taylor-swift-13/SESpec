@@ -90,6 +90,8 @@ void TripleAbsMaxFun(TripleAbsMax *pIp)
     }
 
     *(pIp->ret) = pIp->tmax;
+
+
 }
 /*@
     requires \valid(pIp);
