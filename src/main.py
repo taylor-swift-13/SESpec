@@ -21,6 +21,7 @@ from vector_db_manager import get_vector_db
 from pre_cond_manager import PreconditionsManager
 from config_loader import load_config_from_file
 from collector import Collector
+from llm import get_token_stats, reset_token_stats
 
 
 
@@ -168,6 +169,9 @@ class FunctionProcessor:
         self.start_time = None
         self.end_time = None
         
+        # 重置 token 统计（开始新的分析时）
+        reset_token_stats()
+        
         self.config.input_path = os.path.join(self.config.input_dir,self.config.root_dir)
         self.config.annotated_c_file_path= os.path.join(self.config.annotated_c_dir,self.config.root_dir)
         self.config.annotated_loop_c_file_path = os.path.join(self.config.annotated_loop_dir,self.config.root_dir)
@@ -201,6 +205,24 @@ class FunctionProcessor:
             self.logger.info("⏰ OVERALL EXECUTION TIME STATISTICS")
             self.logger.info(f"Total execution time: {total_duration:.2f} seconds ({total_duration/60:.2f} minutes)")
             self.logger.info("="*50)
+    
+    def _log_token_stats(self):
+        """Log token usage statistics"""
+        stats = get_token_stats()
+        self.logger.info("="*50)
+        self.logger.info("📊 TOKEN USAGE STATISTICS")
+        self.logger.info(f"Total API calls: {stats['call_count']}")
+        self.logger.info(f"Total prompt tokens (input): {stats['total_prompt_tokens']:,}")
+        self.logger.info(f"Total completion tokens (output): {stats['total_completion_tokens']:,}")
+        self.logger.info(f"Total tokens: {stats['total_tokens']:,}")
+        if stats['call_count'] > 0:
+            avg_prompt = stats['total_prompt_tokens'] / stats['call_count']
+            avg_completion = stats['total_completion_tokens'] / stats['call_count']
+            avg_total = stats['total_tokens'] / stats['call_count']
+            self.logger.info(f"Average prompt tokens per call: {avg_prompt:.1f}")
+            self.logger.info(f"Average completion tokens per call: {avg_completion:.1f}")
+            self.logger.info(f"Average total tokens per call: {avg_total:.1f}")
+        self.logger.info("="*50)
 
         
         
@@ -404,6 +426,7 @@ class FunctionProcessor:
         # End overall timing and output statistics
         self.end_time = time.time()
         self._log_overall_timing()
+        self._log_token_stats()
 
         # Collect correct results
         if self.config.collect and self.first_pass['satisfy'] is not None:

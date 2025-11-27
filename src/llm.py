@@ -2,6 +2,48 @@ import openai
 import re
 from config import LLMConfig
 from abc import ABC, abstractmethod # 导入 ABC 和 abstractmethod 用于创建抽象基类
+from typing import Dict
+
+
+# 全局 token 统计追踪器
+class TokenTracker:
+    """全局 token 使用统计追踪器"""
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance.stats = {
+                "total_prompt_tokens": 0,
+                "total_completion_tokens": 0,
+                "total_tokens": 0,
+                "call_count": 0
+            }
+        return cls._instance
+    
+    def record(self, prompt_tokens: int, completion_tokens: int, total_tokens: int):
+        """记录一次 API 调用的 token 使用情况"""
+        self.stats["total_prompt_tokens"] += prompt_tokens
+        self.stats["total_completion_tokens"] += completion_tokens
+        self.stats["total_tokens"] += total_tokens
+        self.stats["call_count"] += 1
+    
+    def get_stats(self) -> Dict:
+        """获取当前统计信息"""
+        return self.stats.copy()
+    
+    def reset(self):
+        """重置统计信息"""
+        self.stats = {
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+            "total_tokens": 0,
+            "call_count": 0
+        }
+
+
+# 全局 token 追踪器实例
+_token_tracker = TokenTracker()
 
 
 
@@ -59,6 +101,14 @@ class OpenAILLM(BaseChatModel):
 
             assistant_response = response.choices[0].message.content
             
+            # 记录 token 使用情况
+            if response.usage:
+                _token_tracker.record(
+                    prompt_tokens=response.usage.prompt_tokens,
+                    completion_tokens=response.usage.completion_tokens,
+                    total_tokens=response.usage.total_tokens
+                )
+            
             # 处理 <think> 标签，并更新历史
             processed_response = self._process_response_think_tags(assistant_response)
             self.messages.append({"role": "assistant", "content": assistant_response}) # 原始响应加入历史以保持完整上下文
@@ -92,6 +142,16 @@ class Chatbot:
             return "Error: LLM instance not initialized"
         response = self.llm_instance.generate_response(user_input)
         return response
+
+
+def get_token_stats() -> Dict:
+    """获取全局 token 使用统计信息"""
+    return _token_tracker.get_stats()
+
+
+def reset_token_stats():
+    """重置全局 token 使用统计信息"""
+    _token_tracker.reset()
     
 
 

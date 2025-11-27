@@ -8,10 +8,7 @@ typedef struct __TripleAbsMax
 
 /*@
  requires \valid(pIp) && \valid(pIp->ret) ;
- requires \separated(pIp,pIp->ret) ;
- requires \valid(pIp);
- requires \valid(pIp->ret);
- requires \separated(pIp, pIp->ret);
+ requires \separated(pIp, pIp->ret) ;
 
  ensures pIp->ret == \old(pIp->ret);
 
@@ -51,9 +48,7 @@ typedef struct __TripleAbsMax
  assigns pIp->tmax, *(pIp->ret);
 */
 void TripleAbsMaxFun(TripleAbsMax *pIp)
-
 {
-    
     int absfx1 = pIp->abs[0];
     int absfy2 = pIp->abs[1];
     int absfz3 = pIp->abs[2];
@@ -88,6 +83,4 @@ void TripleAbsMaxFun(TripleAbsMax *pIp)
     }
 
     *(pIp->ret) = pIp->tmax;
-
-
 }

@@ -23,17 +23,16 @@ Ensure emp
    
   /*@ Print user assertion at number LoopEntry_0*/ 
 /*@ Inv
-    (x == 1 + (y * (y - 1)) / 2) &&
-(0 <= y && y <= 100000
-          loop assigns x, y)
+    (x == (y * (y - 1)) / 2 + 1) &&
+(y >= 0
+      loop assigns x, y)
     */
     
-            while (y < 100000) {
+    while (y < 100000) {
       
-       x  = x + y;
-       y  = y + 1;
+        x = x + y;
+        y = y + 1;
       
-  
     }
   
     
