@@ -19,7 +19,7 @@ int foo0021(int k, int n) {
         for (; j < n; j++) {
             if(unknown1()) {
                 
-                /*@ forall integer k; j <= k < n; k >= 2*i; */
+               /*@ forall integer k; j <= k < n; k >= 2*i; */
             }
             else {
                 /*@ assert k>=n && k <= n;*/

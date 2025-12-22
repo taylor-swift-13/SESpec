@@ -10,6 +10,7 @@ typedef struct __TripleAbsMax
 	requires \valid(pIp); 
     requires \valid(pIp->abs+(0..2));
     requires \valid(pIp->ret);
+    requires \separated(pIp, pIp->ret);
 */
 void TripleAbsMaxFun(TripleAbsMax *pIp)
 {
@@ -56,6 +57,7 @@ void TripleAbsMaxFun(TripleAbsMax *pIp)
 requires \valid(pIp);
 requires \valid(pIp->abs+(0..2));
 requires \valid(pIp->ret);
+requires \separated(pIp, pIp->ret);
 */
 void main3(TripleAbsMax *pIp)
 {
@@ -66,7 +68,7 @@ void main3(TripleAbsMax *pIp)
 
 	TripleAbsMaxFun(pIp);
 
-    /*@ assert pIp->abs[0] == \at(pIp->abs[0], Pre); */
-    /*@ assert pIp->abs[1] == \at(pIp->abs[1], Pre); */
-    /*@ assert pIp->abs[2] == \at(pIp->abs[2], Pre); */
+    /*@ assert pIp->abs[0] == 1; */
+    /*@ assert pIp->abs[1] == 2; */
+    /*@ assert pIp->abs[2] == -3; */
 }

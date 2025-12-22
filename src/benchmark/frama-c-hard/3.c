@@ -1,24 +1,18 @@
-
-
-int power(int n) {
-  if (n == 0) {
-    return 1;
-  }
-  return 2 * power(n-1);
-}
+#include <stdio.h>
+#include <math.h>
 
 int fun(int n) {
     double y = 0;
     double i = 0;
 
     while(i <= n) {
-        y = y + power(i);
+        y = y + pow(2.0, i);
         i = i + 1;
     }
     return y;
 }
 
-int doo4() {
+int main3() {
     int res = fun(4);
     //@assert res == 7;
 }

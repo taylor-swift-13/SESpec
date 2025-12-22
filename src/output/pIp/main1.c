@@ -9,13 +9,49 @@ typedef struct __TripleAbsMax
 } TripleAbsMax;
 
 /*@
-    requires \valid(pIp);                               // Pointer pIp must be valid
-    requires \valid(pIp->abs+(0..2));                   // The abs array must have 3 valid elements
-    requires \valid(pIp->ret);                          // Pointer ret must be valid
-    requires \separated(pIp, pIp->ret);                 // pIp and pIp->ret must not overlap
-    ensures pIp->tmax == \max(\max(\abs(pIp->abs[0]), \abs(pIp->abs[1])), \abs(pIp->abs[2])); // tmax is the maximum absolute value
-    ensures *(pIp->ret) == pIp->tmax;                   // The value pointed to by ret is updated to tmax
-    assigns pIp->tmax, *(pIp->ret);                     // Function modifies tmax and the value pointed to by ret
+ requires \valid(pIp) && \valid(pIp->ret) ;
+ requires \separated(pIp,pIp->ret) ;
+ requires \valid(pIp);
+ requires \valid(pIp->abs+(0..2)) ;
+ requires \valid(pIp->ret);
+ requires \separated(pIp, pIp->ret);
+
+ ensures pIp->ret == \old(pIp->ret);
+
+ ensures -pIp->abs[2] <= pIp->abs[1] && pIp->abs[0] <= pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] >= 0 && pIp->abs[0] >= 0 ==> pIp->tmax == pIp->abs[1] && *\old(pIp->ret) == pIp->abs[1];
+ ensures -pIp->abs[2] <= pIp->abs[1] && -pIp->abs[0] <= pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] >= 0 && pIp->abs[0] < 0 ==> pIp->tmax == pIp->abs[1] && *\old(pIp->ret) == pIp->abs[1];
+ ensures -pIp->abs[2] <= -pIp->abs[1] && -pIp->abs[0] <= -pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] < 0 && pIp->abs[0] < 0 ==> pIp->tmax == -pIp->abs[1] && *\old(pIp->ret) == -pIp->abs[1];
+ ensures -pIp->abs[2] <= -pIp->abs[1] && pIp->abs[0] <= -pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] < 0 && pIp->abs[0] >= 0 ==> pIp->tmax == -pIp->abs[1] && *\old(pIp->ret) == -pIp->abs[1];
+ ensures pIp->abs[2] <= -pIp->abs[1] && pIp->abs[0] <= -pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] < 0 && pIp->abs[0] >= 0 ==> pIp->tmax == -pIp->abs[1] && *\old(pIp->ret) == -pIp->abs[1];
+ ensures pIp->abs[2] <= -pIp->abs[1] && -pIp->abs[0] <= -pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] < 0 && pIp->abs[0] < 0 ==> pIp->tmax == -pIp->abs[1] && *\old(pIp->ret) == -pIp->abs[1];
+ ensures pIp->abs[2] <= pIp->abs[1] && -pIp->abs[0] <= pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] >= 0 && pIp->abs[0] < 0 ==> pIp->tmax == pIp->abs[1] && *\old(pIp->ret) == pIp->abs[1];
+ ensures pIp->abs[2] <= pIp->abs[1] && pIp->abs[0] <= pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] >= 0 && pIp->abs[0] >= 0 ==> pIp->tmax == pIp->abs[1] && *\old(pIp->ret) == pIp->abs[1];
+ ensures -pIp->abs[2] <= pIp->abs[0] && pIp->abs[0] > pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] >= 0 && pIp->abs[0] >= 0 ==> pIp->tmax == pIp->abs[0] && *\old(pIp->ret) == pIp->abs[0];
+ ensures -pIp->abs[2] <= -pIp->abs[0] && -pIp->abs[0] > pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] >= 0 && pIp->abs[0] < 0 ==> pIp->tmax == -pIp->abs[0] && *\old(pIp->ret) == -pIp->abs[0];
+ ensures -pIp->abs[2] <= -pIp->abs[0] && -pIp->abs[0] > -pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] < 0 && pIp->abs[0] < 0 ==> pIp->tmax == -pIp->abs[0] && *\old(pIp->ret) == -pIp->abs[0];
+ ensures -pIp->abs[2] <= pIp->abs[0] && pIp->abs[0] > -pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] < 0 && pIp->abs[0] >= 0 ==> pIp->tmax == pIp->abs[0] && *\old(pIp->ret) == pIp->abs[0];
+ ensures pIp->abs[2] <= pIp->abs[0] && pIp->abs[0] > -pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] < 0 && pIp->abs[0] >= 0 ==> pIp->tmax == pIp->abs[0] && *\old(pIp->ret) == pIp->abs[0];
+ ensures pIp->abs[2] <= -pIp->abs[0] && -pIp->abs[0] > -pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] < 0 && pIp->abs[0] < 0 ==> pIp->tmax == -pIp->abs[0] && *\old(pIp->ret) == -pIp->abs[0];
+ ensures pIp->abs[2] <= -pIp->abs[0] && -pIp->abs[0] > pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] >= 0 && pIp->abs[0] < 0 ==> pIp->tmax == -pIp->abs[0] && *\old(pIp->ret) == -pIp->abs[0];
+ ensures pIp->abs[2] <= pIp->abs[0] && pIp->abs[0] > pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] >= 0 && pIp->abs[0] >= 0 ==> pIp->tmax == pIp->abs[0] && *\old(pIp->ret) == pIp->abs[0];
+ ensures pIp->abs[2] > pIp->abs[0] && pIp->abs[0] > pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] >= 0 && pIp->abs[0] >= 0 ==> pIp->tmax == pIp->abs[2] && *\old(pIp->ret) == pIp->abs[2];
+ ensures pIp->abs[2] > -pIp->abs[0] && -pIp->abs[0] > pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] >= 0 && pIp->abs[0] < 0 ==> pIp->tmax == pIp->abs[2] && *\old(pIp->ret) == pIp->abs[2];
+ ensures pIp->abs[2] > -pIp->abs[0] && -pIp->abs[0] > -pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] < 0 && pIp->abs[0] < 0 ==> pIp->tmax == pIp->abs[2] && *\old(pIp->ret) == pIp->abs[2];
+ ensures pIp->abs[2] > pIp->abs[0] && pIp->abs[0] > -pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] < 0 && pIp->abs[0] >= 0 ==> pIp->tmax == pIp->abs[2] && *\old(pIp->ret) == pIp->abs[2];
+ ensures -pIp->abs[2] > pIp->abs[0] && pIp->abs[0] > -pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] < 0 && pIp->abs[0] >= 0 ==> pIp->tmax == -pIp->abs[2] && *\old(pIp->ret) == -pIp->abs[2];
+ ensures -pIp->abs[2] > -pIp->abs[0] && -pIp->abs[0] > -pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] < 0 && pIp->abs[0] < 0 ==> pIp->tmax == -pIp->abs[2] && *\old(pIp->ret) == -pIp->abs[2];
+ ensures -pIp->abs[2] > -pIp->abs[0] && -pIp->abs[0] > pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] >= 0 && pIp->abs[0] < 0 ==> pIp->tmax == -pIp->abs[2] && *\old(pIp->ret) == -pIp->abs[2];
+ ensures -pIp->abs[2] > pIp->abs[0] && pIp->abs[0] > pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] >= 0 && pIp->abs[0] >= 0 ==> pIp->tmax == -pIp->abs[2] && *\old(pIp->ret) == -pIp->abs[2];
+ ensures pIp->abs[2] > pIp->abs[1] && pIp->abs[0] <= pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] >= 0 && pIp->abs[0] >= 0 ==> pIp->tmax == pIp->abs[2] && *\old(pIp->ret) == pIp->abs[2];
+ ensures pIp->abs[2] > pIp->abs[1] && -pIp->abs[0] <= pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] >= 0 && pIp->abs[0] < 0 ==> pIp->tmax == pIp->abs[2] && *\old(pIp->ret) == pIp->abs[2];
+ ensures pIp->abs[2] > -pIp->abs[1] && -pIp->abs[0] <= -pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] < 0 && pIp->abs[0] < 0 ==> pIp->tmax == pIp->abs[2] && *\old(pIp->ret) == pIp->abs[2];
+ ensures pIp->abs[2] > -pIp->abs[1] && pIp->abs[0] <= -pIp->abs[1] && pIp->abs[2] >= 0 && pIp->abs[1] < 0 && pIp->abs[0] >= 0 ==> pIp->tmax == pIp->abs[2] && *\old(pIp->ret) == pIp->abs[2];
+ ensures -pIp->abs[2] > -pIp->abs[1] && pIp->abs[0] <= -pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] < 0 && pIp->abs[0] >= 0 ==> pIp->tmax == -pIp->abs[2] && *\old(pIp->ret) == -pIp->abs[2];
+ ensures -pIp->abs[2] > -pIp->abs[1] && -pIp->abs[0] <= -pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] < 0 && pIp->abs[0] < 0 ==> pIp->tmax == -pIp->abs[2] && *\old(pIp->ret) == -pIp->abs[2];
+ ensures -pIp->abs[2] > pIp->abs[1] && -pIp->abs[0] <= pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] >= 0 && pIp->abs[0] < 0 ==> pIp->tmax == -pIp->abs[2] && *\old(pIp->ret) == -pIp->abs[2];
+ ensures -pIp->abs[2] > pIp->abs[1] && pIp->abs[0] <= pIp->abs[1] && pIp->abs[2] < 0 && pIp->abs[1] >= 0 && pIp->abs[0] >= 0 ==> pIp->tmax == -pIp->abs[2] && *\old(pIp->ret) == -pIp->abs[2];
+
+ assigns pIp->tmax, *(pIp->ret);
 */
 void TripleAbsMaxFun(TripleAbsMax *pIp)
 {

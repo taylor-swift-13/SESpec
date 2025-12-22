@@ -28,7 +28,6 @@ void goo23(CheckCal *pIp)
 	/*@ assert pIp->len == \at(pIp->len,Pre); */
 	/*@ assert pIp->chksum == \at(pIp->chksum,Pre); */
 
-
 	pIp->chksum = chksum;
 
 

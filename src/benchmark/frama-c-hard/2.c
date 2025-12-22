@@ -15,7 +15,7 @@ int gcd(int a, int b)
     return gcd(a, b-a);
 }
 
-int doo2()
+int main2()
 {
     int a = 98, b = 56;
     int c = gcd(a, b);

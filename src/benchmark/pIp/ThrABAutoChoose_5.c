@@ -15,8 +15,7 @@ typedef struct __ThrABAutoChoose
 } ThrABAutoChoose;
 
 /*@
-requires \valid(pIp) && \valid(pIp->mThrDistribute.stateFlag+ (0..2)) ;
-requires \separated(pIp,pIp->mThrDistribute.stateFlag+(0..2)) ;
+requires \valid(pIp) && \valid(pIp->mThrDistribute.stateFlag+ (0..1)) ;
 */
 
 void ThrABAutoChooseFun(ThrABAutoChoose *pIp)
@@ -42,8 +41,7 @@ void ThrABAutoChooseFun(ThrABAutoChoose *pIp)
 }
 
 /*@
-requires \valid(pIp) && \valid(pIp->mThrDistribute.stateFlag+ (0..2)) ;
-requires \separated(pIp,pIp->mThrDistribute.stateFlag+(0..2)) ;
+requires \valid(pIp) && \valid(pIp->mThrDistribute.stateFlag+ (0..1)) ;
 */
 void main5(ThrABAutoChoose *pIp)
 {

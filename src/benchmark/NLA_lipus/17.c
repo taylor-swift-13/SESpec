@@ -10,8 +10,6 @@ int main17(int k){
 
     // loop body
     while(c < k){
-   
-     //%%%traces: int x, int y, int k
      c = c +1 ;
      y = y +1;
      x=y*y*y+x;

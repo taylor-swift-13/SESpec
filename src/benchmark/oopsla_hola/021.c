@@ -11,7 +11,7 @@ void foo021(int n,int j,int v) {
  
   while( i < n ) {
     i++;
-    if(unknown2() % 2 == 0) {
+    if(unknown() % 2 == 0) {
         v = 0;
     }
     else v = 1;

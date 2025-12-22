@@ -31,20 +31,20 @@ Ensure emp
 /*@ Inv
     ((0 < pIp@pre->len) => (0 <= i && i <= pIp@pre->len)) &&
 ((0 < pIp@pre->len) => (chksum == sum(pIp->pkv, 0, i))) &&
-(!(0 < pIp@pre->len) => ((chksum == 0) && (i == 0) && (pIp == pIp@pre) && (pIp@pre->len == pIp->len@pre) && (pIp@pre->pkv == pIp->pkv@pre) && (*pIp->pkv@pre == *pIp->pkv@pre) && (pIp@pre->chksum == pIp->chksum@pre))) &&
+((!(0 < pIp@pre->len)) => ((chksum == 0) && (i == 0) && (pIp == pIp@pre) && (pIp@pre->len == pIp_len) && (pIp@pre->pkv == pIp_pkv) && (*pIp_pkv == pIp_pkv_v) && (pIp@pre->chksum == pIp_chksum))) &&
 (pIp == pIp@pre) &&
-(pIp@pre->len == pIp->len@pre) &&
-(pIp@pre->pkv == pIp->pkv@pre) &&
-(*pIp->pkv@pre == *pIp->pkv@pre) &&
-(pIp@pre->chksum == pIp->chksum@pre) &&
-(valid_pkvs(pIp)
-      loop assigns chksum, i)
+(pIp@pre->len == pIp_len) &&
+(pIp@pre->pkv == pIp_pkv) &&
+(*pIp_pkv == pIp_pkv_v) &&
+(pIp@pre->chksum == pIp_chksum) &&
+(forall (j:Z), 0 <= j && j < 10 => pIp->pkv_l[j] == pIp->pkv_l[j]@pre
+      loop assigns i, chksum)
     */
     
     for(; i < pIp->len; i++)
-	{
-	    chksum = chksum + pIp->pkv[i];
-	}
+    {
+        chksum = chksum + pIp->pkv[i];
+    }
 
 	
 	

@@ -12,9 +12,7 @@ void foo03(int n, int l) {
   	i = l;
     for (; i<n; i++) {
     }
-
-    }
-  
+  }
     /*@ assert \forall integer i; (l <= i < n) ==> (1 <= i); */
   
 

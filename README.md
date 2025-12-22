@@ -11,6 +11,9 @@ Generation of Program Specifications".
 - `src/`: Main source for specification generation workflows
   - `input/`: input dictionary, input programs with manually annotated ACSL format preconditions and verification goals
   - `output/`: output dictionary, output programs with complete ACSL format specifications
+- `configs/`: Configuration files for the specification generation process
+  - `func_config.json`: Default configuration file for function specification generation
+  - `loop_config.yaml`: Configuration file for loop invariant generation
 
 - `APPENDIX/`: The appendix of our paper
 - `RESULTS/`: Raw experiment results
@@ -68,6 +71,7 @@ frama-c -v
 
 ```bash
 #run
+cd src
 bash init.sh
 #see
 opam environment loaded successfully
@@ -75,9 +79,14 @@ opam environment loaded successfully
 
 ### Quick Start
 
-```python
+```bash
 #run
-run main.py
+cd src
+```
+
+```bash
+#run
+python main.py
 ```
 for motivating example *CheckCalFun*
 
@@ -137,7 +146,7 @@ preconditions:
 
 ##### 1.Basic Usage
 
-Use the default configuration file (e.g., `func_config.json`):
+Use the default configuration file (e.g., `configs/func_config.json`):
 
 ```bash
 python main.py
@@ -146,13 +155,13 @@ python main.py
 Specify a custom configuration file:
 
 ```bash
-python main.py --config func_config.json
+python main.py --config configs/func_config.json
 ```
 
 Use a yaml configuration file:
 
 ```bash
-python main.py --config loop_config.yaml
+python main.py --config configs/loop_config.yaml
 ```
 
 ##### 2. Command-Line Argument Overrides
@@ -170,7 +179,7 @@ for motivating example *TripleAbsMaxFun*
 Override the project directory and function name: 
 
 ```bash
-python main.py --config loop_config.yaml --root-dir syGus_code2inv --function foo1
+python main.py --config configs/loop_config.yaml --root-dir syGus_code2inv --function foo1
 ```
 
 for the first loop in *SyGus*

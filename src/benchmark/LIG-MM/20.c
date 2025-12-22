@@ -11,13 +11,15 @@ struct SLL {
   ensures \result->head == data;
   ensures \result->tail == \null;
   */
-  struct SLL* malloc_SLL(int data);
+  struct SLL* malloc_SLL(int data){
+  }
   
   /*@
   requires \valid(l);
   ensures l == \null;
   */
-  void free_SLL(struct SLL *l);
+  void free_SLL(struct SLL *l){
+  }
   
   struct SLL * main20(struct SLL *l, int data) {
     struct SLL *p;

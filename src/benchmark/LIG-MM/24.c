@@ -5,19 +5,13 @@ struct SLL {
     int head;
   };
   
-
-  /*@
-  ensures \valid(\result);
-  ensures \result->head == data;
-  ensures \result->tail == \null;
-  */
-  struct SLL* malloc_SLL(int data);
   
   /*@
   requires \valid(l);
   ensures l == \null;
   */
-  void free_SLL(struct SLL *l);
+  void free_SLL(struct SLL *l){
+  }
   
   
   void main24(struct SLL *l) 

@@ -24,9 +24,9 @@ void main24(CheckCal *pIp)
 	    chksum = chksum + pIp -> pkv[i];
 	}
 
-	pIp->chksum = chksum;
-
 	/*@ assert chksum >= 0; */
+	
+	pIp->chksum = chksum;
 
 	return;
 }

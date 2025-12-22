@@ -30,7 +30,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='ASGSE - Run with configuration file')
     parser.add_argument('--config', '-c', 
                        type=str, 
-                       default='func_config.json',
+                       default='configs/func_config.json',
                        help='Configuration file path (supports .json and .yaml formats)')
     parser.add_argument('--root-dir', '-r',
                        type=str,

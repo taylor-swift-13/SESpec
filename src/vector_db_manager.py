@@ -50,19 +50,33 @@ class VectorDBManager:
             if db_path and os.path.exists(db_path):
                 # Load database instance from existing ChromaDB file
                 self._vector_db = LangChainVectorDB(persist_directory)
+                # Try to load existing database
+                if self._vector_db.load_existing_db():
+                    print(f"✅ Vector database loaded successfully from existing ChromaDB")
+                else:
+                    # If no existing database, initialize from JSON file
+                    print(f"⚠️ No existing ChromaDB found, initializing from JSON file: {db_path}")
+                    self._vector_db = process_json_to_langchain_db(db_path, persist_directory, mode='init')
+                    print(f"✅ Vector database initialized successfully from JSON")
                 self._db_path = db_path
                 self._persist_directory = persist_directory
-                print(f"✅ Vector database loaded successfully")
                 
             else:
                 # Initialize database using specified JSON file
-                self._vector_db = process_json_to_langchain_db(db_path, persist_directory, mode='init')
+                if db_path:
+                    self._vector_db = process_json_to_langchain_db(db_path, persist_directory, mode='init')
+                    print(f"✅ Vector database initialized successfully from JSON")
+                else:
+                    # Create empty database instance if no db_path provided
+                    self._vector_db = LangChainVectorDB(persist_directory)
+                    print(f"⚠️ No database path provided, created empty database instance")
                 self._db_path = db_path
                 self._persist_directory = persist_directory
-                print(f"✅ Vector database initialized successfully")
                 
         except Exception as e:
             print(f"❌ Vector database initialization failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
             # Create empty database instance as fallback
             self._vector_db = LangChainVectorDB(persist_directory)
             self._db_path = db_path

@@ -6,19 +6,13 @@ struct SLL {
 };
 
 
-/*@
-ensures \valid(\result);
-ensures \result->head == data;
-ensures \result->tail == \null;
-*/
-struct SLL* malloc_SLL(int data);
 
 /*@
 requires \valid(l);
-ensures l == \null;
+ensures \result == l;
 */
-void free_SLL(struct SLL *l);
-
+struct SLL * prepend(struct SLL *l, int data){
+}
 
 struct SLL * main22(struct SLL *l, int data) 
 {

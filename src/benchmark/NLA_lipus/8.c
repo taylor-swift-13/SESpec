@@ -4,7 +4,6 @@
 int main8(int x,int y){
   
   int a,b,p,q,r,s;
-  int x, y;
  
   a = x;
   b = y;

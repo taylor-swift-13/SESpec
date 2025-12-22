@@ -55,6 +55,9 @@ typedef struct __InitVar
 
 } InitVar;
 
+/*@
+requires \valid(pIp);
+*/
 void InitVarFun(InitVar *pIp)
 {
 
@@ -83,6 +86,9 @@ void InitVarFun(InitVar *pIp)
 	return;
 }
 
+/*@
+requires \valid(pIp);
+*/
 void main39(InitVar *pIp)
 {
     InitVarFun(pIp);

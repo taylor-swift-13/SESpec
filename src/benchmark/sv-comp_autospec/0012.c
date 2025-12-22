@@ -11,9 +11,10 @@ requires n < INT_MAX;
 void foo0012(int n, int l) {
   int k = 1;
 
+  
   for (; k < n; k++){
 
-    int i = l;
+    int i= l;
     
     for (; i < n; i++){
       /*@ assert 1 <= i;*/

@@ -2,7 +2,7 @@ int unknown();
 /*@
 requires x >= 0;
 */
-int main25(int x) {
+int main25(int x,int w){
 	
 	int z = w * x;
 

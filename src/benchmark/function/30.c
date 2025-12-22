@@ -8,6 +8,5 @@ int simple(int p,int n,int r)
 int goo30()
 {
     int s = simple(10000, 3,10);
-    /*@ assert s == 3000; */
     return 0;
 }

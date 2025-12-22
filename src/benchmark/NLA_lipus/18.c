@@ -1,4 +1,4 @@
-    /*@
+/*@
 requires k>=0 && k<=30;
 */
 int main18(int k){

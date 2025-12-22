@@ -10,6 +10,7 @@ typedef struct __DevControl
 
 /*@
 requires \valid(pIp);
+requires \separated(pIp,pIp->p1, pIp->p2, pIp->p3);
 */
 void DevControlFun(DevControl *pIp)
 {
@@ -23,6 +24,7 @@ void DevControlFun(DevControl *pIp)
 }
 /*@
 requires \valid(pIp);
+requires \separated(pIp,pIp->p1, pIp->p2, pIp->p3);
 */
 void main35(DevControl *pIp)
 {

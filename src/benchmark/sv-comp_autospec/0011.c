@@ -25,6 +25,7 @@ void foo0011(int n0, int n1) {
 
   int j1 = 0;
   
+  
   while( j1 < n0 + n1 ) {
     /*@ assert k>0;*/
     j1++;
