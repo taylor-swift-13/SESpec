@@ -180,19 +180,24 @@ if __name__ == "__main__":
     # print(f'开始Statistics{folder_path_to_scan}的通过率')
     # calculate_pass_rates(folder_path_to_scan)
 
-    folder_path_to_scan = "./log/NLA_addition/gpt-3.5-turbo"
-    print(f'开始Statistics{folder_path_to_scan}的通过率')
-    calculate_pass_rates(folder_path_to_scan)
+    # folder_path_to_scan = "./log/NLA_addition/gpt-3.5-turbo"
+    # print(f'开始Statistics{folder_path_to_scan}的通过率')
+    # calculate_pass_rates(folder_path_to_scan)
 
-    folder_path_to_scan = "./log/NLA_addition/claude-3-7-sonnet-20250219"
-    print(f'开始Statistics{folder_path_to_scan}的通过率')
-    calculate_pass_rates(folder_path_to_scan)
+    # folder_path_to_scan = "./log/NLA_addition/claude-3-7-sonnet-20250219"
+    # print(f'开始Statistics{folder_path_to_scan}的通过率')
+    # calculate_pass_rates(folder_path_to_scan)
 
-    folder_path_to_scan = "./log/NLA_addition/gpt-4o-mini"
-    print(f'开始Statistics{folder_path_to_scan}的通过率')
-    calculate_pass_rates(folder_path_to_scan)
+    # folder_path_to_scan = "./log/NLA_addition/gpt-4o-mini"
+    # print(f'开始Statistics{folder_path_to_scan}的通过率')
+    # calculate_pass_rates(folder_path_to_scan)
 
-    folder_path_to_scan = "./log/NLA_addition/gpt-4o"
+    # folder_path_to_scan = "./log/NLA_addition/gpt-4o"
+    # print(f'开始Statistics{folder_path_to_scan}的通过率')
+    # calculate_pass_rates(folder_path_to_scan)
+
+
+    folder_path_to_scan = "./log/linear/gpt-4o-mini"
     print(f'开始Statistics{folder_path_to_scan}的通过率')
     calculate_pass_rates(folder_path_to_scan)
 

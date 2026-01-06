@@ -1120,7 +1120,7 @@ You must use these follow examples as a reference to complete the task, with the
 
             if self.config.template:
 
-                annotations  = self.append_assignments_annotations(annotations)
+                #annotations  = self.append_assignments_annotations(annotations)
                 if self.config.debug:
                     self.logger.info("after assignments")
                     self.logger.info(annotations)

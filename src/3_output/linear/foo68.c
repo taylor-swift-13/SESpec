@@ -1,0 +1,27 @@
+
+void foo68(int n,int y) {
+    
+    int x = 1;
+
+    
+    
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (1 <= \at(n,Pre)) ==> (((x == 1)&&(y == \at(y,Pre))&&(n == \at(n,Pre))) || (y == \at(n,Pre) - (x - 1)));
+          loop invariant (1 <= \at(n,Pre)) ==> (1 <= x <= \at(n,Pre) + 1) ;
+          loop invariant (!(1 <= \at(n,Pre))) ==> ((x == 1)&&(y == \at(y,Pre))&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns x, y;
+            */
+            while (x <= n) {
+        y = n - x;
+        x = x + 1;
+    }
+            
+
+    /*@ assert (n > 0) ==> (y <= n); */
+
+
+}

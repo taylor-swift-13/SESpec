@@ -25,7 +25,10 @@ class TokenTracker:
         """记录一次 API 调用的 token 使用情况"""
         self.stats["total_prompt_tokens"] += prompt_tokens
         self.stats["total_completion_tokens"] += completion_tokens
-        self.stats["total_tokens"] += total_tokens
+        # 使用 prompt_tokens + completion_tokens 作为 total_tokens，确保统计一致性
+        # 而不是直接使用 API 返回的 total_tokens（可能包含其他 token）
+        calculated_total = prompt_tokens + completion_tokens
+        self.stats["total_tokens"] += calculated_total
         self.stats["call_count"] += 1
     
     def get_stats(self) -> Dict:
@@ -106,8 +109,12 @@ class OpenAILLM(BaseChatModel):
                 _token_tracker.record(
                     prompt_tokens=response.usage.prompt_tokens,
                     completion_tokens=response.usage.completion_tokens,
-                    total_tokens=response.usage.total_tokens
+                    total_tokens=response.usage.total_tokens  # 这个值会被 record() 方法重新计算为 prompt + completion
                 )
+            else:
+                # 如果 API 调用成功但没有 usage 信息，仍然应该计入调用次数
+                # 但无法记录 token 使用情况
+                _token_tracker.stats["call_count"] += 1
             
             # 处理 <think> 标签，并更新历史
             processed_response = self._process_response_think_tags(assistant_response)

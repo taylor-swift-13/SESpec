@@ -1,9 +1,8 @@
-# ASGSE
+# SESpec
 
-ASGSE is a toolkit designed for end-to-end generation of ACSL specifications for C programs. It is submitted as an FSE 2026 artifact for "Integrating Symbolic Execution with LLMs for Automated
-Generation of Program Specifications".
+SESpec is a toolkit designed for end-to-end generation of ACSL specifications for C programs. 
 
-### Overview of ASGSE
+### Overview of SESpec
 
 ![workflow](./images/workflow.png)
 
@@ -15,7 +14,6 @@ Generation of Program Specifications".
   - `func_config.json`: Default configuration file for function specification generation
   - `loop_config.yaml`: Configuration file for loop invariant generation
 
-- `APPENDIX/`: The appendix of our paper
 - `RESULTS/`: Raw experiment results
 - `VST/`: Symbolic executor
 

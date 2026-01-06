@@ -6,6 +6,8 @@
 
 import os
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from main import MainConfig, FunctionProcessor
 
 def list_files_os(folder_path):
@@ -120,17 +122,113 @@ def get_dataset_config(dataset_name, model_name="default"):
     
     return configs.get(dataset_name, configs['frama-c-loop'])
 
-def test_dataset(dataset_name, model_name="gpt-4o"):
-    """Test指定Dataset"""
+def process_single_file(name, dataset_name, config, model_name, log_dir, counters, lock):
+    """处理单个文件的函数，用于多线程"""
+    # 配置参数
+    original_name = name
+    name = name.split('.')[0]
+    
+    # 根据DatasetType选择日志文件命名格式和函数名
+    if dataset_name == 'frama-c-loop' or dataset_name == 'frama-c-loop-mask' or dataset_name == 'function':
+        log_path = os.path.join(log_dir, f'goo{name}.log')
+        function_name = f'goo{name}'
+    elif dataset_name == 'pIp':
+        name = name.split('_')[1]
+        log_path = os.path.join(log_dir, f'main{name}.log')
+        function_name = f'main{name}'
+    else:
+        log_path = os.path.join(log_dir, f'main{name}.log')
+        function_name = f'main{name}'
+    
+    if os.path.exists(log_path):
+        print(f"⏭️ Skip {name}，日志文件already exists")
+        return None
+
+    print(f"🔄 Processing file: {name}")
+
+    # 创建配置对象
+    config_obj = MainConfig(
+        root_dir=config['root_dir'],
+        function_name=function_name,
+        **config['config_params']
+    )
+
+    # 获取预条件字符串，并封装为字典传入处理器
+    condition_str = config['preconditions'].get(function_name, 'emp')
+    preconditions = {function_name: condition_str}
+
+    try:
+        # 执行分析
+        processor = FunctionProcessor(config_obj, preconditions, model_name)
+        processor.run_analysis()
+        first_pass = processor.first_pass
+
+        if first_pass is None:
+            print(f"⚠️ {name}: 分析返回 None，SkipStatistics")
+            return None
+        
+        if 'syntax' not in first_pass or 'valid' not in first_pass or 'satisfy' not in first_pass:
+            print(f"⚠️ {name}: 分析Result缺少必要的键，SkipStatistics")
+            return None
+        
+        # StatisticsResult
+        syntax_score = first_pass['syntax']
+        valid_score = first_pass['valid']
+        satisfy_score = first_pass['satisfy']
+        
+        # 使用锁更新计数器
+        with lock:
+            if syntax_score == 1:
+                counters['syntax_count'][1] += 1
+                counters['syntax_count'][3] += 1
+                counters['syntax_count'][5] += 1
+            elif syntax_score <= 3:
+                counters['syntax_count'][3] += 1
+                counters['syntax_count'][5] += 1
+            elif syntax_score <= 5:
+                counters['syntax_count'][5] += 1
+                
+            if valid_score == 1:
+                counters['valid_count'][1] += 1
+                counters['valid_count'][3] += 1
+                counters['valid_count'][5] += 1
+            elif valid_score <= 3:
+                counters['valid_count'][3] += 1
+                counters['valid_count'][5] += 1
+            elif valid_score <= 5:
+                counters['valid_count'][5] += 1
+            
+            if satisfy_score == 1:
+                counters['satisfy_count'][1] += 1
+                counters['satisfy_count'][3] += 1
+                counters['satisfy_count'][5] += 1
+            elif satisfy_score <= 3:
+                counters['satisfy_count'][3] += 1
+                counters['satisfy_count'][5] += 1
+            elif satisfy_score <= 5:
+                counters['satisfy_count'][5] += 1
+        
+        print(f"✅ {name}: syntax={syntax_score}, valid={valid_score}, satisfy={satisfy_score}")
+        return {'syntax': syntax_score, 'valid': valid_score, 'satisfy': satisfy_score}
+        
+    except Exception as e:
+        print(f"❌ {name}: 处理过程中发生Error: {str(e)}")
+        return None
+
+def test_dataset(dataset_name, model_name="gpt-4o", num_workers=4):
+    """Test指定Dataset（支持多线程）"""
     config = get_dataset_config(dataset_name, model_name)
     
     name_list = list_files_os(config['input_dir'])
     log_dir = config['log_dir']
     
-    # 初始化计数器
-    syntax_count = {1: 0, 3: 0, 5: 0}
-    valid_count = {1: 0, 3: 0, 5: 0}
-    satisfy_count = {1: 0, 3: 0, 5: 0}
+    # 初始化计数器（使用字典以便在线程间共享）
+    counters = {
+        'syntax_count': {1: 0, 3: 0, 5: 0},
+        'valid_count': {1: 0, 3: 0, 5: 0},
+        'satisfy_count': {1: 0, 3: 0, 5: 0}
+    }
+    lock = threading.Lock()  # 用于保护计数器的线程安全
     
     count = len(name_list)
     print(f"🔍 Dataset: {dataset_name}")
@@ -138,98 +236,30 @@ def test_dataset(dataset_name, model_name="gpt-4o"):
     print(f"📁 Input directory: {config['input_dir']}")
     print(f"📊 Found {count} files需要处理")
     print(f"📝 Log directory: {log_dir}")
+    print(f"🧵 Using {num_workers} worker threads")
     
     # 确保Log directory存在
     os.makedirs(log_dir, exist_ok=True)
     
-    for name in name_list:
-        # 配置参数
-        name = name.split('.')[0]
+    # 使用线程池并行处理
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        # 提交所有任务
+        futures = {
+            executor.submit(process_single_file, name, dataset_name, config, model_name, log_dir, counters, lock): name
+            for name in name_list
+        }
         
-        # 根据DatasetType选择日志文件命名格式和函数名
-        if dataset_name == 'frama-c-loop' or dataset_name == 'frama-c-loop-mask' or dataset_name == 'function':
-            log_path = os.path.join(log_dir, f'goo{name}.log')
-            function_name = f'goo{name}'
-        elif dataset_name == 'pIp':
-            name = name.split('_')[1]
-            log_path = os.path.join(log_dir, f'main{name}.log')
-            function_name = f'main{name}'
-        else:
-            log_path = os.path.join(log_dir, f'main{name}.log')
-            function_name = f'main{name}'
-        
-        if os.path.exists(log_path):
-            print(f"⏭️ Skip {name}，日志文件already exists")
-            continue
-
-        print(f"🔄 Processing file: {name}")
-
-        # 创建配置对象
-        config_obj = MainConfig(
-            root_dir=config['root_dir'],
-            function_name=function_name,
-            **config['config_params']
-        )
-
-        # 获取预条件字符串，并封装为字典传入处理器
-        condition_str = config['preconditions'].get(function_name, 'emp')
-        preconditions = {function_name: condition_str}
-
-        try:
-            # 执行分析
-            processor = FunctionProcessor(config_obj, preconditions, model_name)
-            processor.run_analysis()
-            first_pass = processor.first_pass
-
-            if first_pass is None:
-                print(f"⚠️ {name}: 分析返回 None，SkipStatistics")
-                continue
-            
-            if 'syntax' not in first_pass or 'valid' not in first_pass or 'satisfy' not in first_pass:
-                print(f"⚠️ {name}: 分析Result缺少必要的键，SkipStatistics")
-                continue
-            
-            # StatisticsResult
-            syntax_score = first_pass['syntax']
-            valid_score = first_pass['valid']
-            satisfy_score = first_pass['satisfy']
-            
-            if syntax_score == 1:
-                syntax_count[1] += 1
-                syntax_count[3] += 1
-                syntax_count[5] += 1
-            elif syntax_score <= 3:
-                syntax_count[3] += 1
-                syntax_count[5] += 1
-            elif syntax_score <= 5:
-                syntax_count[5] += 1
-                
-            
-            if valid_score == 1:
-                valid_count[1] += 1
-                valid_count[3] += 1
-                valid_count[5] += 1
-            elif valid_score <= 3:
-                valid_count[3] += 1
-                valid_count[5] += 1
-            elif valid_score <= 5:
-                valid_count[5] += 1
-            
-            if satisfy_score == 1:
-                satisfy_count[1] += 1
-                satisfy_count[3] += 1
-                satisfy_count[5] += 1
-            elif satisfy_score <= 3:
-                satisfy_count[3] += 1
-                satisfy_count[5] += 1
-            elif satisfy_score <= 5:
-                satisfy_count[5] += 1
-            
-            print(f"✅ {name}: syntax={syntax_score}, valid={valid_score}, satisfy={satisfy_score}")
-            
-        except Exception as e:
-            print(f"❌ {name}: 处理过程中发生Error: {str(e)}")
-            continue
+        # 等待所有任务完成
+        completed = 0
+        for future in as_completed(futures):
+            completed += 1
+            if completed % 10 == 0:
+                print(f"📈 Progress: {completed}/{count} files processed")
+    
+    # 提取计数器结果
+    syntax_count = counters['syntax_count']
+    valid_count = counters['valid_count']
+    satisfy_count = counters['satisfy_count']
 
     # OutputStatisticsResult
     print("\n" + "="*60)
@@ -267,20 +297,33 @@ def test_dataset(dataset_name, model_name="gpt-4o"):
 
 def main():
     """主函数"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='函数规约Test脚本（支持多线程）')
+    parser.add_argument('--dataset', type=str, default='pIp', 
+                       help='Dataset名称（默认: pIp）')
+    parser.add_argument('--model', type=str, default='gpt-4o',
+                       help='模型名称（默认: gpt-4o）')
+    parser.add_argument('--workers', type=int, default=4,
+                       help='线程数（默认: 4）')
+    
+    args = parser.parse_args()
+    
     print("🚀 函数规约Test脚本启动")
     print("="*60)
     
-    # 在这里修改您要Test的Dataset和模型Name
-    DATASET_NAME = 'pIp'  # 可选: 'frama-c-loop'
-    MODEL_NAME = 'gpt-4o'   # 可选: 'gpt-4o', 'deepseek-V3' 等
+    DATASET_NAME = args.dataset
+    MODEL_NAME = args.model
+    NUM_WORKERS = args.workers
     
     print(f"📋 Test配置:")
     print(f"  Dataset: {DATASET_NAME}")
     print(f"  Model: {MODEL_NAME}")
+    print(f"  Workers: {NUM_WORKERS}")
     print(f"  Log directory: ./log/{DATASET_NAME}/{MODEL_NAME}")
     
     # Test指定Dataset
-    test_dataset(DATASET_NAME, MODEL_NAME)
+    test_dataset(DATASET_NAME, MODEL_NAME, NUM_WORKERS)
     
     print("\n🎉 Test完成！")
     print(f"📊 Results saved to: ./log/{DATASET_NAME}/{MODEL_NAME}/")

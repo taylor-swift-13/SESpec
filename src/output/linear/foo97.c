@@ -1,0 +1,21 @@
+
+void foo97(int x) {
+    int i =0;
+    int j =0;
+    int y =2;
+    
+    /*@
+      loop invariant (0 <= \at(x,Pre)) ==> (i <= x + 1 && j == 2 * i);
+      loop invariant (0 <= \at(x,Pre)) ==> (i >= 0 && j >= 0);
+      loop invariant (!(0 <= \at(x,Pre))) ==> ((y == 2)&&(j == 0)&&(i == 0)&&(x == \at(x,Pre)));
+      loop invariant y == 2;
+      loop invariant x == \at(x,Pre);
+      loop assigns i, j;
+    */
+    while (i <= x) {
+      i = i + 1;
+      j = j + y;
+    }
+  
+  /*@ assert (y == 1) ==> (i == j) ;*/
+}
