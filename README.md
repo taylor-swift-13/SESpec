@@ -1,17 +1,17 @@
-# SESpec
+# SECOMMENTS
 
-SESpec is a toolkit designed for end-to-end generation of ACSL specifications for C programs. 
+SEComments is a toolkit designed for end-to-end generation of ACSL comments for C programs. 
 
-### Overview of SESpec
+### Overview of SEComments
 
 ![workflow](./images/workflow.png)
 
 ### Repository Structure
-- `src/`: Main source for specification generation workflows
+- `src/`: Main source for comments generation workflows
   - `input/`: input dictionary, input programs with manually annotated ACSL format preconditions and verification goals
-  - `output/`: output dictionary, output programs with complete ACSL format specifications
-- `configs/`: Configuration files for the specification generation process
-  - `func_config.json`: Default configuration file for function specification generation
+  - `output/`: output dictionary, output programs with complete ACSL format comments
+- `configs/`: Configuration files for the comment generation process
+  - `func_config.json`: Default configuration file for function comments generation
   - `loop_config.yaml`: Configuration file for loop invariant generation
 
 - `RESULTS/`: Raw experiment results
@@ -28,7 +28,7 @@ SESpec is a toolkit designed for end-to-end generation of ACSL specifications fo
 
 ```bash
 conda env create -f environment.yml
-conda activate ASGSE
+conda activate SESpec
 ```
 
 ##### Openai-API Config
@@ -83,110 +83,6 @@ cd src
 ```
 
 ```bash
-#run
-python main.py
-```
-for motivating example *CheckCalFun*
-
-![example](./images/example.png)
-
-### Instructions
-
-ASGSE now supports configuration via a dedicated file, offering a more flexible and maintainable way to manage settings. 
-
-Two configuration file formats are supported:
-
-- JSON format (.json)
-- YAML format (.yml, .yaml)
-
-
-#### Configuration File Structure
-
-##### 1. Main process configuration
-
-This section contains settings for the program specifications generation process.
-
-```yaml
-main:
-  root_dir: "motivation_example"      # Project root directory
-  function_name: "foo"                # Name of the function to generate
-  debug: true                         # Enable debug mode
-  only_loop: false                    # Only generate loop invariant
-  auto_annotation: true               # Automated generate precondition
-  refine_count: 3                     # Number of refinement passes
-  pass_count: 5                       # Number of passes
-  think: true                         # Enable "think in natural language" mode
-  template: true                      # Enable loop invariant template
-  auto_post: true                     # Automated generate postconditions
-  use_db: false                       # Enable database
-```
-
-##### 2. LLM Configuration 
-
-This section holds settings for the Large Language Model (LLM) integration.
-
-```yml
-llm:
-  api_model: "gpt-4o"                 # API model name
-```
-
-##### 3. Precondition Configuration
-
-This section allows you to define custom preconditions in VST user assertion for specific functions. You should add same preconditions in ACSL format directly in input file.
-
-```yml
-preconditions:
-  func: "emp" # emp for no preconditon (empty heap)
-  # ... additional preconditions
-```
-
-#### Usage
-
-##### 1.Basic Usage
-
-Use the default configuration file (e.g., `configs/func_config.json`):
-
-```bash
-python main.py
-```
-
-Specify a custom configuration file:
-
-```bash
-python main.py --config configs/func_config.json
-```
-
-Use a yaml configuration file:
-
-```bash
-python main.py --config configs/loop_config.yaml
-```
-
-##### 2. Command-Line Argument Overrides
-
-You can override any setting from the configuration file using command-line arguments.
-
-Override the function name:
-
-```bash
-python main.py --function bar
-```
-
-for motivating example *TripleAbsMaxFun*
-
-Override the project directory and function name: 
-
-```bash
-python main.py --config configs/loop_config.yaml --root-dir syGus_code2inv --function foo1
-```
-
-for the first loop in *SyGus*
-
-##### 3. Help Information
-
-Display the help message for a list of available options:
-
-```bash
-python main.py --help
+python main.py --config configs/air_config.yaml --function foo
 ```
 
