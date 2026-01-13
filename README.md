@@ -2,10 +2,6 @@
 
 SEComments is a toolkit designed for end-to-end generation of ACSL comments for C programs. 
 
-### Overview of SEComments
-
-![workflow](./images/workflow.png)
-
 ### Repository Structure
 - `src/`: Main source for comments generation workflows
   - `input/`: input dictionary, input programs with manually annotated ACSL format preconditions and verification goals
