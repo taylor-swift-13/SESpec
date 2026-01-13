@@ -255,6 +255,7 @@ class FunctionProcessor:
         else:
             new_func = self._initialize_function(func_name)
 
+
         if func_name in self.precond_manager.requires:
             new_func.require = self.precond_manager.requires[func_name]
 

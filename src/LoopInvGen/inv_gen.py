@@ -1301,6 +1301,8 @@ You must use these follow examples as a reference to complete the task, with the
             correct_flag = False
             loop_invariant = ''
 
+            annotations_list = [annotations_list[0]]
+
             for annotations in annotations_list:
 
                 if self.config.debug:
