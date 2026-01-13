@@ -1,4 +1,4 @@
-# SECOMMENTS
+# SEComments
 
 SEComments is a toolkit designed for end-to-end generation of ACSL comments for C programs. 
 
@@ -37,7 +37,6 @@ base_url:str = "your-base-url"
 ```
 
 ##### Verify
-
 ```bash
 #run
 llvm-config-18 --version
@@ -52,23 +51,6 @@ Ubuntu clang version 18.1.8 (++20240731024944+3b5b5c1ec4a3-1~exp1~20240731145000
 Target: x86_64-pc-linux-gnu
 Thread model: posix
 InstalledDir: /usr/bin
-```
-
-```bash
-#run
-frama-c -v
-#see
-29.0 (Copper)
-```
-
-##### init opam
-
-```bash
-#run
-cd src
-bash init.sh
-#see
-opam environment loaded successfully
 ```
 
 ### Quick Start
