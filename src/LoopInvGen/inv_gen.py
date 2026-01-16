@@ -3,6 +3,7 @@ import json
 import re
 import os
 import logging
+from pathlib import Path
 from .loop_analysis import LoopAnalysis
 from .output_verify import OutputVerifier
 from .loop_processor import LoopProcessor
@@ -14,6 +15,10 @@ from vector_db import *
 from spec_gen import SpecGenerator
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+# Get the project root directory (src directory)
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+PROMPT_DIR = PROJECT_ROOT / "src" / "prompt"
 
 class InvGenerator:
     def __init__(self,config:MainConfig,info:FunctionInfo,logger:logging.Logger,vector_db:LangChainVectorDB,llm_config:LLMConfig,spec_gen:SpecGenerator = None):
@@ -587,7 +592,7 @@ class InvGenerator:
     
     def get_user_prompt_traival(self, loop_content,pre_condition):
         # Read prompt template from file
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "inv_gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # Replace {code} placeholder in template
@@ -600,7 +605,7 @@ class InvGenerator:
     
     def get_user_prompt_template(self, loop_content,pre_condition):
         # Read prompt template from file
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "inv_gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
@@ -616,7 +621,7 @@ class InvGenerator:
     
     def get_user_prompt_verification(self, loop_content,pre_condition):
         # Read prompt template from file
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "inv_gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
@@ -632,7 +637,7 @@ class InvGenerator:
     
     def get_user_prompt_db(self, loop_content,pre_condition,examples):
         # Read prompt template from file
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "inv_gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
         
 
@@ -647,7 +652,7 @@ class InvGenerator:
     
     def get_user_prompt_db_template(self, loop_content,pre_condition,examples):
 
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "inv_gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
@@ -664,7 +669,7 @@ class InvGenerator:
 
     def get_user_prompt_db_verification(self, loop_content,pre_condition,examples):
 
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "inv_gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
@@ -684,7 +689,7 @@ class InvGenerator:
     def get_user_prompt(self, loop_content,pre_condition):
 
         # Read prompt template from file
-        with open("prompt/loop/gen.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # Replace {code} placeholder in template
@@ -695,7 +700,7 @@ class InvGenerator:
 
     def get_simgen_prompt(self, loop_content):
          # Read prompt template from file
-        with open("prompt/loop/simgen.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "simgen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # Replace {code} placeholder in template
@@ -705,7 +710,7 @@ class InvGenerator:
 
     def get_error_prompt(self,error_message, c_code):
          # Read prompt template from file
-        with open("prompt/error.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "error.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # Replace {code} placeholder in template
@@ -714,7 +719,7 @@ class InvGenerator:
     
     def get_adjust_prompt(self,error_message, c_code):
          # Read prompt template from file
-        with open("prompt/loop/adjust.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "adjust.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # Replace {code} placeholder in template
@@ -723,7 +728,7 @@ class InvGenerator:
     
     def get_regen_prompt(self,error_message, c_code):
          # Read prompt template from file
-        with open("prompt/loop/regen.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "regen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # Replace {code} placeholder in template
@@ -732,7 +737,7 @@ class InvGenerator:
     
     def get_strength_prompt(self,error_message, c_code):
          # Read prompt template from file
-        with open("prompt/loop/strength.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "loop" / "strength.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # Replace {code} placeholder in template
@@ -1006,7 +1011,7 @@ class InvGenerator:
     
         # Read prompt template from file
         try:
-            with open('prompt/list/spec_gen.txt', 'r', encoding='utf-8') as f:
+            with open(PROMPT_DIR / 'list' / 'spec_gen.txt', 'r', encoding='utf-8') as f:
                 prompt_template = f.read()
         except FileNotFoundError:
             print("File not found.")
@@ -1426,7 +1431,7 @@ You must use these follow examples as a reference to complete the task, with the
 
 
     def get_cot(self,c_code):
-        with open('prompt/loop/cot.txt', 'r', encoding='utf-8') as f:
+        with open(PROMPT_DIR / 'loop' / 'cot.txt', 'r', encoding='utf-8') as f:
             prompt_template = f.read()
         
         prompt = prompt_template.format(c_code=c_code)
@@ -1438,7 +1443,7 @@ You must use these follow examples as a reference to complete the task, with the
     def avoid_error(self,error_examples):
 
 
-        with open('prompt/loop/avoid_error.txt', 'r', encoding='utf-8') as f:
+        with open(PROMPT_DIR / 'loop' / 'avoid_error.txt', 'r', encoding='utf-8') as f:
             prompt_template = f.read()
         
         prompt = prompt_template.format(error_examples=error_examples)

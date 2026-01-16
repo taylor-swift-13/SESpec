@@ -1,9 +1,14 @@
 import openai
 import re
+from pathlib import Path
 from Utils.main_class import *
 from config import LLMConfig
 from collections import Counter
 from llm import *
+
+# Get the project root directory (src directory)
+PROJECT_ROOT = Path(__file__).parent.parent
+PROMPT_DIR = PROJECT_ROOT / "src" / "prompt"
  
 
 class SpecificationConvertor:
@@ -1458,7 +1463,7 @@ ensures {result};
 
     def get_assign_prompt(self,annotations):
         # 从文件中读取 prompt 模板
-        with open("prompt/func/assign.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "func" / "assign.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # 替换模板中的 {code} 占位符
@@ -1502,7 +1507,7 @@ ensures {result};
     
     def get_specgen_prompt(self,annotations):
          # 从文件中读取 prompt 模板
-        with open("prompt/func/specgen.txt", "r", encoding="utf-8") as file:
+        with open(PROMPT_DIR / "func" / "specgen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # 替换模板中的 {code} 占位符

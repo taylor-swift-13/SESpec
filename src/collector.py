@@ -17,7 +17,7 @@ from llm import *
 class Collector:
     """Collector class for managing specification collection and JSON output."""
     
-    def __init__(self, jsons_dir: str = "/home/yangfp/ASGSE/src/VectorDB/Jsons"):
+    def __init__(self, jsons_dir: str = "VectorDB/Jsons"):
         """
         Initialize the Collector.
         

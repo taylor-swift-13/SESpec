@@ -27,7 +27,7 @@ from llm import get_token_stats, reset_token_stats
 
 def parse_arguments():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='ASGSE - Run with configuration file')
+    parser = argparse.ArgumentParser(description='SESpec - Run with configuration file')
     parser.add_argument('--config', '-c', 
                        type=str, 
                        default='configs/func_config.json',
