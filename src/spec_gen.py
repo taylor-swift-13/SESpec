@@ -1,7 +1,6 @@
 import os
 import re
 import logging
-from pathlib import Path
 from Utils.main_class import *
 from Utils.utils import extract_function
 from convertor import SpecificationConvertor
@@ -9,10 +8,6 @@ from specification_verify import SpecVerifier
 from config import *
 from llm import *
 from pre_cond_manager import PreconditionsManager
-
-# Get the project root directory (src directory)
-PROJECT_ROOT = Path(__file__).parent.parent
-PROMPT_DIR = PROJECT_ROOT / "src" / "prompt"
 
 class SpecGenerator:
 
@@ -935,8 +930,7 @@ class SpecGenerator:
     
     def get_refine_prompt(self,error_message, c_code):
          # Read prompt template from file
-        prompt_file = PROMPT_DIR / "func" / "refine.txt"
-        with open(prompt_file, "r", encoding="utf-8") as file:
+        with open("prompt/func/refine.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # Replace {code} placeholder in template
@@ -1045,8 +1039,7 @@ class SpecGenerator:
     
     def repair_spec(self,error_message, c_code):
         """Call model to generate ACSL specification"""
-        prompt_file = PROMPT_DIR / "error.txt"
-        with open(prompt_file, "r", encoding="utf-8") as file:
+        with open("prompt/error.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         # Replace {code} placeholder in template
