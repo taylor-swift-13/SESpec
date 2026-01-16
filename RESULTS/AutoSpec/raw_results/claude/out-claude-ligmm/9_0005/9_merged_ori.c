@@ -1,0 +1,33 @@
+#include <stdlib.h>
+//Glibc iter-twice
+
+struct list_t {
+    struct list_t *next;
+};
+
+
+struct list_t *main9(struct list_t *l)
+{
+    struct list_t *p;
+    p = l;
+    /*@
+    loop invariant \valid(l);
+    loop invariant \exists struct list_t* q; q == p || q == l;
+    loop invariant 2;;
+    loop invariant (\forall struct list_t* node; node != NULL && node != p ==> \valid(node));
+    loop invariant ((p == NULL) || \valid(p));
+    loop assigns p;
+    /*@;
+    */
+    while (p) {
+        p = p->next;
+        if (p) {
+          p = p -> next;
+        }
+      	else {
+          return l;
+        }
+    }
+    // @ assert l == \at(l,Pre);
+    return l;
+}

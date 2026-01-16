@@ -1,0 +1,47 @@
+//SV-COMP insert_unequal
+#include <stdlib.h>
+struct SLL {
+    struct SLL *tail;
+    int head;
+  };
+  
+
+  
+  /*@
+  ensures \valid(\result);
+  ensures \result->head == data;
+  ensures \result->tail == \null;
+  */
+  struct SLL* malloc_SLL(int data){
+
+  }
+  
+  
+  struct SLL * main21(struct SLL *l, int data) {
+    struct SLL *p;
+    struct SLL *new_node;
+    new_node = 0;
+    p = l;
+    
+    /*@
+    loop invariant p == \null || \valid(p);
+    loop invariant new_node == \null;
+    loop invariant \forall struct SLL* q; \at(l,Pre) == q || (q->tail == \null || \valid(q->tail)) ==> (q != p ==> q->head != data);
+    loop assigns p;
+    loop assigns new_node;
+    ```c;
+    ```;
+    Looking at this problem, I need to generate loop invariants for the while loop that traverses a singly linked list looking for a node with a specific value.;
+    */
+    while (p) {
+      if (p-> head == data) {
+        new_node = malloc_SLL(data);
+        new_node->tail = p->tail;
+        p->tail = new_node;
+        return l;
+      }
+      p = p->tail;
+    }
+    // @ assert data == \at(data,Pre);
+    return l;
+  }

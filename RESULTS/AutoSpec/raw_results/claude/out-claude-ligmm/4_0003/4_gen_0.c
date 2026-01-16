@@ -1,0 +1,42 @@
+#include <stdlib.h>
+//SV-COMP slist update_all_reverse
+struct SLL {
+    struct SLL *tail;
+    int head;
+  };
+
+  
+  
+  struct SLL * main4(struct SLL *p, int data) 
+  {
+    struct SLL *w, *t, *v;
+    w = (void *)0;
+    v = p;
+    /*@
+    /*@ 
+      loop invariant \valid(p) || p == \null;
+      loop invariant \forall struct SLL* node; 
+          (node == w || (node != \null && \valid(node))) ==> 
+              node->head == data;
+      loop invariant \forall struct SLL* node; 
+          (node != v && node != w) ==> node == \at(node,Pre);
+      loop invariant \exists struct SLL* last; 
+          last == w || last == v || last == t || last == p;
+      loop invariant \valid(w) || w == \null;
+      loop invariant \valid(v) || v == \null;
+      loop assigns w, v, t;
+    */
+    */
+    while (v) {
+      t = v->tail;
+      v->tail = w;
+      if (v-> head != data) {
+        v -> head = data;
+      }
+      w = v;
+      v = t;
+    }
+    // @ assert data == \at(data,Pre);
+    // @ assert p == \at(p,Pre);
+    return w;
+  }

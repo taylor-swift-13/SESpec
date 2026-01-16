@@ -1,0 +1,36 @@
+#include <assert.h>
+int unknown1();
+int unknown2();
+int unknown3();
+int unknown4();
+
+/*
+ * from Invgen test suite
+ */
+/*@
+requires n > 0;
+requires k > n;
+*/
+int foo(int n, int k) {
+
+  int i, j;
+
+  j = 0;
+  /*@
+  loop invariant k == \old(k) - j;
+  loop invariant k + j == \old(k);
+  loop invariant k >= \old(k) - n;
+  loop invariant j >= 0;
+  loop invariant j <= n;
+  loop invariant j <= n;
+  loop invariant 0 <= j;
+  loop assigns k;
+  loop assigns j;
+  */
+  while( j < n ) {
+    j++;
+    k--;
+  } 
+  // @ assert k>=0;
+  return 0;
+}

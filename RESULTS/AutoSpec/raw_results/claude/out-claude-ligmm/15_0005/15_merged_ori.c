@@ -1,0 +1,32 @@
+#include <stdlib.h>
+//Zephyr slist rev_append
+struct sys_slist_t {
+    struct sys_slist_t *next;
+};
+
+
+struct sys_slist_t *main15(struct sys_slist_t *p, struct sys_slist_t *q)
+{
+    struct sys_slist_t *w, *t, *v;
+    w = q;
+    v = p;
+   
+    /*@
+    loop invariant \forall struct sys_slist_t* node; node != v ==> (node->next == \at(node->next,Pre) || node->next == w);
+    loop invariant \forall struct sys_slist_t* node; \reachable(p, node) ==> (node == v || node == t || node == w || node == q);
+    loop invariant \forall struct sys_slist_t* node; \in_reversed_segment(node, w, q);
+    loop invariant (w == \at(q,Pre) || \exists struct sys_slist_t* u; u == v || u == w);
+    loop assigns w;
+    loop assigns v;
+    loop assigns t;
+    */
+    while (v) {
+      t = v->next;
+      v->next = w;
+      w = v;
+      v = t;
+    }
+    // @ assert p == \at(p,Pre);
+    // @ assert q == \at(q,Pre);
+    return w;
+}

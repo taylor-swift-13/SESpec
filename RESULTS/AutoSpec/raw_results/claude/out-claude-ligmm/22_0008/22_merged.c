@@ -1,0 +1,36 @@
+//SV-COMP prepend_unequal
+#include <stdlib.h>
+struct SLL {
+  struct SLL *tail;
+  int head;
+};
+
+
+
+/*@
+requires \valid(l);
+ensures \result == l;
+*/
+struct SLL * prepend(struct SLL *l, int data){
+}
+
+struct SLL * main22(struct SLL *l, int data) 
+{
+  struct SLL *p;
+  l = prepend(l, data);
+  p = l;
+  
+  /*@
+  loop invariant \valid(l);
+  loop invariant \exists struct SLL* q; q == l && q != NULL;
+  loop assigns p;
+  */
+  while (p) {
+    if (p->head == data) {
+      return l;
+    }
+    p = p->tail;
+  }
+  // @ assert data == \at(data,Pre);
+  return l;
+}

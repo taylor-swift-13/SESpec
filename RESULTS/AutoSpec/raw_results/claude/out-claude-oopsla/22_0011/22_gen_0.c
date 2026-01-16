@@ -1,0 +1,51 @@
+#include <assert.h>
+int unknown1();
+int unknown2();
+int unknown3();
+int unknown4();
+
+void main()
+{
+  int x = 0;
+  int y = 0;
+  int z = 0;
+  int k = 0;
+
+  /*@
+  loop invariant 0 <= x <= y <= z;
+  loop invariant y == z;
+  loop invariant k == x + y + z;
+  loop invariant k % 3 == (x % 3 + y % 3 + z % 3) % 3;
+  loop invariant x <= y;
+  loop invariant y <= z;
+  loop invariant x >= 0 && y >= 0 && z >= 0 && k >= 0;
+  loop invariant \forall integer m; m < y ==> (k >= 3 * m);
+  loop invariant y == z;
+  loop invariant k == 3 * y - x;
+  loop invariant y == z;
+  loop invariant x >= 0 && y >= 0 && z >= 0 && k >= 0;
+  loop invariant x <= y;
+  loop invariant x <= y && y <= z;
+  loop invariant k == x + y + z;
+  loop invariant k % 3 == (x % 3 + y % 3 + z % 3) % 3;
+  loop invariant 0 <= x;
+  loop invariant 0 <= x && 0 <= y && 0 <= z && 0 <= k;
+  loop assigns z;
+  loop assigns y;
+  loop assigns x;
+  loop assigns k;
+  */
+  while(unknown1())
+  {
+     if(k%3 == 0)
+       x++;
+     y++;
+     z++;
+     k = x+y+z;
+  }
+
+  // @ assert x==y;
+  // @ assert y==z;
+ 
+}
+
