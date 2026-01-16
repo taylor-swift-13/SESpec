@@ -1386,7 +1386,7 @@ You must use these follow examples as a reference to complete the task, with the
 
             loop_invariant = self.convertor.convert_annotations(loop_invariant)
 
-            self.logger.info("VST format loop invariant")
+            self.logger.info("QCP format loop invariant")
             self.logger.info(loop_invariant)
               
 

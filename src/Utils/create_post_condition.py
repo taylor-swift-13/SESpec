@@ -26,7 +26,7 @@ def create_post_dict_list(data:str)->list:
 def delete_file_if_exists(file_path):
     """如果文件存在，则Deleted文件"""
     # 构建完整的文件路径
-    file_path = os.path.join('../VST/test', file_path)
+    file_path = os.path.join('../QCP/test', file_path)
 
     if os.path.exists(file_path):  # 检查文件是否存在
         os.remove(file_path)  # Deleted文件
@@ -58,7 +58,7 @@ def create_post(file_name: str,annotated_loop_file_path: str,conds: list)-> list
 
     # 运行命令，捕获Output
     try:
-        result = subprocess.run(command, cwd='../VST/test',
+        result = subprocess.run(command, cwd='../QCP/test',
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         

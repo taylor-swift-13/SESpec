@@ -11,7 +11,7 @@ SEComments is a toolkit designed for end-to-end generation of ACSL comments for 
   - `loop_config.yaml`: Configuration file for loop invariant generation
 
 - `RESULTS/`: Raw experiment results
-- `VST/`: Symbolic executor
+- `QCP/`: Symbolic executor
 
 ### Requirements
 - Linux (Ubuntu 22.04)

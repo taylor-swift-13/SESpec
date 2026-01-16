@@ -7,7 +7,7 @@ class MainConfig:
     Attributes:
         root_dir (str): Project root directory path
         input_dir (str): Preprocessed input directory (default 'input')
-        annotated_c_dir (str): Intermediate directory with VST format annotations (default '1_output')
+        annotated_c_dir (str): Intermediate directory with QCP format annotations (default '1_output')
         annotated_loop_dir (str): Complete loop annotation directory (default '2_output')
         generated_loop_dir (str): ACSL format invariant generation directory (default '3_output')
         output_dir (str): Final output directory (default 'output')
@@ -15,8 +15,8 @@ class MainConfig:
     """Configuration parameter class"""
     root_dir: str = None  # Original input
     input_dir: str = 'input' # Unified format input, can manually inject ACSL format preconditions and verification targets
-    annotated_c_dir: str = '1_output' # VST format annotated preconditions, can manually inject VST format preconditions and verification targets
-    annotated_loop_dir:str = '2_output' # VST format complete annotations
+    annotated_c_dir: str = '1_output' # QCP format annotated preconditions, can manually inject QCP format preconditions and verification targets
+    annotated_loop_dir:str = '2_output' # QCP format complete annotations
     generated_loop_dir :str = '3_output' # ACSL format annotated preconditions, verification targets, invariants
     output_dir:str = 'output' # ACSL format complete annotations
     log_dir:str = 'log'
