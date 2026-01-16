@@ -36,7 +36,7 @@ class LoopProcessor:
         Delete file if it exists.
         :param file_path: File path
         """
-        file_path = os.path.join('../VST/test', file_path)
+        file_path = os.path.join('../QCP/test', file_path)
         if os.path.exists(file_path):
            # print(f"File found: {file_path}. Deleting the file.")
             os.remove(file_path)
@@ -263,7 +263,7 @@ class LoopProcessor:
         try:
             result = subprocess.run(
                 command,
-                cwd='../VST/test',
+                cwd='../QCP/test',
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True

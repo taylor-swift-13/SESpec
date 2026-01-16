@@ -15,7 +15,7 @@ SESpec is a toolkit designed for end-to-end generation of ACSL specifications fo
   - `loop_config.yaml`: Configuration file for loop invariant generation
 
 - `RESULTS/`: Raw experiment results
-- `VST/`: Symbolic executor
+- `QCP/`: Symbolic executor
 
 ### Requirements
 - Linux (Ubuntu 22.04)
@@ -132,7 +132,7 @@ llm:
 
 ##### 3. Precondition Configuration
 
-This section allows you to define custom preconditions in VST user assertion for specific functions. You should add same preconditions in ACSL format directly in input file.
+This section allows you to define custom preconditions in QCP user assertion for specific functions. You should add same preconditions in ACSL format directly in input file.
 
 ```yml
 preconditions:

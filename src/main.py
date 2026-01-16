@@ -473,7 +473,7 @@ class FunctionProcessor:
             self.logger.info(f"\nSPECIFICATION FOR {self.config.function_name}")
             self.logger.info('='* 50+'\n')
 
-            self.logger.info(f'\nVST Specification for function {self.config.function_name}:\n{main_func.annotation}')
+            self.logger.info(f'\nQCP Specification for function {self.config.function_name}:\n{main_func.annotation}')
             if main_func.specification:
                 self.logger.info(f'\nACSL Specification for function {self.config.function_name}:\n{main_func.specification}')
         

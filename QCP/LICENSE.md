@@ -1,0 +1,1 @@
+This folder is a part of qualified c programming (QCP) verification tool. QCP is not an open source software. This copy of QCP is for artifact evaluation ONLY. It should NOT be used for any other purpose.

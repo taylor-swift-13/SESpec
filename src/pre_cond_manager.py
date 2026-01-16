@@ -3,7 +3,7 @@ from typing import Dict
 
 class PreconditionsManager:
     
-    # vst
+    # qcp
     Require: Dict[str, str]
     # acsl
     requires: Dict[str, str]

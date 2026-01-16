@@ -963,7 +963,7 @@ class SpecGenerator:
                 f'\n{function_header}\n{self.function_info.annotation}\n' + '{' + "{".join(groups[1:]))
         
         if self.debug:
-            self.logger.info(f'automated generated VST specification of {self.function_info.name}.c : \n{content}')
+            self.logger.info(f'automated generated QCP specification of {self.function_info.name}.c : \n{content}')
         self.create_c_file(self.annotated_loop_c_file_path, f'{self.function_info.name}.c', content)
 
     def create_specification(self):
