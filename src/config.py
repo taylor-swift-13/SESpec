@@ -56,7 +56,7 @@ class LLMConfig:
     # API model configuration
     use_api_model = True # Control whether to use API model or local Transformers model
     api_model:str = "claude-3-7-sonnet-20250219" # API model name, e.g., "gpt-4o"
-    api_key:str = "sk-afVplv2oRlR8SnMl_______BN5O3zxrD1B7zWzgNWGA"
+    api_key:str = "sk-afVplv2oRlR8Sn_____5O3zxrD1B7zWzgNWGA"
     base_url:str = "https://yunwu.ai/v1"
     api_temperature = 0.7 # Temperature parameter for API calls
     api_top_p=0.7

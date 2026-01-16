@@ -439,14 +439,24 @@ class SpecGenerator:
                     
                     file_path = f"{self.output_path}/{callee_name}.c"
                     
+                    # 如果文件不存在，直接跳过
+                    if not os.path.exists(file_path):
+                        self.logger.warning(f"Callee function {callee_name} file not found at {file_path}, skipping...")
+                        processed_callees.add(callee_name)  # Mark as processed to avoid retry
+                        break
 
                     code = ''
-
-                    with open(file_path, "r", encoding="utf-8") as file:
-                        code = file.read()
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as file:
+                            code = file.read()
+                    except Exception as e:
+                        self.logger.warning(f"Failed to read {file_path}: {e}, skipping...")
+                        processed_callees.add(callee_name)  # Mark as processed to avoid retry
+                        break
                     
-                    annotated_callee_list.append(code)
-                    processed_callees.add(callee_name)  # Mark as processed
+                    if code:
+                        annotated_callee_list.append(code)
+                        processed_callees.add(callee_name)  # Mark as processed
 
                     break
         

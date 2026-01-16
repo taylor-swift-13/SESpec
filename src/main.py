@@ -255,6 +255,10 @@ class FunctionProcessor:
         else:
             new_func = self._initialize_function(func_name)
 
+        # 如果找不到函数，跳过处理
+        if new_func is None:
+            self.logger.warning(f'Function {func_name} not found, skipping...')
+            return
 
         if func_name in self.precond_manager.requires:
             new_func.require = self.precond_manager.requires[func_name]
@@ -384,7 +388,10 @@ class FunctionProcessor:
         self.logger.info('='* 50+'\n')
         
         main_func = self._initialize_function(self.config.function_name)
-
+        
+        # 主函数必须存在，如果找不到则抛出错误
+        if main_func is None:
+            raise ValueError(f"Main function '{self.config.function_name}' not found")
 
         self.precond_manager = PreconditionsManager(main_func.file_path,self.preconditions)
       
