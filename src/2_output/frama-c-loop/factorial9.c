@@ -21,10 +21,10 @@ Ensure Results(__return)
  
   /*@ Print user assertion at number LoopEntry_0*/ 
 /*@ Inv
-    ((1 <= n@pre) => (1 <= i && i <= n + 1)) &&
+    ((1 <= n@pre) => (1 <= i && i <= n + 1) ) &&
+((1 <= n@pre) => (f == factorial(i - 1)) ) &&
 ((!(1 <= n@pre)) => ((f == 1)&&(i == 1)&&(n == n@pre))) &&
-(n == n@pre
-          loop assigns f, i)
+(n == n@pre)
     */
     
             while (i <= n)  {

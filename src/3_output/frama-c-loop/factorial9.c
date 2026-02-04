@@ -1,4 +1,9 @@
 
+/*@
+  logic integer factorial(integer x) =
+    x <= 1 ? 1 : x * factorial(x - 1);
+*/
+
 int factorial9(int n) {
 
   int i = 1;
@@ -9,10 +14,10 @@ int factorial9(int n) {
         /* >>> LOOP INVARIANT TO FILL <<< */
         
             /*@
-          loop invariant (1 <= \at(n,Pre)) ==> (1 <= i <= n + 1);
+          loop invariant (1 <= \at(n,Pre)) ==> (1 <= i <= n + 1) ;
+          loop invariant (1 <= \at(n,Pre)) ==> (f == factorial(i - 1)) ;
           loop invariant (!(1 <= \at(n,Pre))) ==> ((f == 1)&&(i == 1)&&(n == \at(n,Pre)));
           loop invariant n == \at(n,Pre);
-          loop assigns f, i;
             */
             while (i <= n)  {
     f = f * i;

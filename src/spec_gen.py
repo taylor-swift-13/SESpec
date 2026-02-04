@@ -694,9 +694,9 @@ class SpecGenerator:
             print('ignore void')
             jump_flag = True
         elif self.function_info.func_type == 'void':
-            ensure_statement = 'ensures PLACE_HOLDER; \n    assigns PLACE_HOLDER;'
+            ensure_statement = '  assigns PLACE_HOLDER; \n  ensures PLACE_HOLDER;   '
         else:
-            ensure_statement = 'ensures PLACE_HOLDER; \n    ensures \\result == PLACE_HOLDER_RESULT;  \n    assigns PLACE_HOLDER;'
+            ensure_statement = '  assigns PLACE_HOLDER;   \n  ensures PLACE_HOLDER; \n    ensures \\result == PLACE_HOLDER_RESULT;  '
 
 
         if not jump_flag:
