@@ -700,6 +700,8 @@ class InvGenerator:
 
         # Replace {code} placeholder in template
         simgen_prompt = prompt_template.format(content=loop_content)
+        
+        
         return simgen_prompt
     
 

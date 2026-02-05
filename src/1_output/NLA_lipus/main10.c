@@ -9,12 +9,11 @@
         
 
 int main10(int z,int k)
+/*@
 
-            /*@
-            Require z >= 0 && z <= 10 && k > 0 && k <= 10
-            Ensure Results(__return)
-            */
-            {
+Require emp
+Ensure Results(__return)
+*/{
 
     int x=1;
     int y=1;

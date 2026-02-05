@@ -6,7 +6,7 @@ from config import MainConfig
 import re
 
 class OutputVerifier:
-    def __init__(self,config:MainConfig,logger:logging.Logger,output:bool=False):
+    def __init__(self,config:MainConfig,logger:logging.Logger,output:bool=True):
         self.config = config
         self.logger = logger
         self.output = output
