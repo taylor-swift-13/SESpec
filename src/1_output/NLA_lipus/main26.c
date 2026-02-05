@@ -9,12 +9,11 @@
         
 
 int main26(int x,int y) 
+/*@
 
-            /*@
-            Require x == 1 && x <= y
-            Ensure Results(__return)
-            */
-            {
+Require emp
+Ensure Results(__return)
+*/{
 	
 	int z=1;
 	int w=1;

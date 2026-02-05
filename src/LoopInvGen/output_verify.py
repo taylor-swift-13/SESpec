@@ -6,7 +6,7 @@ from config import MainConfig
 import re
 
 class OutputVerifier:
-    def __init__(self,config:MainConfig,logger:logging.Logger,output:bool=True):
+    def __init__(self,config:MainConfig,logger:logging.Logger,output:bool=False):
         self.config = config
         self.logger = logger
         self.output = output
@@ -15,7 +15,6 @@ class OutputVerifier:
         self.verify_error_list = []
         self.verify_result = []
         self.validate_result =[]
-        
 
     def print_errors(self, error_list):
         for error in error_list:

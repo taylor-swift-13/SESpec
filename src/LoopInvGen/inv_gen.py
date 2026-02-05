@@ -1316,7 +1316,7 @@ You must use these follow examples as a reference to complete the task, with the
                     valid = False
                     for _ in range(self.config.refine_count):
 
-                        verifier = OutputVerifier(self.config,self.logger,True)
+                        verifier = OutputVerifier(self.config,self.logger)
                         verifier.run(file_name)   # Pass complete path
                         
                         # Get verification result (assuming it returns a list)
@@ -1391,9 +1391,10 @@ You must use these follow examples as a reference to complete the task, with the
             symexe_updated_code  =processor.update_loop_content(self.get_c_code(processor.output_file),loop_invariant,idx)
                     
             if syntax and valid:
-                self.logger.info("PARTIAL CORRECT INVARIANT")
-                self.logger.info("continue symbolic execution")
-                self.logger.info(annotations)
+                if self.config.debug:
+                    self.logger.info("PARTIAL CORRECT INVARIANT")
+                    self.logger.info("continue symbolic execution")
+                    self.logger.info(annotations)
                 # Write ACSL annotations to output file
                 with open( output_symexe_c_file_path, 'w', encoding='utf-8') as file:
                         file.write(symexe_updated_code)
@@ -1415,6 +1416,7 @@ You must use these follow examples as a reference to complete the task, with the
 
         if syntax and valid and satisfy:
             self.logger.info("CORRECT INVARIANT")
+
 
     
     
