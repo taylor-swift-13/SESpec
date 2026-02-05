@@ -38,9 +38,6 @@ def parse_arguments():
     parser.add_argument('--function', '-f',
                        type=str,
                        help='Function name (overrides config file setting)')
-    parser.add_argument('--debug', '-d',
-                       action='store_true',
-                       help='Enable debug mode (overrides config file setting)')
     return parser.parse_args()
 
 
@@ -625,6 +622,5 @@ if __name__ == '__main__':
         config_path=args.config,
         function_name=args.function,
         root_dir=args.root_dir,
-        debug=args.debug
     )
 

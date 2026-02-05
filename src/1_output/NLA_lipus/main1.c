@@ -9,12 +9,11 @@
         
 
 int main1(int a,int n)
+/*@
 
-            /*@
-            Require a >= n && n == 0
-            Ensure Results(__return)
-            */
-            {
+Require emp
+Ensure Results(__return)
+*/{
  
   int x,y,z;
   

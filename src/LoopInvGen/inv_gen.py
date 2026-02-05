@@ -1318,7 +1318,7 @@ You must use these follow examples as a reference to complete the task, with the
                     valid = False
                     for _ in range(self.config.refine_count):
 
-                        verifier = OutputVerifier(self.config,self.logger,True)
+                        verifier = OutputVerifier(self.config,self.logger)
                         verifier.run(file_name)   # Pass complete path
                         
                         # Get verification result (assuming it returns a list)
