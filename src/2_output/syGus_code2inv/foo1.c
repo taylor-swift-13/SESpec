@@ -30,8 +30,9 @@ Ensure emp
     
     while (y < 100000) {
       
-       x  = x + y;
-       y  = y + 1;
+        x = x + y;
+        y = y + 1;
+      
     }
   
     

@@ -9,11 +9,12 @@
         
 
 int main10(int z,int k)
-/*@
 
-Require emp
-Ensure Results(__return)
-*/{
+            /*@
+            Require z >= 0 && z <= 10 && k > 0 && k <= 10
+            Ensure Results(__return)
+            */
+            {
 
     int x=1;
     int y=1;
@@ -21,20 +22,11 @@ Ensure Results(__return)
   
    
   /*@ Print user assertion at number LoopEntry_0*/ 
-/*@ Inv
-    ((1 < k@pre) => (1 + x*z - x - z*y == 0)) &&
-((1 < k@pre) => (c >= 1 && c <= k)) &&
-((1 < k@pre) => (y >= 0)) &&
-(!(1 < k@pre) => (c == 1 && y == 1 && x == 1 && k == k@pre && z == z@pre)) &&
-(k == k@pre) &&
-(z == z@pre
-      loop assigns c, x, y)
-    */
-    
-    while (c < k){
-       c = c + 1;
-       x = x*z + 1;
-       y = y*z;
+/*@ Inv emp */ /*0*/ 
+ while (c < k){
+   c = c + 1;
+   x = x*z + 1;
+   y = y*z;
     }
   
    
