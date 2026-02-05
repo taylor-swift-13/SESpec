@@ -14,6 +14,6 @@ int main10(int z,int k){
    y = y*z;
     }
   
-   /*@ 1+x*z-x-z*y==0; */
+   /*@assert 1+x*z-x-z*y==0; */
   }
   
