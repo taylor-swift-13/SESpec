@@ -19,14 +19,14 @@ docker compose up -d
 ```bash
 chmod +x pack-offline.sh
 ./pack-offline.sh
-# 生成: sespec-offline.tar
+# 生成: sespec-offline.tar.gz
 ```
 
 ### 部署 (离线机器)
 
 ```bash
 # 导入镜像
-docker load -i sespec-offline.tar
+docker load -i sespec-offline.tar.gz
 
 # 运行容器
 docker run -it --rm \

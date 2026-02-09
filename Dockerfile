@@ -8,6 +8,7 @@ ENV PYTHONUNBUFFERED=1
 ENV LLVM_CONFIG=/usr/bin/llvm-config-18
 ENV CC=clang-18
 ENV CXX=clang++-18
+ENV LD_LIBRARY_PATH=/usr/lib/llvm-18/lib
 
 WORKDIR /home/yangfp/SESpec
 
@@ -29,6 +30,7 @@ RUN echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" > /etc/ap
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     clang-18 \
+    libclang-18-dev \
     llvm-18-dev \
     llvm-18-tools \
     libz3-dev \
@@ -42,6 +44,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     vim \
     && rm -rf /var/lib/apt/lists/*
+
+RUN ln -sf /usr/lib/llvm-18/lib/libclang-18.so.1 /usr/lib/llvm-18/lib/libclang.so
 
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 && \
     update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100 && \

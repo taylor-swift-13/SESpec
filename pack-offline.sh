@@ -6,14 +6,14 @@ echo "=========================================="
 echo ""
 echo "使用方法:"
 echo "  1. 在有网络的机器上运行: ./pack-offline.sh"
-echo "  2. 这将生成 sespec-offline.tar"
-echo "  3. 拷贝 sespec-offline.tar 到离线机器"
-echo "  4. 在离线机器上运行: docker load -i sespec-offline.tar"
+echo "  2. 这将生成 sespec-offline.tar.gz"
+echo "  3. 拷贝 sespec-offline.tar.gz 到离线机器"
+echo "  4. 在离线机器上运行: docker load -i sespec-offline.tar.gz"
 echo "  5. 运行: docker run -it sespec:offline bash"
 echo ""
 
 IMAGE_NAME="sespec-offline"
-OUTPUT_FILE="sespec-offline.tar"
+OUTPUT_FILE="sespec-offline.tar.gz"
 
 if [ ! -f "Dockerfile" ]; then
     echo "错误: 未找到 Dockerfile"
@@ -39,7 +39,7 @@ docker tag $IMAGE_NAME:build $IMAGE_NAME:offline
 
 echo ""
 echo "步骤 3: 导出为离线包..."
-docker save $IMAGE_NAME:offline -o $OUTPUT_FILE
+docker save $IMAGE_NAME:offline | gzip > $OUTPUT_FILE
 
 echo ""
 echo "=========================================="
