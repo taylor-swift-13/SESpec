@@ -70,14 +70,8 @@ A spec is cheating if it avoids the real contract-writing task by, for example:
 
 If the spec is cheating, incomplete, overconstrained, underconstrained, or semantically wrong, score must be 0.
 
-Output JSON with exactly these keys:
+Output JSON with exactly this key:
 - score: integer, must be 0 or 1
-- semantic_complete: boolean
-- cheating: boolean
-- cheating_signals: array of short strings
-- missing_semantics: array of short strings
-- wrong_or_overconstrained_claims: array of short strings
-- summary: short string
 
 Scoring rule:
 - score = 1 only if the spec captures the full intended semantics with no material gaps, no wrong claims, and no cheating
@@ -114,18 +108,11 @@ def judge_spec_completeness(
     )
     payload = _extract_json(response["content"])
     raw_score = payload.get("score", 0)
-    payload["score"] = 1 if str(raw_score).strip() in {"1", "true", "True"} else 0
-    payload["cheating_signals"] = list(payload.get("cheating_signals", []))
-    payload["missing_semantics"] = list(payload.get("missing_semantics", []))
-    payload["wrong_or_overconstrained_claims"] = list(payload.get("wrong_or_overconstrained_claims", []))
-    payload["semantic_complete"] = bool(payload["score"])
-    payload["cheating"] = bool(payload.get("cheating", False))
-    if payload["cheating"]:
-        payload["score"] = 0
-        payload["semantic_complete"] = False
-    payload["judge_model"] = model
-    payload["language"] = language
-    payload["original_program_path"] = str(original_program_path)
-    payload["candidate_program_path"] = str(candidate_program_path)
-    payload["token_usage"] = response["usage"]
-    return payload
+    return {
+        "score": 1 if str(raw_score).strip() in {"1", "true", "True"} else 0,
+        "judge_model": model,
+        "language": language,
+        "original_program_path": str(original_program_path),
+        "candidate_program_path": str(candidate_program_path),
+        "token_usage": response["usage"],
+    }

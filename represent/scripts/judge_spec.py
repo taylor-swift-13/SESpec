@@ -55,7 +55,6 @@ def main() -> None:
     print(json.dumps({
         "project": result["project"],
         "score": result["score"],
-        "summary": result.get("summary", ""),
         "output": str(out_path),
     }, indent=2, ensure_ascii=False))
 

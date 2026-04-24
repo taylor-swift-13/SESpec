@@ -13,7 +13,16 @@ def run_specgen(model: str, *, benchmark_relpath: str = "benchmark/SVCOMP/Additi
     ensure_dirs()
     settings = get_settings()
     repo_root = Path(settings.paths["specgen_root"])
-    result_dir = Path(settings.paths["sespec_root"]) / "represent" / "results" / "smoke" / "specgen" / model
+    benchmark_name = Path(benchmark_relpath).stem
+    result_dir = (
+        Path(settings.paths["sespec_root"])
+        / "represent"
+        / "results"
+        / "smoke"
+        / "specgen"
+        / model
+        / benchmark_name
+    )
     usage_log = result_dir / "usage.jsonl"
     key_file = result_dir / "api_key.txt"
     key_file.parent.mkdir(parents=True, exist_ok=True)
@@ -30,7 +39,6 @@ def run_specgen(model: str, *, benchmark_relpath: str = "benchmark/SVCOMP/Additi
             ["ln", "-sfn", "/home/yangfp/CAV-JAVA/.tools/openjml/current", str(openjml_link)],
             check=True,
         )
-    before_logs = set(glob.glob(str(repo_root / "logs" / "log-*.txt")))
     command = [
         "conda",
         "run",
@@ -54,7 +62,7 @@ def run_specgen(model: str, *, benchmark_relpath: str = "benchmark/SVCOMP/Additi
         }
     )
     result = run_command(command, cwd=repo_root, env=env, log_path=result_dir / "command.log")
-    after_logs = sorted(set(glob.glob(str(repo_root / "logs" / "log-*.txt"))) - before_logs)
+    after_logs = sorted(glob.glob(str(repo_root / "logs" / f"log-{benchmark_name}-*.txt")))
     metrics = parse_specgen_usage(usage_log)
     validity = parse_specgen_validity(result_dir / "command.log")
     summary = {

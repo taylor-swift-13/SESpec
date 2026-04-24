@@ -18,6 +18,7 @@ from represent.runners.common import (
 
 def _apply_sespec_preset(base_config: dict, preset: str) -> None:
     main = base_config["main"]
+    main["pass_count"] = 1
     if preset == "default":
         main["use_symbolic_execution"] = True
     elif preset == "no_repair":
@@ -75,7 +76,17 @@ def run_sespec(
     input_root = src_root / "input" / root_dir
     source_file = _find_source_file(input_root, function_name)
     effective_function_name = _infer_c_function_name(source_file, function_name)
-    result_dir = repo_root / "represent" / "results" / "smoke" / "sespec" / preset / model
+    result_dir = (
+        repo_root
+        / "represent"
+        / "results"
+        / "smoke"
+        / "sespec"
+        / preset
+        / model
+        / root_dir
+        / effective_function_name
+    )
     supported, support_message = c_benchmark_supported(source_file)
     if not supported:
         summary = {

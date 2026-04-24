@@ -115,7 +115,20 @@ def parse_sespec_metrics(log_path: Path, stdout: str, run_seconds: float) -> dic
 
     time_match = re.search(r"Total execution time:\s*([0-9.]+)\s*seconds", content)
     seconds = float(time_match.group(1)) if time_match else run_seconds
-    syntax_ok = "Syntax Error:\nsyntax Correct" in content or "syntax Correct" in content
+    first_pass_match = re.search(
+        r"first_pass:\s*\n\s*syntax=(\d+),\s*valid=(\d+)(?:,\s*satisfy=(\d+))?",
+        content,
+    )
+    first_pass_syntax = None
+    first_pass_valid = None
+    if first_pass_match:
+        first_pass_syntax = first_pass_match.group(1) == "1"
+        first_pass_valid = first_pass_match.group(2) == "1"
+    syntax_ok = (
+        first_pass_syntax
+        if first_pass_syntax is not None
+        else ("Syntax Error:\nsyntax Correct" in content or "syntax Correct" in content)
+    )
     loop_results = grab_bool_list("Loop Invariant")
     post_results = grab_bool_list("Post Condition")
     instance_results = grab_bool_list("Instance")
@@ -126,11 +139,17 @@ def parse_sespec_metrics(log_path: Path, stdout: str, run_seconds: float) -> dic
         valid_groups.append(all(post_results))
     if instance_results:
         valid_groups.append(all(instance_results))
-    valid_pass = syntax_ok and all(valid_groups) if valid_groups else syntax_ok
+    valid_pass = (
+        (first_pass_syntax and first_pass_valid)
+        if first_pass_syntax is not None and first_pass_valid is not None
+        else (syntax_ok and all(valid_groups) if valid_groups else syntax_ok)
+    )
     return {
-        "success": valid_pass,
-        "valid_pass": valid_pass,
-        "syntax_ok": syntax_ok,
+        "success": bool(valid_pass),
+        "valid_pass": bool(valid_pass),
+        "syntax_ok": bool(syntax_ok),
+        "first_pass_syntax": first_pass_syntax,
+        "first_pass_valid": first_pass_valid,
         "total_seconds": seconds,
         "prompt_tokens": grab(r"Total prompt tokens \(input\):\s*([0-9,]+)"),
         "completion_tokens": grab(r"Total completion tokens \(output\):\s*([0-9,]+)"),
@@ -141,16 +160,62 @@ def parse_sespec_metrics(log_path: Path, stdout: str, run_seconds: float) -> dic
 
 def parse_autospec_final_result(final_result_path: Path) -> dict[str, Any]:
     if not final_result_path.exists():
-        return {"success": False}
-    lines = final_result_path.read_text(encoding="utf-8").splitlines()
-    payload = ast.literal_eval(lines[-1]) if lines else {}
-    status = payload.get("Status")
+        return {
+            "success": False,
+            "status": None,
+            "tokens_usage": 0,
+            "llms_query_times": "",
+            "total_solve_time": "",
+            "llms_query_seconds": 0.0,
+            "total_solve_seconds": 0.0,
+        }
+    content = final_result_path.read_text(encoding="utf-8", errors="ignore")
+    lines = content.splitlines()
+
+    def parse_timedelta(field: str) -> tuple[str, float]:
+        match = re.search(rf"'{field}':\s*datetime\.timedelta\(([^)]*)\)", content)
+        if not match:
+            return "", 0.0
+        args = match.group(1).strip()
+        if not args:
+            return "0:00:00", 0.0
+        days = 0
+        seconds = 0
+        microseconds = 0
+        for part in [item.strip() for item in args.split(",") if item.strip()]:
+            if "=" not in part:
+                try:
+                    days = int(part)
+                except ValueError:
+                    pass
+                continue
+            key, value = [item.strip() for item in part.split("=", 1)]
+            try:
+                ivalue = int(value)
+            except ValueError:
+                continue
+            if key == "days":
+                days = ivalue
+            elif key == "seconds":
+                seconds = ivalue
+            elif key == "microseconds":
+                microseconds = ivalue
+        total_seconds = days * 86400 + seconds + microseconds / 1_000_000
+        return f"{days} day, {seconds}s, {microseconds}us" if days else f"{seconds}.{microseconds:06d}s", total_seconds
+
+    status_match = re.search(r"'Status':\s*(\d+)", content)
+    tokens_match = re.search(r"'tokens_usage':\s*(\d+)", content)
+    llm_text, llm_seconds = parse_timedelta("llms_query_times")
+    solve_text, solve_seconds = parse_timedelta("total_solve_time")
+    status = int(status_match.group(1)) if status_match else None
     return {
-        "success": status == 0,
+        "success": bool(lines and lines[0].strip() == "Pass"),
         "status": status,
-        "tokens_usage": int(payload.get("tokens_usage", 0)),
-        "llms_query_times": str(payload.get("llms_query_times", "")),
-        "total_solve_time": str(payload.get("total_solve_time", "")),
+        "tokens_usage": int(tokens_match.group(1)) if tokens_match else 0,
+        "llms_query_times": llm_text,
+        "total_solve_time": solve_text,
+        "llms_query_seconds": llm_seconds,
+        "total_solve_seconds": solve_seconds,
     }
 
 
