@@ -1,5 +1,6 @@
 import os
 import re
+from typing import Optional
 import logging
 from Utils.main_class import *
 from Utils.utils import extract_function
@@ -273,12 +274,18 @@ class SpecGenerator:
         self.create_c_file(self.generated_loop_c_file_path, f'{self.function_info.name}.c',content)
     
 
-    def create_annotated_callee(self,callee_set: set) -> str:
+    def create_annotated_callee(self,callee_set: set, visited: Optional[set] = None) -> str:
+        if visited is None:
+            visited = set()
         if len(callee_set) == 0:
             return ''
         annotated_callee_list = []
         sub_callee_str = ''
         for callee_name in callee_set:
+            if callee_name in visited or callee_name == self.function_info.name:
+                continue
+            next_visited = set(visited)
+            next_visited.add(callee_name)
             for function_info in self.function_info_list:
                 if function_info.name == callee_name:
 
@@ -286,7 +293,7 @@ class SpecGenerator:
                     
                     sub_callee_set = function_info.callee_set
                     if sub_callee_set != []:
-                        sub_callee_str += self.create_annotated_callee(sub_callee_set)
+                        sub_callee_str += self.create_annotated_callee(sub_callee_set, next_visited)
 
                     function_header = function_info.code.split('{')[0]
                     # Extract new function
@@ -417,7 +424,9 @@ class SpecGenerator:
     
     
 
-    def create_callee_specifications_by_llm(self,callee_set: set) -> str:
+    def create_callee_specifications_by_llm(self,callee_set: set, visited: Optional[set] = None) -> str:
+        if visited is None:
+            visited = set()
 
         if len(callee_set) == 0:
             return ''
@@ -426,8 +435,10 @@ class SpecGenerator:
         processed_callees = set()  # Track processed callees to avoid duplicates
     
         for callee_name in callee_set:
-            if callee_name in processed_callees:
+            if callee_name in processed_callees or callee_name in visited or callee_name == self.function_info.name:
                 continue  # Skip already processed callees
+            next_visited = set(visited)
+            next_visited.add(callee_name)
                 
             for function_info in self.function_info_list:
                 if function_info.name == callee_name:
@@ -435,7 +446,7 @@ class SpecGenerator:
                     sub_callee_set = function_info.callee_set
                     
                     if sub_callee_set != []:
-                        sub_callee_str += self.create_callee_specifications_by_llm(sub_callee_set)
+                        sub_callee_str += self.create_callee_specifications_by_llm(sub_callee_set, next_visited)
                     
                     file_path = f"{self.output_path}/{callee_name}.c"
                     
@@ -456,20 +467,26 @@ class SpecGenerator:
     
     
     
-    def create_callee_specifications(self,callee_set) -> str:
+    def create_callee_specifications(self,callee_set, visited: Optional[set] = None) -> str:
+        if visited is None:
+            visited = set()
 
         if len(callee_set) == 0:
             return ''
         annotated_callee_list = []
         sub_callee_str = ''
         for callee_name in callee_set:
+            if callee_name in visited or callee_name == self.function_info.name:
+                continue
+            next_visited = set(visited)
+            next_visited.add(callee_name)
             for function_info in self.function_info_list:
                 if function_info.name == callee_name:
                     
                 
                     sub_callee_set = function_info.callee_set
                     if sub_callee_set != []:
-                        sub_callee_str += self.create_callee_specifications(sub_callee_set)
+                        sub_callee_str += self.create_callee_specifications(sub_callee_set, next_visited)
 
 
                     function_header = function_info.code.split('{')[0]
@@ -705,7 +722,7 @@ class SpecGenerator:
         if self.debug:
             self.logger.info(f'content before specgen: \n{content}')
 
-        convertor = SpecificationConvertor(self.function_info)
+        convertor = SpecificationConvertor(self.function_info, self.llm_config)
 
 
         # Generate specification annotations
@@ -782,7 +799,7 @@ class SpecGenerator:
             
         file_path = f"{self.generated_loop_c_file_path}/{self.function_info.name}.c"
 
-        convertor = SpecificationConvertor(self.function_info)
+        convertor = SpecificationConvertor(self.function_info, self.llm_config)
         
         if self.function_info.require:
             only_pre = f'''/*@
@@ -984,7 +1001,7 @@ class SpecGenerator:
                 
             file_path = f"{self.generated_loop_c_file_path}/{self.function_info.name}.c"
 
-            convertor = SpecificationConvertor(self.function_info)
+            convertor = SpecificationConvertor(self.function_info, self.llm_config)
             
             if self.function_info.require:
                 only_pre = f'''/*@

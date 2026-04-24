@@ -19,6 +19,9 @@ METHOD_RE = re.compile(
     r"(?m)^[ \t]*(?P<prefix>(?:public|private|protected)\s+)?(?P<static>static\s+)?(?P<rtype>[\w\[\]]+)\s+"
     r"(?P<name>\w+)\s*\((?P<params>[^)]*)\)\s*(?:throws [^{]+)?\{"
 )
+C_FUNC_RE = re.compile(
+    r"(?m)^[ \t]*(?:int|void|char|float|double|long|short|unsigned|signed)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;{]*\)\s*\{"
+)
 
 
 def strip_annotations(text: str) -> str:
@@ -277,6 +280,30 @@ def collect_methods(text: str) -> list[dict[str, object]]:
             }
         )
     return methods
+
+
+def lower_camel(name: str) -> str:
+    if not name:
+        return name
+    return name[:1].lower() + name[1:]
+
+
+def infer_primary_java_method(text: str, source_path: Path) -> str:
+    methods = collect_methods(strip_annotations(text))
+    names = [str(item["match"].group("name")) for item in methods]
+    if not names:
+        return source_path.stem
+    class_name = source_path.stem
+    preferred = [class_name, lower_camel(class_name)]
+    for candidate in preferred:
+        if candidate in names:
+            return candidate
+    return names[0]
+
+
+def infer_primary_c_function(text: str, fallback: str) -> str:
+    names = [name for name in C_FUNC_RE.findall(text) if name != "unknown"]
+    return names[0] if names else fallback
 
 
 def has_recursive_method(text: str) -> bool:
@@ -539,7 +566,7 @@ def main() -> None:
     bench_root = ROOT / "represent" / "bench"
     java_flat = bench_root / "java_flat"
     c_flat = bench_root / "c_flat"
-    mapping_rows: list[tuple[str, str, str, str]] = []
+    mapping_rows: list[tuple[str, str, str, str, str]] = []
 
     for stale in ["specgen_c", "formalbench_c", "specgen_java_flat", "formalbench_java_flat", "java_flat", "c_flat"]:
         path = bench_root / stale
@@ -587,6 +614,7 @@ def main() -> None:
         bench_id = f"{prefix}_{formalbench_index:04d}"
         source_out = java_flat / f"{bench_id}__{stem}.java"
         out = c_flat / f"{bench_id}__{stem}.c"
+        function_name = infer_primary_java_method(original, source)
         if not translate_java_to_c(source, out):
             if out.exists():
                 out.unlink()
@@ -596,7 +624,7 @@ def main() -> None:
             continue
         source_out.write_text(strip_all_comments(original), encoding="utf-8")
         selected_source_keys.add(source_key)
-        mapping_rows.append((bench_id, source_kind, str(source_out.relative_to(ROOT)), str(out.relative_to(ROOT))))
+        mapping_rows.append((bench_id, source_kind, str(source_out.relative_to(ROOT)), str(out.relative_to(ROOT)), function_name))
         formalbench_index += 1
 
     specgen_files = sorted(specgen_root.rglob("*.java"))
@@ -616,6 +644,7 @@ def main() -> None:
         if not out.exists():
             continue
         source_key = strip_all_comments(original)
+        function_name = infer_primary_java_method(original, source)
         java_out.write_text(strip_all_comments(original), encoding="utf-8")
         specgen_candidates.append(
             {
@@ -627,6 +656,7 @@ def main() -> None:
                 "length": nonblank_line_count(original),
                 "source_key": source_key,
                 "source_repo": source_repo,
+                "function_name": function_name,
             }
         )
 
@@ -648,6 +678,7 @@ def main() -> None:
                 str(item["source_repo"]),
                 str(Path(item["java_out"]).relative_to(ROOT)),
                 str(Path(item["c_out"]).relative_to(ROOT)),
+                str(item["function_name"]),
             )
         )
 
@@ -665,9 +696,11 @@ def main() -> None:
         bench_id = f"SVCOMP_{bench_bucket}_{index:04d}"
         java_out = java_flat / f"{bench_id}__{source.stem}.java"
         c_out = c_flat / f"{bench_id}__{source.stem}.c"
-        c_out.write_text(strip_all_comments(original), encoding="utf-8")
+        cleaned_c = strip_all_comments(original)
+        c_out.write_text(cleaned_c, encoding="utf-8")
         translate_c_numeric_loop_to_java(source, java_out, bench_bucket)
-        mapping_rows.append((bench_id, "SV-COMP", str(java_out.relative_to(ROOT)), str(c_out.relative_to(ROOT))))
+        function_name = infer_primary_c_function(cleaned_c, source.stem)
+        mapping_rows.append((bench_id, "SV-COMP", str(java_out.relative_to(ROOT)), str(c_out.relative_to(ROOT)), function_name))
         local_loop_mode[bench_id] = True
 
     mapped_java = {Path(row[2]).name for row in mapping_rows}

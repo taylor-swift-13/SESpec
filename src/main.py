@@ -232,14 +232,23 @@ class FunctionProcessor:
 
     def _initialize_function(self, func_name: str) -> FunctionInfo:
         """Initialize single function information"""
-       
-        return function_info_init(
+        func = function_info_init(
             self.tu_dict,
             self.config.input_path,
             func_name,
             self.file_cache,
             self.global_type_info_dict
         )
+        self._disable_recursive_callee_expansion(func)
+        return func
+
+    def _disable_recursive_callee_expansion(self, func: FunctionInfo) -> None:
+        """Stop callee expansion for directly recursive functions."""
+        if func.name in func.callee_set:
+            self.logger.info(
+                f"Recursive function detected for {func.name}; stop expanding callees and keep the rest of the workflow unchanged."
+            )
+            func.callee_set = set()
     
     
 
@@ -452,7 +461,7 @@ class FunctionProcessor:
             f for f in self.function_info_list 
             if f.name == self.config.function_name
         )
-        convertor = SpecificationConvertor(main_func)
+        convertor = SpecificationConvertor(main_func, self.llm_config)
         if convertor.z3_map:
          
             post2DSL = Post2DSL(main_func.specification,convertor.z3_map,self.config,self.logger)

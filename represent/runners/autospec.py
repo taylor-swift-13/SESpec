@@ -41,15 +41,35 @@ def run_autospec(model: str, *, benchmark_relpath: str = "benchmark/fib_46_bench
         }
         write_json(result_dir / "summary.json", summary)
         return summary
-    env = project_env({"PYTHONPATH": f"{repo_root}:{Path(settings.paths['sespec_root'])}"})
-    entry = "step.py" if one_shot else "fuzz.py"
-    shell_cmd = (
-        "source ./scripts/requires/init_env.sh >/dev/null 2>&1 && "
-        "export PATH='/home/yangfp/.opam/frama-c.27.1/bin:$PATH' && "
-        f"export PYTHONPATH='{repo_root}:{Path(settings.paths['sespec_root'])}:$PYTHONPATH' && "
-        f"python3 {entry} -f '{gpt_file}' -t 0 -o '{output_dir}' -m '{model}'"
+    env = project_env(
+        {
+            "PATH": f"/home/yangfp/.opam/frama-c.27.1/bin:{project_env().get('PATH', '')}",
+            "PYTHONPATH": f"{repo_root}:{Path(settings.paths['sespec_root'])}",
+            "ROOT_DIR": str(repo_root),
+            "LLVM_COMPILER": "clang",
+            "ASAN_OPTIONS": "detect_leaks=0",
+            "VERI_LIB_PATH": str(repo_root / "llvm"),
+            "LD_LIBRARY_PATH": str(repo_root / "clang+llvm" / "lib"),
+        }
     )
-    command = ["conda", "run", "--no-capture-output", "-n", settings.env_name, "bash", "-lc", shell_cmd]
+    entry = "step.py" if one_shot else "fuzz.py"
+    command = [
+        "conda",
+        "run",
+        "--no-capture-output",
+        "-n",
+        settings.env_name,
+        "python",
+        entry,
+        "-f",
+        str(gpt_file),
+        "-t",
+        "0",
+        "-o",
+        str(output_dir),
+        "-m",
+        model,
+    ]
     result = run_command(command, cwd=repo_root, env=env, log_path=result_dir / "command.log")
     final_result = parse_autospec_final_result(output_dir / "final_result")
     valid_result = parse_autospec_valid_goals(output_dir)

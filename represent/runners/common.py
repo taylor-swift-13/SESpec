@@ -269,9 +269,9 @@ def parse_frama_c_wp_output(stdout: str, stderr: str = "") -> dict[str, Any]:
     }
 
 
-def write_mapping(rows: list[tuple[str, str, str, str]], mapping_path: Path) -> None:
+def write_mapping(rows: list[tuple[str, str, str, str, str]], mapping_path: Path) -> None:
     mapping_path.parent.mkdir(parents=True, exist_ok=True)
     with mapping_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle, delimiter="\t")
-        writer.writerow(["id", "source_repo", "source_path", "translated_c_path"])
+        writer.writerow(["id", "source_repo", "source_path", "translated_c_path", "function_name"])
         writer.writerows(rows)

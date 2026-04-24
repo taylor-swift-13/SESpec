@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 
 from represent.api.client import project_env
 from represent.api.config import get_settings
@@ -36,6 +37,30 @@ def _apply_sespec_preset(base_config: dict, preset: str) -> None:
         raise ValueError(f"Unknown SESpec preset: {preset}")
 
 
+def _find_source_file(input_root: Path, requested_name: str) -> Path:
+    direct = input_root / f"{requested_name}.c"
+    if direct.exists():
+        return direct
+    c_files = sorted(input_root.glob("*.c"))
+    if len(c_files) == 1:
+        return c_files[0]
+    raise FileNotFoundError(f"Cannot resolve source file for {requested_name} in {input_root}")
+
+
+def _infer_c_function_name(source_file: Path, requested_name: str) -> str:
+    text = source_file.read_text(encoding="utf-8", errors="ignore")
+    pattern = re.compile(r"^\s*(?:int|void|char|float|double|long|short|unsigned|signed)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*\{", re.MULTILINE)
+    names = [name for name in pattern.findall(text) if name != "unknown"]
+    if requested_name in names:
+        return requested_name
+    lowered = requested_name[:1].lower() + requested_name[1:]
+    if lowered in names:
+        return lowered
+    if names:
+        return names[0]
+    return requested_name
+
+
 def run_sespec(
     model: str,
     *,
@@ -48,7 +73,9 @@ def run_sespec(
     settings = get_settings()
     repo_root = Path(settings.paths["sespec_root"])
     src_root = repo_root / "src"
-    source_file = src_root / "input" / root_dir / f"{function_name}.c"
+    input_root = src_root / "input" / root_dir
+    source_file = _find_source_file(input_root, function_name)
+    effective_function_name = _infer_c_function_name(source_file, function_name)
     result_dir = repo_root / "represent" / "results" / "smoke" / "sespec" / preset / model
     supported, support_message = c_benchmark_supported(source_file)
     if not supported:
@@ -57,7 +84,7 @@ def run_sespec(
             "preset": preset,
             "model": model,
             "root_dir": root_dir,
-            "function_name": function_name,
+            "function_name": effective_function_name,
             "source_path": str(source_file),
             "skipped": True,
             "skip_reason": support_message,
@@ -74,7 +101,7 @@ def run_sespec(
     temp_config = TMP_ROOT / f"sespec_{preset}_{root_dir}_{function_name}_{model}.json"
     base_config = json.loads((src_root / "configs" / "func_config.json").read_text(encoding="utf-8"))
     base_config["main"]["root_dir"] = root_dir
-    base_config["main"]["function_name"] = function_name
+    base_config["main"]["function_name"] = effective_function_name
     _apply_sespec_preset(base_config, preset)
     if loop_mode:
         base_config["main"]["only_loop"] = True
@@ -111,7 +138,7 @@ def run_sespec(
         "loop_mode": loop_mode,
         "model": model,
         "root_dir": root_dir,
-        "function_name": function_name,
+        "function_name": effective_function_name,
         "returncode": result.returncode,
         "command": result.command,
         "log_path": str(sespec_log),

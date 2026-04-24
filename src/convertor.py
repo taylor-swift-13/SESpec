@@ -8,7 +8,7 @@ from llm import *
 
 class SpecificationConvertor:
 
-    def __init__(self,function_info: FunctionInfo = None):
+    def __init__(self,function_info: FunctionInfo = None, llm_config: LLMConfig = None):
         # OpenAI 客户端初始化
         # self.llm ='gpt-3.5-turbo'
         # self.llm ='claude-3-7-sonnet'
@@ -16,6 +16,8 @@ class SpecificationConvertor:
         # self.llm = 'claude-3-7-sonnet-thinking'
         
         self.function_info = function_info
+        self.llm_config = llm_config or LLMConfig()
+        self.llm = Chatbot(self.llm_config)
         self.post_map = self.create_post_map()
         self.z3_map = self.create_z3_map()
         self.inv_map =self.create_inv_map()
@@ -24,7 +26,6 @@ class SpecificationConvertor:
         
         
     def optimize_acsl(self,acsl_code):
-    
         ensures_pattern = r'ensures\s+(.+?);'
         all_ensures = re.findall(ensures_pattern, acsl_code, re.DOTALL)
 
@@ -1046,6 +1047,19 @@ class SpecificationConvertor:
     
 
     def inconvert_annotations(self, annotations):
+        def normalize_qcp_result_placeholder(condition_str):
+            if not condition_str:
+                return condition_str
+
+            parts = [part.strip() for part in condition_str.split('&&') if part.strip()]
+            kept_parts = []
+            for part in parts:
+                compact = re.sub(r'\s+', '', part)
+                if compact in {'Results(__return)', 'Result(__return)'}:
+                    continue
+                kept_parts.append(part)
+
+            return ' && '.join(kept_parts).strip()
 
 
         def updated_condition_str(condition_str, predefined_vars):
@@ -1117,6 +1131,9 @@ class SpecificationConvertor:
         ensures = ensure.split('||')
         updated_ensures = []
         for part in ensures:
+            part = normalize_qcp_result_placeholder(part)
+            if not part:
+                continue
 
             if 'exists' in ensure:
                 part = updated_condition_str(part ,var_names)
@@ -1426,10 +1443,6 @@ ensures {result};
         return condition
 
     def assign_annotations(self, annotations):
-
-            config = LLMConfig()
-            llm = Chatbot(config)
-
             """调用Model生成ACSL规约"""
 
             prompt =  self.get_assign_prompt(annotations)
@@ -1445,7 +1458,7 @@ ensures {result};
                     return code_blocks[-1] if code_blocks else text  # 返回最后一个 C 代码块
 
                 # 处理响应
-                assistant_response = llm.chat(prompt)
+                assistant_response = self.llm.chat(prompt)
                 assistant_response = re.sub(r'>\s*Reasoning\s*[\s\S]*?(?=\n\n|$)', '', assistant_response, flags=re.IGNORECASE)
                 assistant_response = re.sub(r'<think>.*?</think>', '', assistant_response, flags=re.DOTALL)
                 assistant_response = extract_last_c_code(assistant_response)
@@ -1468,10 +1481,6 @@ ensures {result};
 
             
     def specgen_annotations(self, annotations):
-
-            config = LLMConfig()
-            llm = Chatbot(config)
-
             """调用Model生成ACSL规约"""
 
             prompt =  self.get_specgen_prompt(annotations)
@@ -1487,7 +1496,7 @@ ensures {result};
                     return code_blocks[-1] if code_blocks else text  # 返回最后一个 C 代码块
 
                 # 处理响应
-                assistant_response = llm.chat(prompt)
+                assistant_response = self.llm.chat(prompt)
                 assistant_response = re.sub(r'>\s*Reasoning\s*[\s\S]*?(?=\n\n|$)', '', assistant_response, flags=re.IGNORECASE)
                 assistant_response = re.sub(r'<think>.*?</think>', '', assistant_response, flags=re.DOTALL)
                 assistant_response = extract_last_c_code(assistant_response)

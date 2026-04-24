@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from represent.api.client import chat_completion, project_env
 from represent.api.config import get_settings
@@ -55,6 +56,13 @@ def _extract_code_block(text: str, language: str) -> str:
     return text.strip() + "\n"
 
 
+def _java_public_type_name(source_code: str) -> str | None:
+    match = re.search(r"\bpublic\s+(?:class|interface|enum)\s+([A-Za-z_][A-Za-z0-9_]*)", source_code)
+    if match:
+        return match.group(1)
+    return None
+
+
 def run_bare_model(model: str, *, source_path: str, language: str, benchmark_id: str) -> dict:
     ensure_dirs()
     settings = get_settings()
@@ -91,10 +99,14 @@ def run_bare_model(model: str, *, source_path: str, language: str, benchmark_id:
         top_p=1.0,
         usage_log=usage_log,
     )
-    suffix = ".c" if language == "c" else ".java"
-    candidate_path = result_dir / f"candidate{suffix}"
+    candidate_source = _extract_code_block(response["content"], language)
+    if language == "java":
+        java_name = _java_public_type_name(candidate_source) or Path(source_path).stem or "Candidate"
+        candidate_path = result_dir / f"{java_name}.java"
+    else:
+        candidate_path = result_dir / "candidate.c"
     candidate_path.parent.mkdir(parents=True, exist_ok=True)
-    candidate_path.write_text(_extract_code_block(response["content"], language), encoding="utf-8")
+    candidate_path.write_text(candidate_source, encoding="utf-8")
 
     if language == "c":
         supported, support_message = c_benchmark_supported(candidate_path)
