@@ -28,6 +28,31 @@ class SpecVerifier:
             print(error[1])  # 打印Error文件位置
             print(error[2])  # 打印Error行内容
             print()
+
+    def _goal_header(self, goal_block):
+        for line in goal_block.splitlines():
+            line = line.strip()
+            if line.startswith("Goal "):
+                return line
+        return "Goal <unknown>"
+
+    def _log_goal_results(self, section_name, goals):
+        if self.logger:
+            self.logger.info(f"{section_name} VC Details:")
+            if not goals:
+                self.logger.info("[]")
+            for index, goal in enumerate(goals, start=1):
+                status = "Valid" if "Valid" in goal else "Invalid"
+                self.logger.info(f"[{index}] {status} - {self._goal_header(goal)}")
+            self.logger.info('')
+        else:
+            print(f"{section_name} VC Details:")
+            if not goals:
+                print("[]")
+            for index, goal in enumerate(goals, start=1):
+                status = "Valid" if "Valid" in goal else "Invalid"
+                print(f"[{index}] {status} - {self._goal_header(goal)}")
+            print('')
     
     def log_errors(self):
         # 创建一个字符串来存储日志内容
@@ -246,10 +271,12 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                 self.logger.info('Loop Invariant:')
                 self.logger.info(self.loop_result)
                 self.logger.info('')
+                self._log_goal_results('Loop Invariant', filter_invs)
             else:
                 print('Loop Invariant:')
                 print(self.loop_result)
                 print('')
+                self._log_goal_results('Loop Invariant', filter_invs)
             # self.print_errors(self.loop_error_list)
 
             filter_contents = self.filter_goal_assertion(contents)
@@ -265,10 +292,12 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                 self.logger.info('Assertion:')
                 self.logger.info(self.assert_result)
                 self.logger.info('')
+                self._log_goal_results('Assertion', filter_contents)
             else:
                 print('Assertion:')
                 print(self.assert_result)
                 print('')
+                self._log_goal_results('Assertion', filter_contents)
             # self.print_errors(self.assert_error_list)
 
             filter_postconds = self.filter_post_condition(contents)
@@ -284,10 +313,12 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                 self.logger.info('Post Condition:')
                 self.logger.info(self.post_result)
                 self.logger.info('')
+                self._log_goal_results('Post Condition', filter_postconds)
             else:
                 print('Post Condition:')
                 print(self.post_result)
                 print('')
+                self._log_goal_results('Post Condition', filter_postconds)
             # self.print_errors(self.post_error_list)
 
             filter_instance = self.filter_instance(contents)
@@ -304,14 +335,15 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                     self.logger.info('Instance:')
                     self.logger.info(self.instance_result)
                     self.logger.info('')
+                    self._log_goal_results('Instance', filter_instance)
                 else:
                     print('Instance:')
                     print(self.instance_result)
                     print('')
+                    self._log_goal_results('Instance', filter_instance)
 
 
 
 
 
     
-

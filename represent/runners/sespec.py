@@ -29,7 +29,6 @@ def _apply_sespec_preset(base_config: dict, preset: str) -> None:
     elif preset == "bare_prompt":
         main["pass_count"] = 1
         main["refine_count"] = 0
-        main["use_db"] = False
         main["template"] = False
         main["think"] = False
         main["use_symbolic_execution"] = False
@@ -130,7 +129,7 @@ def run_sespec(
     )
     log_path = result_dir / "command.log"
     result = run_command(command, cwd=src_root, env=env, log_path=log_path)
-    sespec_log = src_root / "log" / root_dir / model / f"{function_name}.log"
+    sespec_log = src_root / "log" / root_dir / model / f"{effective_function_name}.log"
     metrics = parse_sespec_metrics(sespec_log, result.stdout, result.seconds)
     summary = {
         "project": "sespec",

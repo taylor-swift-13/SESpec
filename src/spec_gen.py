@@ -40,8 +40,20 @@ class SpecGenerator:
         self.logger = logger
         self.precond_manager = precond_manager
         self.ignore_list = ['main','test','bar','foo']
+        self.llm_config = llm_config
 
         self.llm = Chatbot(llm_config)
+
+    def _is_recursive_function(self) -> bool:
+        body = self.function_info.code.split('{', 1)[-1] if self.function_info.code and '{' in self.function_info.code else self.function_info.code
+        if not body:
+            return False
+        pattern = re.compile(rf'\b{re.escape(self.function_info.name)}\s*\(')
+        return bool(pattern.search(body))
+
+    def _load_recursion_rules(self) -> str:
+        with open("prompt/experience/recursion.txt", "r", encoding="utf-8") as file:
+            return file.read().strip()
 
     def if_assigns(self) -> bool:
 
@@ -942,6 +954,8 @@ class SpecGenerator:
 
         # Replace {code} placeholder in template
         error_prompt = prompt_template.format(error_str = error_message , c_code= c_code)
+        if self._is_recursive_function():
+            error_prompt += "\n\n" + self._load_recursion_rules()
         return error_prompt
     
     
@@ -1051,6 +1065,8 @@ class SpecGenerator:
 
         # Replace {code} placeholder in template
         error_prompt = prompt_template.format(error_str = error_message , c_code= c_code)
+        if self._is_recursive_function():
+            error_prompt += "\n\n" + self._load_recursion_rules()
 
         try:
             """Call OpenAI API to get ACSL annotations"""
@@ -1080,14 +1096,7 @@ class SpecGenerator:
         # Create required type definitions
         required_type = self.create_required_type()
 
-        if self.config.use_db:
-            definitions_str = '''
-        /*@
-        PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION
-        */
-        '''
-        else:
-            definitions_str = ''
+        definitions_str = ''
 
         
         require_str = self.function_info.require

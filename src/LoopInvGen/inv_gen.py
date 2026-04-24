@@ -10,13 +10,12 @@ from config import MainConfig,LLMConfig
 from llm import *
 from convertor import SpecificationConvertor
 from Utils.main_class import FunctionInfo
-from vector_db import *
 from spec_gen import SpecGenerator
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 class InvGenerator:
-    def __init__(self,config:MainConfig,info:FunctionInfo,logger:logging.Logger,vector_db:LangChainVectorDB,llm_config:LLMConfig,spec_gen:SpecGenerator = None):
+    def __init__(self,config:MainConfig,info:FunctionInfo,logger:logging.Logger,llm_config:LLMConfig,spec_gen:SpecGenerator = None):
         
         self.config =config
         self.info = info
@@ -25,18 +24,6 @@ class InvGenerator:
         self.llm_config = llm_config
         self.llm = Chatbot(llm_config)
 
-        self.query_llm_config = LLMConfig(
-            api_model=llm_config.api_model,
-            api_key=llm_config.api_key,
-            base_url=llm_config.base_url,
-        )
-        self.query_llm_config.api_temperature = llm_config.api_temperature
-        self.query_llm_config.api_top_p = llm_config.api_top_p
-        self.query_llm_config.use_api_model = llm_config.use_api_model
-        self.query_llm_config.think_mode_enabled = llm_config.think_mode_enabled
-        self.query_llm = Chatbot(self.query_llm_config)
-
-        
         self.spec_gen = spec_gen
         self.error_history = []
        
@@ -44,7 +31,24 @@ class InvGenerator:
         self.pass_count = self.config.pass_count
         self.first_pass = None
 
-        self.vector_db = vector_db
+    def _load_experience_file(self, filename: str) -> str:
+        path = os.path.join("prompt", "experience", filename)
+        if not os.path.exists(path):
+            return ""
+        with open(path, "r", encoding="utf-8") as file:
+            return file.read().strip()
+
+    def _build_prompt_experience(self, loop_content: str) -> str:
+        experiences = []
+        if "->" in loop_content or "list" in loop_content.lower():
+            linked_list_examples = self._load_experience_file("linked_list.txt")
+            if linked_list_examples:
+                experiences.append(linked_list_examples)
+        if "[" in loop_content or "PLACE_HOLDER_ARRAY_" in loop_content or "PLACE_HOLDER_UNCHANGED_ARRAY_" in loop_content:
+            array_examples = self._load_experience_file("array.txt")
+            if array_examples:
+                experiences.append(array_examples)
+        return "\n\n".join(experiences)
         
     
     
@@ -599,7 +603,7 @@ class InvGenerator:
             prompt_template = file.read()
 
         # Replace {code} placeholder in template
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples='',strength_guide='',predicate_guide='',verification_guide='')
+        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=self._build_prompt_experience(loop_content),strength_guide='',predicate_guide='',verification_guide='')
 
         self.logger.debug("user_prompt_traival")
         self.logger.debug(user_prompt)
@@ -614,7 +618,7 @@ class InvGenerator:
         strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
 
         # Replace {code} placeholder in template
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples='',strength_guide=strength_guide,predicate_guide='',verification_guide='')
+        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=self._build_prompt_experience(loop_content),strength_guide=strength_guide,predicate_guide='',verification_guide='')
 
         self.logger.debug("user_prompt_template")
         self.logger.debug(user_prompt)
@@ -631,64 +635,13 @@ class InvGenerator:
 
         verification_guide = '- Please first try to directly use the verification goal as the loop invariant at `PLACE_HOLDER_VERFICATION_GOAL`. Often, the verification goal (assertion) also holds throughout the loop; in that case, it can be used directly as the invariant.'
 
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples='',strength_guide=strength_guide,predicate_guide='',verification_guide=verification_guide)
+        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=self._build_prompt_experience(loop_content),strength_guide=strength_guide,predicate_guide='',verification_guide=verification_guide)
 
         self.logger.debug("user_prompt_verification")
         self.logger.debug(user_prompt)
 
         return user_prompt
     
-    def get_user_prompt_db(self, loop_content,pre_condition,examples):
-        # Read prompt template from file
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
-            prompt_template = file.read()
-        
-
-        predicate_guide = '- If the invariant you need requires a logical function or a predicate, please fill `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`'
-
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=examples,strength_guide='',predicate_guide=predicate_guide,verification_guide='')
-
-        self.logger.debug("user_prompt_db")
-        self.logger.debug(user_prompt)
-
-        return user_prompt
-    
-    def get_user_prompt_db_template(self, loop_content,pre_condition,examples):
-
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
-            prompt_template = file.read()
-
-        strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
-
-        predicate_guide = '- If the invariant you need requires a logical function or a predicate, please fill `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`'
-
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=examples,strength_guide=strength_guide,predicate_guide=predicate_guide,verification_guide='')
-
-        self.logger.debug("user_prompt_db_template")
-        self.logger.debug(user_prompt)
-
-        return user_prompt
-
-
-    def get_user_prompt_db_verification(self, loop_content,pre_condition,examples):
-
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
-            prompt_template = file.read()
-
-        strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
-
-        predicate_guide = '- If the invariant you need requires a logical function or a predicate, please fill `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`'
-        
-        verification_guide = '- Please first try to directly use the verification goal as the loop invariant at `PLACE_HOLDER_VERFICATION_GOAL`. Often, the verification goal (assertion) also holds throughout the loop; in that case, it can be used directly as the invariant.'
-
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=examples,strength_guide=strength_guide,predicate_guide=predicate_guide,verification_guide=verification_guide)
-
-        self.logger.debug("user_prompt_db_verification")
-        self.logger.debug(user_prompt)
-
-        return user_prompt
-
-
     def get_user_prompt(self, loop_content,pre_condition):
 
         # Read prompt template from file
@@ -1025,31 +978,6 @@ class InvGenerator:
         return prompt
     
         
-    def get_examples(self,loop_code):
-
-        query = self.query_llm.chat(f'Please brief explain what the following code do: {loop_code}')
-        if self.config.recursive_loop:
-            results = search_and_return(self.vector_db, query=query,target_category='loop invariant',target_type='recursive')
-        else:
-            results = search_and_return(self.vector_db, query=query,target_category='loop invariant')
-            
-        contents = '\n\n'.join(results)
-        examples = f'''
-Examples:
-You must use these follow examples as a reference to complete the task, with the following requirements:
-    - You may use the invariant generation logic from these examples as a guide for your own invariant.
-    - You may directly use the predicates or functions defined in these examples.
-    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
-    ```
-    {contents}
-    ```
-'''
-        self.logger.info("examples:")
-        self.logger.info(examples)
-        
-        return examples
-
-
     def run(self):
         """Main logic"""
 
@@ -1227,41 +1155,18 @@ You must use these follow examples as a reference to complete the task, with the
                 annotations_list[0] = self.get_annotations(user_prompt)
 
             elif self.config.recursive_loop:
-
-                if self.config.use_db:
-                    examples = self.get_examples(loop_content)
-                    user_prompt = self.get_user_prompt_db(annotations_list[0],pre_condition,examples)
-                    annotations_list[0] = self.get_annotations(user_prompt)
-                else:
-                    user_prompt = self.get_user_prompt_traival(annotations_list[0],pre_condition)
-                    annotations_list[0] = self.get_annotations(user_prompt)
+                user_prompt = self.get_user_prompt_traival(annotations_list[0],pre_condition)
+                annotations_list[0] = self.get_annotations(user_prompt)
 
             else:
             # Get user prompt
-                
-                if self.config.use_db:
+                user_prompt_0 = self.get_user_prompt_traival(annotations_list[0],pre_condition)
+                user_prompt_1 = self.get_user_prompt_template(annotations_list[1],pre_condition)
+                user_prompt_2 = self.get_user_prompt_verification(annotations_list[2],pre_condition)
 
-
-                    examples = self.get_examples(loop_content)
-
-                    user_prompt_0 = self.get_user_prompt_db(annotations_list[0],pre_condition,examples)
-                    user_prompt_1 = self.get_user_prompt_db_template(annotations_list[1],pre_condition,examples)
-                    user_prompt_2 = self.get_user_prompt_db_verification(annotations_list[2],pre_condition,examples)
-
-                    annotations_list[0] = self.get_annotations(user_prompt_0)
-                    annotations_list[1] = self.get_annotations(user_prompt_1)
-                    annotations_list[2] = self.get_annotations(user_prompt_2)
-
-                   
-                else:   
-
-                    user_prompt_0 = self.get_user_prompt_traival(annotations_list[0],pre_condition)
-                    user_prompt_1 = self.get_user_prompt_template(annotations_list[1],pre_condition)
-                    user_prompt_2 = self.get_user_prompt_verification(annotations_list[2],pre_condition)
-
-                    annotations_list[0] = self.get_annotations(user_prompt_0)
-                    annotations_list[1] = self.get_annotations(user_prompt_1)
-                    annotations_list[2] = self.get_annotations(user_prompt_2)   
+                annotations_list[0] = self.get_annotations(user_prompt_0)
+                annotations_list[1] = self.get_annotations(user_prompt_1)
+                annotations_list[2] = self.get_annotations(user_prompt_2)   
                                                                                                                                                                                                                                                                                                                                                                                                                                                 
 
 
@@ -1529,8 +1434,5 @@ You must use these follow examples as a reference to complete the task, with the
 # if __name__ == "__main__":
 #     generator = InvGenerator()
 #     generator.run()
-
-
-
 
 

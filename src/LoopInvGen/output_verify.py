@@ -22,6 +22,22 @@ class OutputVerifier:
             print(error[1])  # Print error file location
             print(error[2])  # Print error line content
             print()
+
+    def _goal_header(self, goal_block):
+        for line in goal_block.splitlines():
+            line = line.strip()
+            if line.startswith("Goal "):
+                return line
+        return "Goal <unknown>"
+
+    def _log_goal_results(self, section_name, goals):
+        self.logger.info(f"{section_name} VC Details:")
+        if not goals:
+            self.logger.info("[]")
+        for index, goal in enumerate(goals, start=1):
+            status = "Valid" if "Valid" in goal else "Invalid"
+            self.logger.info(f"[{index}] {status} - {self._goal_header(goal)}")
+        self.logger.info('')
     
 
     def extract_semantic_error(self,error_message):
@@ -129,6 +145,7 @@ class OutputVerifier:
                 self.logger.info('Validate:')
                 self.logger.info(self.validate_result)
                 self.logger.info('')
+                self._log_goal_results('Validate', filter_invs)
                 self.print_errors(self.valid_error_list)
 
             filter_contents = self.filter_goal_assertion(contents)
@@ -143,6 +160,7 @@ class OutputVerifier:
                 self.logger.info('Verify:')
                 self.logger.info(self.verify_result)
                 self.logger.info('')
+                self._log_goal_results('Verify', filter_contents)
                 self.print_errors(self.verify_error_list)
 
     

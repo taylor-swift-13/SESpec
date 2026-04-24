@@ -17,10 +17,8 @@ from config import MainConfig,LLMConfig
 from convertor import SpecificationConvertor
 from spec_gen import SpecGenerator
 from DSL.Q2D import Post2DSL
-from vector_db_manager import get_vector_db
 from pre_cond_manager import PreconditionsManager
 from config_loader import load_config_from_file
-from collector import Collector
 from llm import get_token_stats, reset_token_stats
 
 
@@ -50,7 +48,6 @@ def run_from_config(config_path: str, function_name: str = None, root_dir: str =
         function_name (str, optional): Function name to analyze
         root_dir (str, optional): Project root directory
         debug (bool, optional): Whether to enable debug mode
-        vector_db (bool, optional): Whether to enable vector database
     """
     try:
         # Load configuration file
@@ -187,13 +184,6 @@ class FunctionProcessor:
                 to_console=True 
             )
         
-        if self.config.use_db:
-            self.vector_db = get_vector_db(self.config.db_path)
-        else:
-            self.vector_db = None
-
-            
-        
     def _log_overall_timing(self):
         """Log overall timing information"""
         if self.start_time and self.end_time:
@@ -244,11 +234,16 @@ class FunctionProcessor:
 
     def _disable_recursive_callee_expansion(self, func: FunctionInfo) -> None:
         """Stop callee expansion for directly recursive functions."""
-        if func.name in func.callee_set:
+        is_recursive_function = func.name in func.callee_set
+        setattr(func, "is_recursive_function", is_recursive_function)
+        if is_recursive_function:
             self.logger.info(
                 f"Recursive function detected for {func.name}; stop expanding callees and keep the rest of the workflow unchanged."
             )
             func.callee_set = set()
+
+    def _is_recursive_function(self, func: FunctionInfo) -> bool:
+        return bool(getattr(func, "is_recursive_function", False))
     
     
 
@@ -282,6 +277,13 @@ class FunctionProcessor:
 
         generator.create_generated_c_file()
 
+        if self._is_recursive_function(func):
+            self.logger.info(
+                f"Recursive function {func.name}: skip automatic annotation/symbolic execution/translation and generate ACSL directly by LLM."
+            )
+            generator.create_specification_by_llm()
+            return
+
     
 
         if self.config.auto_annotation:
@@ -303,7 +305,7 @@ class FunctionProcessor:
         if matches:
             self.logger.info(f"\nGENERATE LOOP INVARIANT FOR {func.name}")
             self.logger.info('='* 50+'\n')
-            inv_generator = InvGenerator(self.config,func,self.logger,self.vector_db,self.llm_config,generator)
+            inv_generator = InvGenerator(self.config,func,self.logger,self.llm_config,generator)
             self.first_pass = inv_generator.run_pass()
 
         generator.create_looped_c_file()
@@ -326,6 +328,15 @@ class FunctionProcessor:
         
         generator.create_generated_c_file()
 
+        if self._is_recursive_function(func):
+            self.logger.info(
+                f"Recursive function {func.name}: skip automatic annotation/symbolic execution/translation and generate ACSL directly by LLM."
+            )
+            self.logger.info(f"\nGENERATE FUNCTION SPECIFICATION FOR {func.name}")
+            self.logger.info('='* 50+'\n')
+            generator.create_specification_by_llm()
+            return
+
 
 
         if self.config.auto_annotation:
@@ -346,7 +357,7 @@ class FunctionProcessor:
         if matches:
             self.logger.info(f"\nGENERATE LOOP INVARIANT FOR {func.name}")
             self.logger.info('='* 50+'\n')
-            inv_generator = InvGenerator(self.config,func,self.logger,self.vector_db,self.llm_config,generator)
+            inv_generator = InvGenerator(self.config,func,self.logger,self.llm_config,generator)
             inv_generator.run()
 
         # Postcondition generation (enable as needed)
@@ -433,11 +444,6 @@ class FunctionProcessor:
         self.end_time = time.time()
         self._log_overall_timing()
         self._log_token_stats()
-
-        # Collect correct results
-        if self.config.collect and self.first_pass['satisfy'] is not None:
-            self._collect_results(main_func.file_path)
-        
 
     def _handle_existing_function(self, func: FunctionInfo):
         """Handle already initialized functions"""
@@ -595,23 +601,6 @@ class FunctionProcessor:
 
         verifier = SpecVerifier(self.config,self.logger)
         verifier.run(self.config.function_name)   # Pass complete path
-
-    def _collect_results(self,input_file_path:str):
-        self.logger.info("collecting results")
-       
-        output_file_path = self.config.output_path
-
-        with open(input_file_path, 'r', encoding='utf-8') as f:
-            input_code = f.read()
-        with open(output_file_path, 'r', encoding='utf-8') as f:
-            output_code = f.read()
-
-        collector = Collector(llm_config=self.llm_config)
-
-        collector.add_specification_to_file(input_code,output_code,'add.json')
-
-
-      
 
 # Usage example
 if __name__ == '__main__':

@@ -50,8 +50,6 @@ class ConfigLoader:
         config.think = main_config.get('think', config.think)
         config.template = main_config.get('template', config.template)
         config.auto_post = main_config.get('auto_post', config.auto_post)
-        config.use_db = main_config.get('use_db', config.use_db)
-        config.collect = main_config.get('collect', config.collect)
         config.use_symbolic_execution = main_config.get('use_symbolic_execution', config.use_symbolic_execution)
         
         return config

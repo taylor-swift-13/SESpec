@@ -47,10 +47,6 @@ class MainConfig:
     template:bool = True
     auto_post:bool = True # Whether to automatically generate postconditions
 
-    use_db:bool = True
-    db_path:str = 'VectorDB/Jsons/init.json'
-
-    collect:bool = False
     use_symbolic_execution:bool = True
 
 @dataclass

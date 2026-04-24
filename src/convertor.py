@@ -22,6 +22,17 @@ class SpecificationConvertor:
         self.z3_map = self.create_z3_map()
         self.inv_map =self.create_inv_map()
 
+    def _is_recursive_function(self) -> bool:
+        if not self.function_info or not self.function_info.code or not self.function_info.name:
+            return False
+        body = self.function_info.code.split('{', 1)[-1] if '{' in self.function_info.code else self.function_info.code
+        pattern = re.compile(rf'\b{re.escape(self.function_info.name)}\s*\(')
+        return bool(pattern.search(body))
+
+    def _load_recursion_rules(self) -> str:
+        with open("prompt/experience/recursion.txt", "r", encoding="utf-8") as file:
+            return file.read().strip()
+
        
         
         
@@ -1476,6 +1487,8 @@ ensures {result};
 
         # 替换模板中的 {code} 占位符
         assign_prompt = prompt_template.format(code = annotations)
+        if self._is_recursive_function():
+            assign_prompt += "\n\n" + self._load_recursion_rules()
 
         return assign_prompt
 
@@ -1516,6 +1529,8 @@ ensures {result};
 
         # 替换模板中的 {code} 占位符
         specgen_prompt = prompt_template.format(code = annotations)
+        if self._is_recursive_function():
+            specgen_prompt += "\n\n" + self._load_recursion_rules()
 
         return specgen_prompt
 
