@@ -25,7 +25,15 @@ class InvGenerator:
         self.llm_config = llm_config
         self.llm = Chatbot(llm_config)
 
-        self.query_llm_config = LLMConfig(api_model='gpt-4o-mini')
+        self.query_llm_config = LLMConfig(
+            api_model=llm_config.api_model,
+            api_key=llm_config.api_key,
+            base_url=llm_config.base_url,
+        )
+        self.query_llm_config.api_temperature = llm_config.api_temperature
+        self.query_llm_config.api_top_p = llm_config.api_top_p
+        self.query_llm_config.use_api_model = llm_config.use_api_model
+        self.query_llm_config.think_mode_enabled = llm_config.think_mode_enabled
         self.query_llm = Chatbot(self.query_llm_config)
 
         
@@ -1389,8 +1397,8 @@ You must use these follow examples as a reference to complete the task, with the
               
 
             symexe_updated_code  =processor.update_loop_content(self.get_c_code(processor.output_file),loop_invariant,idx)
-                    
-            if syntax and valid:
+
+            if syntax and valid and self.config.use_symbolic_execution:
                 if self.config.debug:
                     self.logger.info("PARTIAL CORRECT INVARIANT")
                     self.logger.info("continue symbolic execution")
@@ -1521,8 +1529,6 @@ You must use these follow examples as a reference to complete the task, with the
 # if __name__ == "__main__":
 #     generator = InvGenerator()
 #     generator.run()
-
-
 
 
 

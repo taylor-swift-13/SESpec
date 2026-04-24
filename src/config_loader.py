@@ -1,7 +1,7 @@
 import json
 import yaml
 import os
-from typing import Dict, Any, Union,Tuple
+from typing import Dict, Any, Tuple
 from config import MainConfig, LLMConfig
 
 
@@ -52,6 +52,7 @@ class ConfigLoader:
         config.auto_post = main_config.get('auto_post', config.auto_post)
         config.use_db = main_config.get('use_db', config.use_db)
         config.collect = main_config.get('collect', config.collect)
+        config.use_symbolic_execution = main_config.get('use_symbolic_execution', config.use_symbolic_execution)
         
         return config
     
@@ -64,8 +65,21 @@ class ConfigLoader:
         llm_config = self.config_data.get('llm', {})
         return llm_config.get('api_model', 'gpt-4o')
 
+    def get_llm_config(self) -> LLMConfig:
+        """Get full llm configuration"""
+        llm_section = self.config_data.get('llm', {})
+        config = LLMConfig()
+        config.api_model = llm_section.get('api_model', config.api_model)
+        config.base_url = llm_section.get('base_url', config.base_url)
+        config.api_key = llm_section.get('api_key', os.environ.get('OPENAI_API_KEY', config.api_key))
+        config.api_temperature = llm_section.get('api_temperature', config.api_temperature)
+        config.api_top_p = llm_section.get('api_top_p', config.api_top_p)
+        config.use_api_model = llm_section.get('use_api_model', config.use_api_model)
+        config.think_mode_enabled = llm_section.get('think_mode_enabled', config.think_mode_enabled)
+        return config
 
-def load_config_from_file(config_path: str) -> Tuple[MainConfig, LLMConfig, Dict[str, str], str]:
+
+def load_config_from_file(config_path: str) -> Tuple[MainConfig, Dict[str, str], LLMConfig]:
     """
     Load all configurations from configuration file
     
@@ -73,12 +87,12 @@ def load_config_from_file(config_path: str) -> Tuple[MainConfig, LLMConfig, Dict
         config_path (str): Configuration file path
         
     Returns:
-        tuple: (MainConfig, preconditions, model_name)
+        tuple: (MainConfig, preconditions, llm_config)
     """
     loader = ConfigLoader(config_path)
     
     main_config = loader.get_main_config()
     preconditions = loader.get_preconditions()
-    model_name = loader.get_model_name()
+    llm_config = loader.get_llm_config()
     
-    return main_config, preconditions, model_name
+    return main_config, preconditions, llm_config

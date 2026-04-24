@@ -1,0 +1,26 @@
+class SVCOMP_unlinear_0039__17 {
+static int unknown() {
+return 0;
+}
+
+static int hoo17(int x,int y) {
+
+while (x < y) {
+if (x < 0){
+x = x + 7;
+}
+else {
+x = x + 10;
+}
+if (y < 0){
+y = y - 10;
+}
+else {
+y = y + 3;
+}
+
+}
+
+return 0;
+}
+}

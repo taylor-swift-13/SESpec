@@ -1,0 +1,14 @@
+void foo175(int n) {
+
+    int i;
+    int c;
+
+    i = 0;
+    c = 0;
+
+    while(i < n){
+       c = c + i;
+       i = i + 1;
+      }
+
+  }

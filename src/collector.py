@@ -17,7 +17,7 @@ from llm import *
 class Collector:
     """Collector class for managing specification collection and JSON output."""
     
-    def __init__(self, jsons_dir: str = "VectorDB/Jsons"):
+    def __init__(self, jsons_dir: str = "VectorDB/Jsons", llm_config: Optional[LLMConfig] = None):
         """
         Initialize the Collector.
         
@@ -26,7 +26,7 @@ class Collector:
         """
         self.jsons_dir = jsons_dir
         self.ensure_jsons_dir()
-        self.llm_config = LLMConfig(api_model='gpt-4o-mini')
+        self.llm_config = llm_config or LLMConfig()
         self.llm = Chatbot(self.llm_config)
     
     def ensure_jsons_dir(self) -> None:

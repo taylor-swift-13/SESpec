@@ -1,0 +1,15 @@
+class SVCOMP_linear_0146__23 {
+static void foo23() {
+
+int i=1;
+int j=20;
+
+while (j >= i) {
+
+i  = i + 2;
+j  = j - 1;
+
+}
+
+}
+}

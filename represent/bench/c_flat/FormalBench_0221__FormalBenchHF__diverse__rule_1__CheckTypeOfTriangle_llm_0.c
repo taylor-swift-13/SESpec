@@ -1,0 +1,15 @@
+const char * checkTypeOfTriangle(int type, int n, int d);
+
+const char * checkTypeOfTriangle(int type, int n, int d) {
+
+		if (type + n > d && type + d > n
+				&& n + d > type)
+			return "Acute-angled Triangle";
+		if (type == n && n == d)
+			return "Equilateral Triangle";
+		if (type != n && type != d && n != d)
+			return "Obtuse-angled Triangle";
+		if (type == n || type == d || n == d)
+			return "Right-angled Triangle";
+		return "Scalene Triangle";
+}

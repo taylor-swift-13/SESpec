@@ -1,0 +1,15 @@
+class SVCOMP_linear_0026__121 {
+static void foo121() {
+
+int i = 1;
+int sn = 0;
+
+while (i <= 8) {
+
+i  = (i + 1);
+sn  = (sn + 1);
+
+}
+
+}
+}

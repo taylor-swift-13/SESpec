@@ -1,0 +1,17 @@
+class SVCOMP_linear_0222__299 {
+static void foo299() {
+
+int x;
+int z;
+
+x = 0;
+z = 5000000;
+
+while(x < 10000000){
+if(x >= 5000000)
+z++;
+x++;
+}
+
+}
+}

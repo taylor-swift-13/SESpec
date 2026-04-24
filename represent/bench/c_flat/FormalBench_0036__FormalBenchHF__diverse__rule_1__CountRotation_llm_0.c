@@ -1,0 +1,21 @@
+int countRotation(int * array, int array_len, int count);
+
+int countRotation(int * array, int array_len, int count) {
+
+		if (count == 0) {
+			return 0;
+		}
+		int r = 0, top = count - 1;
+		while (r < top) {
+			if (array[r] < array[top]) {
+				return r + 1;
+			}
+			int i = (r + top) / 2;
+			if (array[i] > array[r]) {
+				r = i;
+			} else {
+				top = i;
+			}
+		}
+		return r + 1;
+}

@@ -1,0 +1,16 @@
+class SVCOMP_unlinear_0003__11 {
+static int main11(int z,int k,int a) {
+
+int x=a;
+int y=1;
+int c=1;
+
+while (c < k){
+c = c + 1;
+x = x*z + a;
+y = y*z;
+}
+
+return 0;
+}
+}

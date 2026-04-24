@@ -1,0 +1,14 @@
+#include <stdlib.h>
+
+int isNumDecagonal(int n);
+
+int isNumDecagonal(int n) {
+
+        int *f = (int *)malloc(sizeof(int) * (n + 1));
+int f_len = n + 1;
+        f[0] = 0;
+        for (int i = 0; i <= n - 1; i++) {
+            f[i + 1] = f[i] + 8 * i + 1;
+        }
+        return f[n];
+}

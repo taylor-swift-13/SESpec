@@ -1,0 +1,12 @@
+void foo159(int k, int n) {
+
+    int j;
+
+    j = 0;
+
+    while(j < n){
+       j = j + 1;
+       k = k - 1;
+      }
+
+  }

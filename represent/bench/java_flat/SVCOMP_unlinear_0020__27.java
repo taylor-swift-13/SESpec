@@ -1,0 +1,14 @@
+class SVCOMP_unlinear_0020__27 {
+static int main27(int x,int y) {
+
+int z=0;
+int w=0;
+
+while(w < y) {
+z += x;
+w += 1;
+}
+
+return 0;
+}
+}

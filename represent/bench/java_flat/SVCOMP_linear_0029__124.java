@@ -1,0 +1,15 @@
+class SVCOMP_linear_0029__124 {
+static void foo124(int x, int y) {
+
+int i = x;
+int j = y;
+
+while (x != 0) {
+
+x  = x - 1;
+y  = y - 1;
+
+}
+
+}
+}
