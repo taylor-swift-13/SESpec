@@ -12,6 +12,7 @@ JUDGE_SYSTEM_PROMPT = """You are a formal-methods evaluator.
 You judge whether a candidate specification completely captures the semantics of a program.
 Focus on semantic completeness, not surface syntax style.
 Be strict. If important behaviors, preconditions, postconditions, edge cases, mutation effects, or return-value relations are missing, the spec is not complete.
+Do not require a function-level contract for every program. For void procedures or main-style programs, a complete specification may be expressed through loop invariants, assertions, frame conditions, and other local specifications, as long as they fully characterize the intended behavior.
 Also detect cheating specifications. A cheating spec must receive score 0.
 Examples of cheating include:
 - encoding the implementation logic or branch-by-branch algorithm directly into the spec instead of giving a proper behavioral contract
@@ -61,6 +62,7 @@ Candidate program with specification:
 
 Judge the candidate specification only, not the implementation text that may still be present.
 You must explicitly check whether the spec is cheating.
+Do not penalize a candidate only because it lacks a top-level function contract when the program is a void procedure or main-style program and the observable behavior is otherwise fully specified by local annotations.
 
 A spec is cheating if it avoids the real contract-writing task by, for example:
 - excluding normal inputs with suspiciously strong preconditions
@@ -70,8 +72,9 @@ A spec is cheating if it avoids the real contract-writing task by, for example:
 
 If the spec is cheating, incomplete, overconstrained, underconstrained, or semantically wrong, score must be 0.
 
-Output JSON with exactly this key:
+Output JSON with exactly these keys:
 - score: integer, must be 0 or 1
+- reasoning: short string, one concise reason for the score
 
 Scoring rule:
 - score = 1 only if the spec captures the full intended semantics with no material gaps, no wrong claims, and no cheating
@@ -110,6 +113,7 @@ def judge_spec_completeness(
     raw_score = payload.get("score", 0)
     return {
         "score": 1 if str(raw_score).strip() in {"1", "true", "True"} else 0,
+        "reasoning": str(payload.get("reasoning", "")).strip(),
         "judge_model": model,
         "language": language,
         "original_program_path": str(original_program_path),

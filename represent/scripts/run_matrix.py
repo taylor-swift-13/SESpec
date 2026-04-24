@@ -228,7 +228,10 @@ def _run_judge(
         candidate_program_path=candidate_path,
         usage_log=out / "judge_usage.jsonl",
     )
-    judge_payload = {"score": int(result["score"])}
+    judge_payload = {
+        "score": int(result["score"]),
+        "reasoning": str(result.get("reasoning", "")).strip(),
+    }
     (out / "judge.json").write_text(json.dumps(judge_payload, indent=2), encoding="utf-8")
     return judge_payload["score"]
 

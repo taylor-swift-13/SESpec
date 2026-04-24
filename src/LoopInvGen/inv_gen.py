@@ -276,6 +276,37 @@ class InvGenerator:
        # Join the list back into a single string and return
         return "\n".join(updated_code)
 
+    def infer_assignments_annotation(self, loop_content, var_map, unchanged_vars, array_names, unchanged_arrays):
+        changed_scalars = []
+        if var_map:
+            for var in var_map.keys():
+                if var in unchanged_vars:
+                    continue
+                escaped_var = re.escape(var)
+                pattern = re.compile(
+                    rf"(\b{escaped_var}\b\s*(\+\+|--|\+=|-=|\*=|/=|=(?!=))|(\+\+|--)\s*\b{escaped_var}\b)"
+                )
+                if pattern.search(loop_content):
+                    changed_scalars.append(var)
+
+        unresolved_arrays = []
+        for array_name in array_names or []:
+            if array_name in (unchanged_arrays or []):
+                continue
+            unresolved_arrays.append(array_name)
+
+        if unresolved_arrays:
+            return None
+
+        if not changed_scalars:
+            return "\\nothing"
+        return ", ".join(changed_scalars)
+
+    def fill_assignments_placeholder(self, annotations, assigns_text):
+        if assigns_text is None:
+            return annotations
+        return annotations.replace("PLACE_HOLDER_ASSIGNMENTS", assigns_text)
+
     
 
     def append_notin_annotations(self, annotations, var_map , updated_loop_condition,path_cond=None):
@@ -1033,6 +1064,7 @@ class InvGenerator:
 
 
             simple_annotations  = self.append_inner_annotations(annotations)
+            simple_annotations = self.append_assignments_annotations(simple_annotations)
             annotations_list.append(simple_annotations)
             
 
@@ -1046,6 +1078,18 @@ class InvGenerator:
             array_names = analysis.array_names
             non_inductive_vars = analysis.non_inductive_vars
             unchanged_arrays = analysis.unchanged_arrays
+            loop_json = analysis.get_json_at_index()
+            loop_content = loop_json.get("content", "")
+
+            inferred_assigns = self.infer_assignments_annotation(
+                loop_content,
+                var_maps[0] if var_maps else {},
+                unchanged_vars,
+                array_names,
+                unchanged_arrays,
+            )
+            annotations_list[0] = self.fill_assignments_placeholder(annotations_list[0], inferred_assigns)
+            annotations = self.fill_assignments_placeholder(annotations, inferred_assigns)
 
            
 
@@ -1056,7 +1100,7 @@ class InvGenerator:
 
             if self.config.template:
 
-                #annotations  = self.append_assignments_annotations(annotations)
+                annotations  = self.append_assignments_annotations(annotations)
                 if self.config.debug:
                     self.logger.info("after assignments")
                     self.logger.info(annotations)
@@ -1096,12 +1140,6 @@ class InvGenerator:
                     
                 for var_map, path_cond,updated_loop_condition in zip(var_maps, path_conds,updated_loop_conditions):
                                 path_cond = None
-
-
-                                annotations  = self.append_const_annotations(annotations,unchanged_vars,var_map,path_cond)
-                                if self.config.debug:
-                                    self.logger.info("after const")
-                                    self.logger.info(annotations)
 
 
                                 updated_loop_condition = self.convertor.filter_condition(updated_loop_condition)
@@ -1434,5 +1472,3 @@ class InvGenerator:
 # if __name__ == "__main__":
 #     generator = InvGenerator()
 #     generator.run()
-
-

@@ -116,8 +116,9 @@ def parse_sespec_metrics(log_path: Path, stdout: str, run_seconds: float) -> dic
     time_match = re.search(r"Total execution time:\s*([0-9.]+)\s*seconds", content)
     seconds = float(time_match.group(1)) if time_match else run_seconds
     first_pass_match = re.search(
-        r"first_pass:\s*\n\s*syntax=(\d+),\s*valid=(\d+)(?:,\s*satisfy=(\d+))?",
+        r"first_pass:.*?\n.*?syntax=(\d+),\s*valid=(\d+)(?:,\s*satisfy=(\d+))?",
         content,
+        re.DOTALL,
     )
     first_pass_syntax = None
     first_pass_valid = None
