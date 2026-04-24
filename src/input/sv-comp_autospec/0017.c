@@ -8,5 +8,5 @@ void foo0017(int tmp, int A[2048], int B[2048]) {
     B[i] = tmp;
   }
 
-  /*@assert A[1024] == B[1024];*/
+  /*@ assert A[1024] == B[1024]; */
 }

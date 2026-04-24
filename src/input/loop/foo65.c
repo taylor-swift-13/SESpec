@@ -26,5 +26,5 @@ void foo65() {
       b--;
     }
   }
-  /*@assert a + c == b + d ;*/
+  /*@ assert a + c == b + d; */
 }

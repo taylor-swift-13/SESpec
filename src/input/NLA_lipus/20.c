@@ -18,5 +18,5 @@ int main20(int n){
     }
 
     // post-condition
-    /*@ assert( n < (a + 1) * (a + 1)); */
+    /*@ assert (n < (a + 1) * (a + 1)); */
 }

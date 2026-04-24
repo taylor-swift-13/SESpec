@@ -28,5 +28,5 @@ int main7(int x,int y){
       }
   }
 
-  /*@ assert(b == x*q + y*s); */
+  /*@ assert (b == x * q + y * s); */
 }

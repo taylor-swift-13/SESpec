@@ -13,6 +13,6 @@ void foo017(int n) {
   }
   i++;
  }
- /*@ assert k >= n */;
+ /*@ assert k >= n; */
  
 }

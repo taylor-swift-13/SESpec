@@ -11,7 +11,7 @@ void foo024(int n) {
 
       k=j;
       for (k=j;k<n;k++){
-	       /*@assert k >= i;*/
+	       /*@ assert k >= i; */
       }
     }
   }

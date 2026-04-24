@@ -26,5 +26,5 @@ int main8(int x,int y){
       }
   }
  
-  /*@ assert((r-s) * y == (q-p) * x); */
+  /*@ assert ((r - s) * y == (q - p) * x); */
 }

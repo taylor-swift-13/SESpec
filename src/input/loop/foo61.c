@@ -24,7 +24,7 @@ void foo61(int x, int y, int k, int j, int i, int n) {
   }
   /*@ assert (x + y) == k; */
   
-  /*@ assert(n > 0) ==> (0 <= m && m < n);*/
+  /*@ assert (n > 0) ==> (0 <= m && m < n); */
   
 
 }

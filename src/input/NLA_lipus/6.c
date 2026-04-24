@@ -27,6 +27,6 @@ int main6(int x,int y){
       }
   }
  
-  /*@ assert(a == y*r + x*p); */
+  /*@ assert (a == y * r + x * p); */
  
 }
