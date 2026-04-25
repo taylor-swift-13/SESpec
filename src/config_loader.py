@@ -40,7 +40,9 @@ class ConfigLoader:
         
         # Set basic parameters
         config.root_dir = main_config.get('root_dir')
+        config.input_dir = main_config.get('input_dir', config.input_dir)
         config.function_name = main_config.get('function_name')
+        config.run_id = main_config.get('run_id', config.run_id)
         config.debug = main_config.get('debug', config.debug)
         config.only_loop = main_config.get('only_loop', config.only_loop)
         config.recursive_loop = main_config.get('recursive_loop', config.recursive_loop)

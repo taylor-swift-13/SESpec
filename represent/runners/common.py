@@ -3,7 +3,9 @@ from __future__ import annotations
 import ast
 import csv
 import json
+import os
 import re
+import signal
 import subprocess
 import time
 from dataclasses import dataclass
@@ -44,22 +46,39 @@ def run_command(
     cwd: Path,
     env: dict[str, str],
     log_path: Path,
+    timeout_seconds: int | None = None,
 ) -> CommandResult:
     start = time.perf_counter()
-    proc = subprocess.run(
+    proc = subprocess.Popen(
         command,
         cwd=str(cwd),
         env=env,
         text=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
     )
+    timed_out = False
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+            time.sleep(1)
+            if proc.poll() is None:
+                os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        stdout, stderr = proc.communicate()
     seconds = time.perf_counter() - start
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    timeout_note = f"\n\n[monitor]\nKilled after {timeout_seconds} seconds." if timed_out else ""
     log_path.write_text(
-        f"$ {' '.join(command)}\n\n[stdout]\n{proc.stdout}\n\n[stderr]\n{proc.stderr}",
+        f"$ {' '.join(command)}\n\n[stdout]\n{stdout}\n\n[stderr]\n{stderr}{timeout_note}",
         encoding="utf-8",
     )
-    return CommandResult(command, proc.returncode, seconds, proc.stdout, proc.stderr)
+    return CommandResult(command, proc.returncode if proc.returncode is not None else -9, seconds, stdout, stderr)
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -94,69 +113,6 @@ def c_benchmark_supported(c_path: Path, *, timeout_seconds: int = 8) -> tuple[bo
         if marker in text:
             return False, f"Unsupported translation marker: {marker}"
     return framac_supports_file(c_path, timeout_seconds=timeout_seconds)
-
-
-def parse_sespec_metrics(log_path: Path, stdout: str, run_seconds: float) -> dict[str, Any]:
-    content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
-
-    def grab(pattern: str) -> int:
-        match = re.search(pattern, content)
-        return int(match.group(1).replace(",", "")) if match else 0
-
-    def grab_bool_list(section_name: str) -> list[bool]:
-        pattern = rf"{re.escape(section_name)}:\s*\n(\[[^\]]*\])"
-        match = re.search(pattern, content)
-        if not match:
-            return []
-        raw = match.group(1).strip()[1:-1].strip()
-        if not raw:
-            return []
-        return [item.strip() == "True" for item in raw.split(",")]
-
-    time_match = re.search(r"Total execution time:\s*([0-9.]+)\s*seconds", content)
-    seconds = float(time_match.group(1)) if time_match else run_seconds
-    first_pass_match = re.search(
-        r"first_pass:.*?\n.*?syntax=(\d+),\s*valid=(\d+)(?:,\s*satisfy=(\d+))?",
-        content,
-        re.DOTALL,
-    )
-    first_pass_syntax = None
-    first_pass_valid = None
-    if first_pass_match:
-        first_pass_syntax = first_pass_match.group(1) == "1"
-        first_pass_valid = first_pass_match.group(2) == "1"
-    syntax_ok = (
-        first_pass_syntax
-        if first_pass_syntax is not None
-        else ("Syntax Error:\nsyntax Correct" in content or "syntax Correct" in content)
-    )
-    loop_results = grab_bool_list("Loop Invariant")
-    post_results = grab_bool_list("Post Condition")
-    instance_results = grab_bool_list("Instance")
-    valid_groups = []
-    if loop_results:
-        valid_groups.append(all(loop_results))
-    if post_results:
-        valid_groups.append(all(post_results))
-    if instance_results:
-        valid_groups.append(all(instance_results))
-    valid_pass = (
-        (first_pass_syntax and first_pass_valid)
-        if first_pass_syntax is not None and first_pass_valid is not None
-        else (syntax_ok and all(valid_groups) if valid_groups else syntax_ok)
-    )
-    return {
-        "success": bool(valid_pass),
-        "valid_pass": bool(valid_pass),
-        "syntax_ok": bool(syntax_ok),
-        "first_pass_syntax": first_pass_syntax,
-        "first_pass_valid": first_pass_valid,
-        "total_seconds": seconds,
-        "prompt_tokens": grab(r"Total prompt tokens \(input\):\s*([0-9,]+)"),
-        "completion_tokens": grab(r"Total completion tokens \(output\):\s*([0-9,]+)"),
-        "total_tokens": grab(r"Total tokens:\s*([0-9,]+)"),
-        "call_count": grab(r"Total API calls:\s*([0-9,]+)"),
-    }
 
 
 def parse_autospec_final_result(final_result_path: Path) -> dict[str, Any]:
@@ -254,7 +210,11 @@ def parse_autospec_valid_goals(output_dir: Path) -> dict[str, Any]:
     if current_goal is not None:
         goals.append((current_goal, "\n".join(current_lines)))
 
-    filtered = [(name, block) for name, block in goals if "Goal Assertion" not in name]
+    filtered = [
+        (name, block)
+        for name, block in goals
+        if "Goal Assertion" not in name and "Loop variant" not in name
+    ]
     valid_count = 0
     for _, block in filtered:
         if re.search(r"returns\s+Valid\b", block):
@@ -326,7 +286,11 @@ def parse_frama_c_wp_output(stdout: str, stderr: str = "") -> dict[str, Any]:
     if current_goal is not None:
         goals.append((current_goal, "\n".join(current_lines)))
 
-    filtered = [(name, block) for name, block in goals if "Goal Assertion" not in name]
+    filtered = [
+        (name, block)
+        for name, block in goals
+        if "Goal Assertion" not in name and "Loop variant" not in name
+    ]
     valid_count = sum(1 for _, block in filtered if re.search(r"returns\s+Valid\b", block))
     return {
         "valid_pass": bool(filtered) and valid_count == len(filtered),

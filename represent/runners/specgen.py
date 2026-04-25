@@ -15,7 +15,7 @@ def run_specgen(model: str, *, benchmark_relpath: str = "benchmark/SVCOMP/Additi
     repo_root = Path(settings.paths["specgen_root"])
     benchmark_name = Path(benchmark_relpath).stem
     result_dir = (
-        Path(settings.paths["sespec_root"])
+        Path(settings.paths["project_root"])
         / "represent"
         / "results"
         / "smoke"
@@ -58,7 +58,7 @@ def run_specgen(model: str, *, benchmark_relpath: str = "benchmark/SVCOMP/Additi
         {
             "REPRESENT_SPECGEN_MODEL": model,
             "REPRESENT_USAGE_LOG": str(usage_log),
-            "PYTHONPATH": str(Path(settings.paths["sespec_root"])),
+            "PYTHONPATH": str(Path(settings.paths["project_root"])),
         }
     )
     result = run_command(command, cwd=repo_root, env=env, log_path=result_dir / "command.log")

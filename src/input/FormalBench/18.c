@@ -1,0 +1,20 @@
+int foo18(int * arr, int arr_len, int n, int k);
+
+int foo18(int * arr, int arr_len, int n, int k) {
+
+        int max1 = arr[0];
+        for (int i = 1; i < n; i++) {
+            if (arr[i] > max1) {
+                max1 = arr[i];
+            }
+        }
+        int res = 0;
+        for (int i = 0; i < n; i++) {
+            if ((max1 - arr[i]) % k != 0) {
+                return -1;
+            } else {
+                res += (max1 - arr[i]) / k;
+            }
+        }
+        return res;
+}

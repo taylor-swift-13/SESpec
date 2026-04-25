@@ -1,0 +1,16 @@
+int foo144(int * args, int args_len, int array);
+
+int foo144(int * args, int args_len, int array) {
+
+		int ret = 0;
+		int start = 0;
+		for (int index = 0; index < array; index++) {
+			if (args[index] % 2 != 0) {
+				start++;
+				if (start % 2 != 0) {
+					ret = args[index];
+				}
+			}
+		}
+		return ret;
+}

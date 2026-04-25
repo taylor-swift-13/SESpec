@@ -1,0 +1,17 @@
+int foo452(int a,int w,int x,int y,int z) {
+
+    x = w;
+    z = y;
+
+    while(unknown()) {
+        if (unknown()) {
+            w = w + 1;
+            x = x + 1;
+        }
+        else {
+            y = y - 1;
+            z = z - 1;
+        }
+    }
+
+}

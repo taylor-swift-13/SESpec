@@ -5,6 +5,10 @@ from abc import ABC, abstractmethod # 导入 ABC 和 abstractmethod 用于创建
 from typing import Dict
 
 
+class LLMCallError(RuntimeError):
+    """Raised when an LLM provider call fails before returning usable text."""
+
+
 # 全局 token 统计追踪器
 class TokenTracker:
     """全局 token 使用统计追踪器"""
@@ -127,7 +131,7 @@ class OpenAILLM(BaseChatModel):
             # 从历史中移除失败的用户Input，避免下次重复发送
             if self.messages and self.messages[-1]["role"] == "user":
                 self.messages.pop()
-            return f"生成响应失败: {e}"
+            raise LLMCallError(f"OpenAI API call failed: {e}") from e
 
 # 主控制类，根据配置选择使用哪种 LLM 实现
 class Chatbot:

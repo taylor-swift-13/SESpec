@@ -14,17 +14,21 @@ from pathlib import Path
 
 from represent.api.config import get_settings
 from represent.judge import judge_spec_completeness
-from represent.runners import run_autospec, run_bare_model, run_sespec, run_specgen
+from represent.runners import run_autospec, run_bare_model, run_specgen
 
 
 ROOT = Path(__file__).resolve().parents[2]
 BENCH_ROOT = ROOT / "represent" / "bench"
 MAPPING_PATH = BENCH_ROOT / "mapping.tsv"
-LOOP_MODE_PATH = BENCH_ROOT / "sespec_loop_mode.json"
 RESULTS_ROOT = ROOT / "represent" / "results" / "matrix_runs"
 AUTO_SPEC_ROOT = ROOT / "represent" / "external" / "autospec"
-SESPEC_INPUT_ROOT = ROOT / "src" / "input"
 JUDGE_MODEL = "gpt-5.4"
+ALL_LABELS = [
+    "bare_model_java",
+    "bare_model_c",
+    "specgen",
+    "autospec",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,6 +52,13 @@ def parse_args() -> argparse.Namespace:
         default=max(1, min(4, os.cpu_count() or 1)),
         help="Parallel benchmark workers. Models and tools for the same benchmark still run sequentially.",
     )
+    parser.add_argument(
+        "--labels",
+        nargs="*",
+        default=ALL_LABELS,
+        choices=ALL_LABELS,
+        help="Subset of experiment labels to run.",
+    )
     return parser.parse_args()
 
 
@@ -55,11 +66,6 @@ def load_rows(group: str) -> list[dict[str, str]]:
     with MAPPING_PATH.open(encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle, delimiter="\t"))
     return [row for row in rows if row["id"].startswith(f"SVCOMP_{group}_")]
-
-
-def load_loop_ids() -> set[str]:
-    payload = json.loads(LOOP_MODE_PATH.read_text(encoding="utf-8"))
-    return set(payload.get("only_loop_ids", []))
 
 
 def copy_if_exists(src: Path, dst: Path) -> None:
@@ -76,10 +82,6 @@ def copytree_if_exists(src: Path, dst: Path) -> None:
 
 
 def ensure_benchmark_inputs(bench_id: str, c_path: Path) -> str:
-    sespec_dir = SESPEC_INPUT_ROOT / bench_id
-    sespec_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(c_path, sespec_dir / c_path.name)
-
     autospec_rel = f"benchmark/represent_matrix/{bench_id}.c"
     autospec_target = AUTO_SPEC_ROOT / autospec_rel
     autospec_target.parent.mkdir(parents=True, exist_ok=True)
@@ -192,12 +194,6 @@ def _resolve_judge_inputs(
     if label == "autospec":
         candidate = out / "autospec_out" / f"{summary['benchmark'].split('/')[-1].removesuffix('.c')}_merged.c"
         return ("c", source_c, candidate) if candidate.exists() else None
-    if label.startswith("sespec_"):
-        function_name = summary.get("function_name")
-        if not function_name:
-            return None
-        candidate = out / f"{function_name}.c"
-        return ("c", source_c, candidate) if candidate.exists() else None
     return None
 
 
@@ -248,9 +244,33 @@ def run_job(
     runner,
 ) -> None:
     out = run_root / group / label / model / bench_id
+    if (out / "summary.json").exists():
+        print(f"[SKIP] {group} {bench_id} {model} {label}")
+        return
     out.mkdir(parents=True, exist_ok=True)
     try:
         summary = runner()
+
+        if label == "specgen":
+            if summary.get("log_path"):
+                copy_if_exists(Path(summary["log_path"]), out / Path(summary["log_path"]).name)
+            smoke = ROOT / "represent" / "results" / "smoke" / "specgen" / model / Path(str(summary.get("benchmark", ""))).stem
+            copy_if_exists(smoke / "command.log", out / "command.log")
+            copy_if_exists(smoke / "usage.jsonl", out / "usage.jsonl")
+
+        elif label == "autospec":
+            smoke = ROOT / "represent" / "results" / "smoke" / "autospec" / "one_shot" / model / bench_id
+            copy_if_exists(smoke / "command.log", out / "command.log")
+            copytree_if_exists(smoke / "autospec_out", out / "autospec_out")
+
+        elif label.startswith("bare_model_"):
+            language = "java" if label.endswith("java") else "c"
+            smoke = ROOT / "represent" / "results" / "smoke" / "bare_model" / language / model / bench_id
+            copy_if_exists(smoke / "command.log", out / "command.log")
+            for pattern in ("*.java", "*.c"):
+                for file_path in smoke.glob(pattern):
+                    copy_if_exists(file_path, out / file_path.name)
+
         judge_score = None
         try:
             judge_score = _run_judge(
@@ -268,48 +288,23 @@ def run_job(
             encoding="utf-8",
         )
 
-        if label == "specgen":
-            if summary.get("log_path"):
-                copy_if_exists(Path(summary["log_path"]), out / Path(summary["log_path"]).name)
-            smoke = ROOT / "represent" / "results" / "smoke" / "specgen" / model / Path(str(summary.get("benchmark", ""))).stem
-            copy_if_exists(smoke / "command.log", out / "command.log")
-            copy_if_exists(smoke / "usage.jsonl", out / "usage.jsonl")
-
-        elif label == "autospec":
-            smoke = ROOT / "represent" / "results" / "smoke" / "autospec" / "one_shot" / model / bench_id
-            copy_if_exists(smoke / "command.log", out / "command.log")
-            copytree_if_exists(smoke / "autospec_out", out / "autospec_out")
-
-        elif label.startswith("sespec_"):
-            preset = label.replace("sespec_", "")
-            function_name = summary.get("function_name", "")
-            if function_name:
-                smoke = ROOT / "represent" / "results" / "smoke" / "sespec" / preset / model / bench_id / function_name
-                copy_if_exists(smoke / "command.log", out / "command.log")
-                copy_if_exists(ROOT / "src" / "log" / bench_id / model / f"{function_name}.log", out / f"{function_name}.log")
-                copy_if_exists(ROOT / "src" / "output" / bench_id / f"{function_name}.c", out / f"{function_name}.c")
-
-        elif label.startswith("bare_model_"):
-            language = "java" if label.endswith("java") else "c"
-            smoke = ROOT / "represent" / "results" / "smoke" / "bare_model" / language / model / bench_id
-            copy_if_exists(smoke / "command.log", out / "command.log")
-            for pattern in ("*.java", "*.c"):
-                for file_path in smoke.glob(pattern):
-                    copy_if_exists(file_path, out / file_path.name)
-
         print(f"[OK] {group} {bench_id} {model} {label}")
     except Exception:
         (out / "error.txt").write_text(traceback.format_exc(), encoding="utf-8")
         print(f"[ERR] {group} {bench_id} {model} {label}")
 
 
-def run_benchmark(run_root: Path, group: str, row: dict[str, str], models: list[str], loop_ids: set[str]) -> None:
+def run_benchmark(
+    run_root: Path,
+    group: str,
+    row: dict[str, str],
+    models: list[str],
+    enabled_labels: set[str],
+) -> None:
     bench_id = row["id"]
     java_path = ROOT / row["source_path"]
     c_path = ROOT / row["translated_c_path"]
     autospec_rel = ensure_benchmark_inputs(bench_id, c_path)
-    stem = c_path.stem
-    use_loop_mode = bench_id in loop_ids
 
     for model in models:
         jobs = [
@@ -337,48 +332,10 @@ def run_benchmark(run_root: Path, group: str, row: dict[str, str], models: list[
                     model, benchmark_relpath=autospec_rel, one_shot=True
                 ),
             ),
-            (
-                "sespec_default",
-                lambda model=model, bench_id=bench_id, stem=stem, use_loop_mode=use_loop_mode: run_sespec(
-                    model,
-                    root_dir=bench_id,
-                    function_name=stem,
-                    preset="default",
-                    loop_mode=use_loop_mode,
-                ),
-            ),
-            (
-                "sespec_no_repair",
-                lambda model=model, bench_id=bench_id, stem=stem, use_loop_mode=use_loop_mode: run_sespec(
-                    model,
-                    root_dir=bench_id,
-                    function_name=stem,
-                    preset="no_repair",
-                    loop_mode=use_loop_mode,
-                ),
-            ),
-            (
-                "sespec_no_se_no_repair",
-                lambda model=model, bench_id=bench_id, stem=stem, use_loop_mode=use_loop_mode: run_sespec(
-                    model,
-                    root_dir=bench_id,
-                    function_name=stem,
-                    preset="no_se_no_repair",
-                    loop_mode=use_loop_mode,
-                ),
-            ),
-            (
-                "sespec_bare_prompt",
-                lambda model=model, bench_id=bench_id, stem=stem, use_loop_mode=use_loop_mode: run_sespec(
-                    model,
-                    root_dir=bench_id,
-                    function_name=stem,
-                    preset="bare_prompt",
-                    loop_mode=use_loop_mode,
-                ),
-            ),
         ]
         for label, runner in jobs:
+            if label not in enabled_labels:
+                continue
             run_job(
                 run_root=run_root,
                 group=group,
@@ -396,12 +353,12 @@ def run_group(
     group: str,
     rows: list[dict[str, str]],
     models: list[str],
-    loop_ids: set[str],
     workers: int,
+    enabled_labels: set[str],
 ) -> Path:
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         futures = [
-            executor.submit(run_benchmark, run_root, group, row, models, loop_ids)
+            executor.submit(run_benchmark, run_root, group, row, models, enabled_labels)
             for row in rows
         ]
         for future in concurrent.futures.as_completed(futures):
@@ -414,7 +371,7 @@ def main() -> None:
     settings = get_settings()
     models = args.models or settings.model_list
     groups = ["linear", "unlinear"] if args.group == "all" else [args.group]
-    loop_ids = load_loop_ids()
+    enabled_labels = set(args.labels)
     run_name = args.run_name or datetime.now().strftime("%Y%m%d_%H%M%S")
     run_root = RESULTS_ROOT / run_name
     run_root.mkdir(parents=True, exist_ok=True)
@@ -423,7 +380,7 @@ def main() -> None:
         rows = load_rows(group)
         if args.limit:
             rows = rows[: args.limit]
-        summary_path = run_group(run_root, group, rows, models, loop_ids, args.workers)
+        summary_path = run_group(run_root, group, rows, models, args.workers, enabled_labels)
         print(f"done: {group}, benchmarks={len(rows)}, models={len(models)}")
         print(summary_path)
     print(f"run_root={run_root}")

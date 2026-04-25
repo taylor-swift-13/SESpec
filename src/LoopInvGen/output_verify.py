@@ -15,6 +15,13 @@ class OutputVerifier:
         self.verify_error_list = []
         self.verify_result = []
         self.validate_result =[]
+        self.status_summary = {
+            "file_path": "",
+            "syntax_status": "no_result",
+            "validity_status": "no_result",
+            "satisfy_status": "no_result",
+            "failure_reason": "not_run",
+        }
 
     def print_errors(self, error_list):
         for error in error_list:
@@ -77,7 +84,7 @@ class OutputVerifier:
         results = []
         # Group by adjacent identical elements
         for i in range(0, len(filter_invs), 2):
-            if "Valid" in str(filter_invs[i]) and "Valid" in str(filter_invs[i+1]):
+            if i + 1 < len(filter_invs) and "Valid" in str(filter_invs[i]) and "Valid" in str(filter_invs[i+1]):
                 results.append(True)
             else:
                 results.append(False)
@@ -110,6 +117,13 @@ class OutputVerifier:
         else :
             args = self.parse_args()
             file_path = f"{self.config.generated_loop_c_file_path}/{args.file_name}.c"
+        self.status_summary = {
+            "file_path": file_path,
+            "syntax_status": "no_result",
+            "validity_status": "no_result",
+            "satisfy_status": "no_result",
+            "failure_reason": "not_run",
+        }
 
         # syntax_msg = subprocess.run(['python3', 'syntaxChecker.py', file_path], capture_output=True, text=True).stdout
         # print(syntax_msg)
@@ -123,17 +137,42 @@ class OutputVerifier:
 
         if syntax_msg !='syntax Correct':
             self.syntax_error = syntax_msg
+            self.status_summary.update(
+                {
+                    "syntax_status": "fail",
+                    "validity_status": "no_result",
+                    "satisfy_status": "no_result",
+                    "failure_reason": "syntax_error",
+                }
+            )
         else:
+            self.status_summary["syntax_status"] = "pass"
             frama_c_command = "frama-c"
             wp_command = [frama_c_command, "-wp", "-wp-print", "-wp-timeout", "10", "-wp-prover", "z3", "-wp-model", "Typed", file_path]
             # wp_command = [frama_c_command, "-wp", "-wp-print", "-wp-timeout", "3", "-wp-prover", "z3", "-wp-model", "Typed+Caveat", file_path]
-            result = subprocess.run(wp_command, capture_output=True, text=True, check=True)
+            try:
+                result = subprocess.run(wp_command, capture_output=True, text=True, check=True)
+            except subprocess.CalledProcessError as exc:
+                self.syntax_error = exc.stderr or exc.stdout
+                self.status_summary.update(
+                    {
+                        "validity_status": "no_result",
+                        "satisfy_status": "no_result",
+                        "failure_reason": "verifier_no_output",
+                    }
+                )
+                return
             spliter = '------------------------------------------------------------'
             content = result.stdout
             contents = content.split(spliter)
 
             filter_invs = self.filter_invariant(contents)
             self.validate_result = self.check_valid_pairs(filter_invs)
+            if not filter_invs:
+                self.status_summary["validity_status"] = "no_result"
+                self.status_summary["failure_reason"] = "no_invariants_extracted"
+            else:
+                self.status_summary["validity_status"] = "pass" if all(self.validate_result) else "fail"
 
             for item in filter_invs:
                 if 'Valid' not in item:
@@ -150,6 +189,10 @@ class OutputVerifier:
 
             filter_contents = self.filter_goal_assertion(contents)
             self.verify_result = self.check_verify_target(filter_contents)
+            if not filter_contents:
+                self.status_summary["satisfy_status"] = "pass"
+            else:
+                self.status_summary["satisfy_status"] = "pass" if all(self.verify_result) else "fail"
 
             for item in filter_contents:
                 if 'Valid' not in item:
@@ -162,6 +205,14 @@ class OutputVerifier:
                 self.logger.info('')
                 self._log_goal_results('Verify', filter_contents)
                 self.print_errors(self.verify_error_list)
+
+            if self.status_summary["failure_reason"] == "not_run":
+                if self.status_summary["validity_status"] == "fail":
+                    self.status_summary["failure_reason"] = "verification_failed"
+                elif self.status_summary["satisfy_status"] == "fail":
+                    self.status_summary["failure_reason"] = "assertion_failed"
+                else:
+                    self.status_summary["failure_reason"] = "pass"
 
     
 

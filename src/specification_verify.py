@@ -17,9 +17,17 @@ class SpecVerifier:
         self.post_error_list = []
         self.instance_error_list = []
         self.loop_result = []
+        self.assigns_result = []
         self.assert_result =[]
         self.post_result =[]
         self.instance_result=[]
+        self.status_summary = {
+            "file_path": "",
+            "syntax_status": "no_result",
+            "validity_status": "no_result",
+            "satisfy_status": "no_result",
+            "failure_reason": "not_run",
+        }
        
 
     def print_errors(self, error_list):
@@ -189,7 +197,7 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
         results = []
         # 按相邻相同的元素分组
         for i in range(0, len(filter_invs), 2):
-            if "Valid" in str(filter_invs[i]) and "Valid" in str(filter_invs[i+1]):
+            if i + 1 < len(filter_invs) and "Valid" in str(filter_invs[i]) and "Valid" in str(filter_invs[i+1]):
                 results.append(True)
             else:
                 results.append(False)
@@ -205,7 +213,10 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
         return results
 
     def filter_goal_assertion(self, contents):
-        return [line for line in contents if line.strip().startswith("Goal Assertion ") or line.strip().startswith("Goal Assigns ")]
+        return [line for line in contents if line.strip().startswith("Goal Assertion ")]
+
+    def filter_goal_assigns(self, contents):
+        return [line for line in contents if line.strip().startswith("Goal Assigns ")]
 
     def filter_invariant(self, contents):
         return [line for line in contents if line.strip().startswith("Goal Establishment of Invariant") or line.strip().startswith("Goal Preservation of Invariant")]
@@ -230,6 +241,13 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
         else :
             args = self.parse_args()
             file_path = f"{self.config.output_path}/{args.file_name}.c"
+        self.status_summary = {
+            "file_path": file_path,
+            "syntax_status": "no_result",
+            "validity_status": "no_result",
+            "satisfy_status": "no_result",
+            "failure_reason": "not_run",
+        }
 
         
         # syntax_msg = subprocess.run(['python3', 'syntaxChecker.py', file_path], capture_output=True, text=True).stdout
@@ -246,12 +264,32 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
         if syntax_msg !='syntax Correct':
             self.syntax_error = syntax_msg
             self.syntax_bool = False
+            self.status_summary.update(
+                {
+                    "syntax_status": "fail",
+                    "validity_status": "no_result",
+                    "satisfy_status": "no_result",
+                    "failure_reason": "syntax_error",
+                }
+            )
         else:
             self.syntax_bool = True
+            self.status_summary["syntax_status"] = "pass"
             frama_c_command = "frama-c"
             wp_command = [frama_c_command, "-wp", "-wp-print", "-wp-timeout", "10", "-wp-prover", "z3", "-wp-model", "Typed",  file_path]
             # wp_command = [frama_c_command, "-wp", "-wp-print", "-wp-timeout", "3", "-wp-prover", "z3", "-wp-model", "Typed+Caveat", file_path]
-            result = subprocess.run(wp_command, capture_output=True, text=True, check=True)
+            try:
+                result = subprocess.run(wp_command, capture_output=True, text=True, check=True)
+            except subprocess.CalledProcessError as exc:
+                self.syntax_error = exc.stderr or exc.stdout
+                self.status_summary.update(
+                    {
+                        "validity_status": "no_result",
+                        "satisfy_status": "no_result",
+                        "failure_reason": "verifier_no_output",
+                    }
+                )
+                return
             spliter = '------------------------------------------------------------'
             content = result.stdout
             contents = content.split(spliter)
@@ -279,6 +317,25 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                 self._log_goal_results('Loop Invariant', filter_invs)
             # self.print_errors(self.loop_error_list)
 
+            filter_assigns = self.filter_goal_assigns(contents)
+            self.assigns_result = self.check_target(filter_assigns)
+            for item in filter_assigns:
+                if 'Valid' not in item:
+                    assign_error_msg = item
+                    error_location_msg, error_content_msg = self.extract_semantic_error(assign_error_msg)
+                    self.assert_error_list.append((assign_error_msg.strip(),error_location_msg, error_content_msg))
+
+            if self.logger:
+                self.logger.info('Assigns:')
+                self.logger.info(self.assigns_result)
+                self.logger.info('')
+                self._log_goal_results('Assigns', filter_assigns)
+            else:
+                print('Assigns:')
+                print(self.assigns_result)
+                print('')
+                self._log_goal_results('Assigns', filter_assigns)
+
             filter_contents = self.filter_goal_assertion(contents)
             self.assert_result = self.check_target(filter_contents)
 
@@ -302,6 +359,12 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
 
             filter_postconds = self.filter_post_condition(contents)
             self.post_result = self.check_target(filter_postconds)
+            if filter_contents:
+                self.status_summary["satisfy_status"] = "pass" if all(self.assert_result) else "fail"
+            else:
+                self.status_summary["satisfy_status"] = "pass"
+                if not filter_postconds and self.status_summary["failure_reason"] in ["not_run", "no_invariants_extracted"]:
+                    self.status_summary["failure_reason"] = "no_target"
             
             for item in filter_postconds:
                 if 'Valid' not in item:
@@ -341,6 +404,27 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                     print(self.instance_result)
                     print('')
                     self._log_goal_results('Instance', filter_instance)
+            validity_groups = []
+            if filter_invs:
+                validity_groups.append(all(self.loop_result))
+            if filter_assigns:
+                validity_groups.append(all(self.assigns_result))
+            if filter_postconds:
+                validity_groups.append(all(self.post_result))
+            if filter_instance:
+                validity_groups.append(all(self.instance_result))
+            if validity_groups:
+                self.status_summary["validity_status"] = "pass" if all(validity_groups) else "fail"
+            else:
+                self.status_summary["validity_status"] = "no_result"
+            if self.status_summary["validity_status"] == "fail":
+                self.status_summary["failure_reason"] = "verification_failed"
+            elif self.status_summary["satisfy_status"] == "fail":
+                self.status_summary["failure_reason"] = "assertion_failed"
+            elif self.status_summary["validity_status"] == "pass" and self.status_summary["satisfy_status"] == "pass":
+                self.status_summary["failure_reason"] = "pass"
+            elif self.status_summary["failure_reason"] == "not_run":
+                self.status_summary["failure_reason"] = "no_invariants_extracted"
 
 
 

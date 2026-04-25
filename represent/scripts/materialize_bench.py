@@ -682,8 +682,7 @@ def main() -> None:
             )
         )
 
-    local_loop_mode: dict[str, bool] = {}
-    src_root = Path(settings.paths["sespec_root"]) / "src"
+    src_root = Path(settings.paths["project_root"]) / "src"
     local_index: dict[str, int] = {"linear": 1, "unlinear": 1}
     for bench_bucket, source_repo_name, source in local_numeric_loop_sources(src_root):
         original = source.read_text(encoding="utf-8", errors="ignore")
@@ -701,7 +700,6 @@ def main() -> None:
         translate_c_numeric_loop_to_java(source, java_out, bench_bucket)
         function_name = infer_primary_c_function(cleaned_c, source.stem)
         mapping_rows.append((bench_id, "SV-COMP", str(java_out.relative_to(ROOT)), str(c_out.relative_to(ROOT)), function_name))
-        local_loop_mode[bench_id] = True
 
     mapped_java = {Path(row[2]).name for row in mapping_rows}
     mapped_c = {Path(row[3]).name for row in mapping_rows}
@@ -713,10 +711,6 @@ def main() -> None:
             stale.unlink()
 
     write_mapping(mapping_rows, bench_root / "mapping.tsv")
-    (bench_root / "sespec_loop_mode.json").write_text(
-        json.dumps({"only_loop_ids": sorted(local_loop_mode)}, indent=2),
-        encoding="utf-8",
-    )
     print(f"materialized={len(mapping_rows)}")
 
 

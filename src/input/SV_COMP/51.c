@@ -1,0 +1,8 @@
+int foo51(int x);
+
+int foo51(int x) {
+
+    int y = x == 10 ? 11 : 9;
+    if (x == 10) return y == 11;
+    else return y == 9;
+}
