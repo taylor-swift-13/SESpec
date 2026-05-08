@@ -1,0 +1,14 @@
+int foo102(int * pairs, int pairs_len, int num, int p);
+
+int foo102(int * pairs, int pairs_len, int num, int p) {
+
+		int result = 0;
+		for (int index = 0; index < num; index++) {
+			for (int j = index + 1; j < num; j++) {
+				if (pairs[index] + pairs[j] == p) {
+					result++;
+				}
+			}
+		}
+		return result;
+}
