@@ -8,14 +8,13 @@ from llm import *
 
 class SpecificationConvertor:
 
-    def __init__(self,function_info: FunctionInfo = None):
-        # OpenAI 客户端初始化
-        # self.llm ='gpt-3.5-turbo'
-        # self.llm ='claude-3-7-sonnet'
-        # self.llm = 'deepseek-v3'
-        # self.llm = 'claude-3-7-sonnet-thinking'
-        
+    def __init__(self, function_info: FunctionInfo = None, llm_config: LLMConfig = None):
         self.function_info = function_info
+        # When no llm_config is supplied (legacy callers), fall back to defaults.
+        # All in-pipeline callers should pass the user-selected llm_config so
+        # that LLM calls inside specgen_annotations/assign_annotations actually
+        # use the requested model instead of the dataclass default.
+        self.llm_config = llm_config if llm_config is not None else LLMConfig()
         self.post_map = self.create_post_map()
         self.z3_map = self.create_z3_map()
         self.inv_map =self.create_inv_map()
@@ -1427,8 +1426,7 @@ ensures {result};
 
     def assign_annotations(self, annotations):
 
-            config = LLMConfig()
-            llm = Chatbot(config)
+            llm = Chatbot(self.llm_config)
 
             """调用Model生成ACSL规约"""
 
@@ -1469,8 +1467,7 @@ ensures {result};
             
     def specgen_annotations(self, annotations):
 
-            config = LLMConfig()
-            llm = Chatbot(config)
+            llm = Chatbot(self.llm_config)
 
             """调用Model生成ACSL规约"""
 

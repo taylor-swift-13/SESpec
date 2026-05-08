@@ -1,25 +1,17 @@
+import os
 from dataclasses import dataclass
 
 @dataclass
 class MainConfig:
     """Global configuration class for main process
-    
-    Attributes:
-        root_dir (str): Project root directory path
-        input_dir (str): Preprocessed input directory (default 'input')
-        annotated_c_dir (str): Intermediate directory with QCP format annotations (default '1_output')
-        annotated_loop_dir (str): Complete loop annotation directory (default '2_output')
-        generated_loop_dir (str): ACSL format invariant generation directory (default '3_output')
-        output_dir (str): Final output directory (default 'output')
+
+    All run artifacts (1_output / 2_output / 3_output / output / loop) are
+    materialized inside a per-run ``workspace_root`` under ``log_dir``; the
+    legacy top-level ``*_dir`` defaults were unused and have been removed.
     """
-    """Configuration parameter class"""
     root_dir: str = None  # Original input
     input_dir: str = 'input' # Unified format input, can manually inject ACSL format preconditions and verification targets
-    annotated_c_dir: str = '1_output' # QCP format annotated preconditions, can manually inject QCP format preconditions and verification targets
-    annotated_loop_dir:str = '2_output' # QCP format complete annotations
-    generated_loop_dir :str = '3_output' # ACSL format annotated preconditions, verification targets, invariants
-    output_dir:str = 'output' # ACSL format complete annotations
-    log_dir:str = 'log'
+    log_dir: str = 'log'
 
     
     function_name: str = None
@@ -32,8 +24,8 @@ class MainConfig:
 
     debug:bool = True
     generlization:bool = False
-    only_loop:bool = True 
     recursive_loop:bool = False
+    only_loop:bool = False  # Set automatically by FunctionProcessor._auto_set_only_loop based on function signature + side-effect scan; do not configure manually.
 
     # T: Use input_dir as the only input
     # F: Use input_dir and preconditions as input
@@ -56,7 +48,7 @@ class LLMConfig:
     # API model configuration
     use_api_model = True # Control whether to use API model or local Transformers model
     api_model:str = "claude-3-7-sonnet-20250219" # API model name, e.g., "gpt-4o"
-    api_key:str = "sk-afVplv2oRlR8Sn_____5O3zxrD1B7zWzgNWGA"
+    api_key:str = os.environ.get("OPENAI_API_KEY", "")
     base_url:str = "https://yunwu.ai/v1"
     api_temperature = 0.7 # Temperature parameter for API calls
     api_top_p=0.7

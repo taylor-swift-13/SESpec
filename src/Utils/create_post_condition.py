@@ -40,7 +40,9 @@ def create_post(file_name: str,annotated_loop_file_path: str,conds: list)-> list
     goal_file = f"../goal/{file_name}_goal.v"
     proof_auto_file = f"../goal/{file_name}_proof_auto.v"
     proof_manual_file = f"../goal/{file_name}_proof_manual.v"
-    input_file = f"../../src/{annotated_loop_file_path}/{file_name}.c"
+    # annotated_loop_file_path is now an absolute path under workspace_root,
+    # so use it directly (no `../../src/` prefix).
+    input_file = os.path.join(annotated_loop_file_path, f"{file_name}.c")
     # 检查文件是否存在，存在则Deleted
     for file_path in [goal_file, proof_auto_file, proof_manual_file]:
         delete_file_if_exists(file_path)
@@ -51,8 +53,8 @@ def create_post(file_name: str,annotated_loop_file_path: str,conds: list)-> list
         f"--goal-file={goal_file}",
         f"--proof-auto-file={proof_auto_file}",
         f"--proof-manual-file={proof_manual_file}",
-        '--no-logic-path --strategy-file=../examples/common_DSLFileLists',
-        f"--input-file={input_file}"
+        "--no-logic-path",
+        f"--input-file={input_file}",
     ]
     # print(' '.join(command))
 

@@ -40,6 +40,7 @@ class SpecGenerator:
         self.precond_manager = precond_manager
         self.ignore_list = ['main','test','bar','foo']
 
+        self.llm_config = llm_config
         self.llm = Chatbot(llm_config)
 
     def if_assigns(self) -> bool:
@@ -524,7 +525,7 @@ class SpecGenerator:
     #     code = extract_function(input_path, self.function_info)[0][2]
 
     #     # Create specification converter
-    #     convertor = SpecificationConvertor(self.function_info)
+    #     convertor = SpecificationConvertor(self.function_info, self.llm_config)
 
     #     # Handle test functions
     #     if any(keyword in self.function_info.name for keyword in ['test','main','goo']):
@@ -705,7 +706,7 @@ class SpecGenerator:
         if self.debug:
             self.logger.info(f'content before specgen: \n{content}')
 
-        convertor = SpecificationConvertor(self.function_info)
+        convertor = SpecificationConvertor(self.function_info, self.llm_config)
 
 
         # Generate specification annotations
@@ -782,7 +783,7 @@ class SpecGenerator:
             
         file_path = f"{self.generated_loop_c_file_path}/{self.function_info.name}.c"
 
-        convertor = SpecificationConvertor(self.function_info)
+        convertor = SpecificationConvertor(self.function_info, self.llm_config)
         
         if self.function_info.require:
             only_pre = f'''/*@
@@ -984,7 +985,7 @@ class SpecGenerator:
                 
             file_path = f"{self.generated_loop_c_file_path}/{self.function_info.name}.c"
 
-            convertor = SpecificationConvertor(self.function_info)
+            convertor = SpecificationConvertor(self.function_info, self.llm_config)
             
             if self.function_info.require:
                 only_pre = f'''/*@

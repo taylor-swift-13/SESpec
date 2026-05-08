@@ -1,7 +1,8 @@
 import re
 import sys
 import logging
-import os 
+import os
+import shutil
 import time
 import argparse
 from datetime import datetime
@@ -86,7 +87,7 @@ def run_from_config(config_path: str, function_name: str = None, root_dir: str =
         sys.exit(1)
 
 
-def _setup_analysis_logger(function_name: str, log_dir: str,  debug: bool = False, to_console: bool = True) -> logging.Logger:
+def _setup_analysis_logger(function_name: str, log_dir: str,  debug: bool = False, to_console: bool = True, log_filename: str = None) -> logging.Logger:
     """
     Configure and return an independent logger for specific function analysis tasks.
     Logs will be written to both file and console (if to_console is True).
@@ -94,7 +95,7 @@ def _setup_analysis_logger(function_name: str, log_dir: str,  debug: bool = Fals
     """
     # Ensure the log directory exists
     os.makedirs(log_dir, exist_ok=True)
-    log_file_path = os.path.join(log_dir, f'{function_name}.log')
+    log_file_path = os.path.join(log_dir, log_filename or f'{function_name}.log')
 
     # Get or create the logger instance named after the function
     logger = logging.getLogger(function_name)
@@ -168,24 +169,59 @@ class FunctionProcessor:
         
         # 重置 token 统计（开始新的分析时）
         reset_token_stats()
-        
-        self.config.input_path = os.path.join(self.config.input_dir,self.config.root_dir)
-        self.config.annotated_c_file_path= os.path.join(self.config.annotated_c_dir,self.config.root_dir)
-        self.config.annotated_loop_c_file_path = os.path.join(self.config.annotated_loop_dir,self.config.root_dir)
-        self.config.generated_loop_c_file_path =  os.path.join(self.config.generated_loop_dir,self.config.root_dir)
-        self.config.output_path = os.path.join(self.config.output_dir,self.config.root_dir)
-        self.config.log_dir = os.path.join(self.config.log_dir,f'{self.config.root_dir}/{self.llm_config.api_model}')
 
-        # Create Log directory
-        os.makedirs(self.config.log_dir, exist_ok=True)
+        # All run artifacts (intermediate Cs, final spec, log) go under one
+        # workspace_root: log/<bench>/<model>/<function>/<timestamp>_<pid>_<uuid>/
+        from uuid import uuid4
+        run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{uuid4().hex[:8]}"
+        self.config.run_id = run_id
+        # Use an absolute path so paths embedded in subprocess commands
+        # (e.g. build/symexec invoked with cwd=../QCP/test/) resolve correctly.
+        workspace_root = os.path.abspath(os.path.join(
+            self.config.log_dir,
+            self.config.root_dir,
+            self.llm_config.api_model,
+            self.config.function_name,
+            run_id,
+        ))
+        self.config.workspace_root = workspace_root
+        self.config.input_path = os.path.join(self.config.input_dir, self.config.root_dir)
+        self.config.annotated_c_file_path = os.path.join(workspace_root, '1_output')
+        self.config.annotated_loop_c_file_path = os.path.join(workspace_root, '2_output')
+        self.config.generated_loop_c_file_path = os.path.join(workspace_root, '3_output')
+        self.config.output_path = os.path.join(workspace_root, 'output')
+        self.config.log_dir = workspace_root
 
-        # Initialize dual-path Output
+        for _path in (
+            workspace_root,
+            self.config.annotated_c_file_path,
+            self.config.annotated_loop_c_file_path,
+            self.config.generated_loop_c_file_path,
+            self.config.output_path,
+        ):
+            os.makedirs(_path, exist_ok=True)
+
+        # Stage QCP assets (verification_*.h, int_array_def.h, common.strategies)
+        # at workspace_root so that:
+        #   - `#include "../foo.h"` from {1,2,3}_output/foo.c resolves
+        #   - build/symexec's default `<input_dir>/../common.strategies` lookup
+        #     finds a real strategies file instead of erroring
+        qcp_headers_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'qcp_headers')
+        if os.path.isdir(qcp_headers_dir):
+            for _name in os.listdir(qcp_headers_dir):
+                src = os.path.join(qcp_headers_dir, _name)
+                dst = os.path.join(workspace_root, _name)
+                if os.path.isfile(src) and not os.path.exists(dst):
+                    shutil.copyfile(src, dst)
+
         self.logger = _setup_analysis_logger(
                 function_name=self.config.function_name,
-                log_dir=self.config.log_dir, 
-                debug=self.config.debug, 
-                to_console=True 
+                log_dir=self.config.log_dir,
+                debug=self.config.debug,
+                to_console=True,
+                log_filename='run.log',
             )
+        self.logger.info(f"workspace_root={workspace_root}")
         
         if self.config.use_db:
             self.vector_db = get_vector_db(self.config.db_path)
@@ -369,6 +405,35 @@ class FunctionProcessor:
 
     
 
+    def _auto_set_only_loop(self, func: FunctionInfo) -> None:
+        """Auto-set only_loop for side-effect-free void functions and int main.
+
+        Side effects detected: pointer-member writes (`p->f = ...`), index writes
+        (`p[i] = ...`), and explicit deref writes (`(*p) = ...`), with compound
+        assignment variants. Local array index writes can register as false
+        positives; on uncertainty we keep only_loop=False (full pipeline).
+        """
+        func_type = (func.func_type or "").strip()
+        is_void = func_type == "void"
+        is_int_main = func.name == "main" and re.match(r"^\s*int\b", func_type)
+        if not (is_void or is_int_main):
+            self.config.only_loop = False
+            self.logger.info(f"[auto only_loop] False — {func.name} returns '{func_type}'")
+            return
+
+        code = func.code or ""
+        side_effect_patterns = [
+            r'[A-Za-z_]\w*\s*->\s*[A-Za-z_]\w*\s*(?:\[[^\]]*\])?\s*[+\-*/%&|^]?=(?!=)',
+            r'(?<![A-Za-z_\[])[A-Za-z_]\w*\s*\[[^\]]+\]\s*[+\-*/%&|^]?=(?!=)',
+            r'\(\s*\*\s*[A-Za-z_]\w*\s*\)\s*[+\-*/%&|^]?=(?!=)',
+        ]
+        has_side_effects = any(re.search(p, code) for p in side_effect_patterns)
+        self.config.only_loop = not has_side_effects
+        verdict = "True" if self.config.only_loop else "False"
+        kind = "void" if is_void else "int main"
+        reason = "no side effects" if not has_side_effects else "writes via pointer/array"
+        self.logger.info(f"[auto only_loop] {verdict} — {kind} {func.name}: {reason}")
+
     def run_analysis(self):
         """Execute main generation workflow"""
         # Start overall timing
@@ -381,6 +446,7 @@ class FunctionProcessor:
         
         main_func = self._initialize_function(self.config.function_name)
 
+        self._auto_set_only_loop(main_func)
 
         self.precond_manager = PreconditionsManager(main_func.file_path,self.preconditions)
       
@@ -452,7 +518,7 @@ class FunctionProcessor:
             f for f in self.function_info_list 
             if f.name == self.config.function_name
         )
-        convertor = SpecificationConvertor(main_func)
+        convertor = SpecificationConvertor(main_func, self.llm_config)
         if convertor.z3_map:
          
             post2DSL = Post2DSL(main_func.specification,convertor.z3_map,self.config,self.logger)
@@ -597,7 +663,7 @@ class FunctionProcessor:
         with open(output_file_path, 'r', encoding='utf-8') as f:
             output_code = f.read()
 
-        collector = Collector()
+        collector = Collector(llm_config=self.llm_config)
 
         collector.add_specification_to_file(input_code,output_code,'add.json')
 

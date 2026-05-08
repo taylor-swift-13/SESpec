@@ -20,12 +20,14 @@ class InvGenerator:
         
         self.config =config
         self.info = info
-        self.convertor = SpecificationConvertor(info)
+        self.convertor = SpecificationConvertor(info, llm_config)
         self.logger = logger
         self.llm_config = llm_config
         self.llm = Chatbot(llm_config)
 
-        self.query_llm_config = LLMConfig(api_model='gpt-4o-mini')
+        # Auxiliary "describe this loop" RAG-query LLM uses the same model
+        # as the main pipeline so it honors the user's --models setting.
+        self.query_llm_config = llm_config
         self.query_llm = Chatbot(self.query_llm_config)
 
         
@@ -1049,8 +1051,10 @@ You must use these follow examples as a reference to complete the task, with the
 
        
         file_name = self.info.name
-        output_c_file_path = f"../src/{self.config.generated_loop_c_file_path}/{file_name}.c"
-        output_symexe_c_file_path = f"../src/{self.config.annotated_loop_c_file_path}/{file_name}.c"
+        # generated_loop_c_file_path / annotated_loop_c_file_path are absolute
+        # paths under workspace_root, so use them directly.
+        output_c_file_path = os.path.join(self.config.generated_loop_c_file_path, f"{file_name}.c")
+        output_symexe_c_file_path = os.path.join(self.config.annotated_loop_c_file_path, f"{file_name}.c")
 
         dir_path = '/'.join(output_c_file_path.split('/')[:-1])
         
@@ -1058,7 +1062,7 @@ You must use these follow examples as a reference to complete the task, with the
             os.makedirs(dir_path, exist_ok=True)
 
 
-        json_file =f'loop/{file_name}.json'
+        json_file = os.path.join(getattr(self.config, 'workspace_root', '.') or '.', 'loop', f'{file_name}.json')
 
         processor = LoopProcessor(self.info,self.config)
         processor.init_execute()

@@ -23,13 +23,16 @@ class LoopProcessor:
         self.goal_file = f"../goal/{self.file_name}_goal.v"
         self.proof_auto_file = f"../goal/{self.file_name}_proof_auto.v"
         self.proof_manual_file = f"../goal/{self.file_name}_proof_manual.v"
-        # self.input_file = f"symexe/input/{self.file_name}.c"
-        # self.output_file =f"symexe/output/{self.file_name}.c"
-        # self.iter_file = f"../../LoopInvGen_V7/symexe/output/{self.file_name}.c"
-        self.input_file = f"../src/{config.annotated_c_file_path}/{self.file_name}.c"
-        self.output_file =f"../src/{config.annotated_loop_c_file_path}/{self.file_name}.c"
-        self.iter_file = f"../../src/{config.annotated_loop_c_file_path}/{self.file_name}.c"
-        self.json_file = f'loop/{self.file_name}.json'
+        # annotated_*_c_file_path is now an absolute path under workspace_root,
+        # so use it directly. input_file/output_file are opened by Python from
+        # cwd=src/; iter_file is passed to build/symexec (cwd=../QCP/test/),
+        # which also accepts an absolute path.
+        self.input_file = os.path.join(config.annotated_c_file_path, f'{self.file_name}.c')
+        self.output_file = os.path.join(config.annotated_loop_c_file_path, f'{self.file_name}.c')
+        self.iter_file = os.path.join(config.annotated_loop_c_file_path, f'{self.file_name}.c')
+        loop_dir = os.path.join(getattr(config, 'workspace_root', '.') or '.', 'loop')
+        os.makedirs(loop_dir, exist_ok=True)
+        self.json_file = os.path.join(loop_dir, f'{self.file_name}.json')
 
     def delete_file_if_exists(self, file_path):
         """
