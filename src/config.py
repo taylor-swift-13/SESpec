@@ -35,13 +35,7 @@ class MainConfig:
     refine_count:int = 3
     pass_count:int = 5
     think:bool = True
-    template:bool = True
-    auto_post:bool = True # Whether to automatically generate postconditions
-
-    use_db:bool = True
-    db_path:str = 'VectorDB/Jsons/init.json'
-
-    collect:bool = False
+    use_se:bool = True  # False forces LLM for all postcondition generation; also disables structural loop-invariant template
 
 @dataclass
 class LLMConfig:

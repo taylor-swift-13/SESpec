@@ -42,10 +42,7 @@ PRESETS: Dict[str, Dict] = {
         "refine_count": 3,
         "pass_count": 5,
         "think": False,
-        "template": True,
-        "auto_post": True,
-        "use_db": False,
-        "collect": False,
+        "use_se": True,
         "debug": False,
     },
 }
@@ -324,10 +321,10 @@ def parse_args() -> argparse.Namespace:
                    help="Python interpreter used to launch main.py")
     p.add_argument("--matrix-root", default=None,
                    help="Override output root (default: results/matrix_runs/<run_id>)")
-    p.add_argument("--use-db", dest="use_db", action="store_true", default=None,
-                   help="Force-enable the vector DB (RAG) for every run")
-    p.add_argument("--no-db", dest="use_db", action="store_false",
-                   help="Force-disable the vector DB (RAG) for every run")
+    p.add_argument("--use-se", dest="use_se", action="store_true", default=None,
+                   help="Force-enable symbolic execution for loop-free postconds")
+    p.add_argument("--no-se", dest="use_se", action="store_false",
+                   help="Force-disable symbolic execution; use LLM for all postconds")
     return p.parse_args()
 
 
@@ -346,8 +343,8 @@ def main() -> int:
             print(f"⚠ unknown label '{label}'; falling back to sespec_default settings",
                   file=sys.stderr)
         settings = dict(PRESETS.get(label, PRESETS["sespec_default"]))
-        if args.use_db is not None:
-            settings["use_db"] = args.use_db
+        if args.use_se is not None:
+            settings["use_se"] = args.use_se
         for bench in args.bench:
             for case_id in args.cases:
                 for model in args.models:

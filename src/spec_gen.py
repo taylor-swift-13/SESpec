@@ -1064,14 +1064,11 @@ class SpecGenerator:
         # Create required type definitions
         required_type = self.create_required_type()
 
-        if self.config.use_db:
-            definitions_str = '''
+        definitions_str = '''
         /*@
         PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION
         */
         '''
-        else:
-            definitions_str = ''
 
         
         require_str = self.function_info.require

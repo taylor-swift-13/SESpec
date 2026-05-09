@@ -47,10 +47,7 @@ class ConfigLoader:
         config.refine_count = main_config.get('refine_count', config.refine_count)
         config.pass_count = main_config.get('pass_count', config.pass_count)
         config.think = main_config.get('think', config.think)
-        config.template = main_config.get('template', config.template)
-        config.auto_post = main_config.get('auto_post', config.auto_post)
-        config.use_db = main_config.get('use_db', config.use_db)
-        config.collect = main_config.get('collect', config.collect)
+        config.use_se = main_config.get('use_se', config.use_se)
         
         return config
     

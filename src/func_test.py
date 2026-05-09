@@ -32,7 +32,6 @@ def get_dataset_config(dataset_name, model_name="default"):
                 'debug': True,
                 'only_loop': False,
                 'generlization': False,
-                'use_db': False,
                 'pass_count': 5
             }
         },
@@ -47,7 +46,6 @@ def get_dataset_config(dataset_name, model_name="default"):
                 'debug': True,
                 'only_loop': False,
                 'generlization': False,
-                'use_db': True,
                 'pass_count': 1
             }
         },
@@ -62,8 +60,6 @@ def get_dataset_config(dataset_name, model_name="default"):
                 'debug': True,
                 'only_loop': False,
                 'generlization': False,
-                'use_db': True,
-                'auto_post': False,
                 'pass_count': 5
             }
         },
@@ -76,13 +72,10 @@ def get_dataset_config(dataset_name, model_name="default"):
             'config_params': {
                 'auto_annotation': True,
                 'debug': True,
-                'template': True,
                 'only_loop': False,
                 'generlization': False,
-                'use_db': True,
                 'refine_count': 3,
                 'pass_count': 1,
-                'auto_post': True
             }
         },
         'LIG-MM': {
@@ -97,8 +90,6 @@ def get_dataset_config(dataset_name, model_name="default"):
                 'only_loop': True,
                 'list_loop': True,
                 'generlization': False,
-                'use_db': True,
-                'auto_post': True,
                 'pass_count': 5
             }
         },
@@ -113,8 +104,6 @@ def get_dataset_config(dataset_name, model_name="default"):
                 'debug': True,
                 'only_loop': False,
                 'generlization': False,
-                'use_db': True,
-                'auto_post': True
             }
         }
     }

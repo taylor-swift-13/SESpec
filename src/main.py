@@ -18,10 +18,8 @@ from config import MainConfig,LLMConfig
 from convertor import SpecificationConvertor
 from spec_gen import SpecGenerator
 from DSL.Q2D import Post2DSL
-from vector_db_manager import get_vector_db
 from pre_cond_manager import PreconditionsManager
 from config_loader import load_config_from_file
-from collector import Collector
 from llm import get_token_stats, reset_token_stats
 
 
@@ -51,7 +49,6 @@ def run_from_config(config_path: str, function_name: str = None, root_dir: str =
         function_name (str, optional): Function name to analyze
         root_dir (str, optional): Project root directory
         debug (bool, optional): Whether to enable debug mode
-        vector_db (bool, optional): Whether to enable vector database
     """
     try:
         # Load configuration file
@@ -222,14 +219,8 @@ class FunctionProcessor:
                 log_filename='run.log',
             )
         self.logger.info(f"workspace_root={workspace_root}")
-        
-        if self.config.use_db:
-            self.vector_db = get_vector_db(self.config.db_path)
-        else:
-            self.vector_db = None
 
-            
-        
+
     def _log_overall_timing(self):
         """Log overall timing information"""
         if self.start_time and self.end_time:
@@ -330,7 +321,7 @@ class FunctionProcessor:
         if matches:
             self.logger.info(f"\nGENERATE LOOP INVARIANT FOR {func.name}")
             self.logger.info('='* 50+'\n')
-            inv_generator = InvGenerator(self.config,func,self.logger,self.vector_db,self.llm_config,generator)
+            inv_generator = InvGenerator(self.config,func,self.logger,self.llm_config,generator)
             self.first_pass = inv_generator.run_pass()
 
         generator.create_looped_c_file()
@@ -373,7 +364,7 @@ class FunctionProcessor:
         if matches:
             self.logger.info(f"\nGENERATE LOOP INVARIANT FOR {func.name}")
             self.logger.info('='* 50+'\n')
-            inv_generator = InvGenerator(self.config,func,self.logger,self.vector_db,self.llm_config,generator)
+            inv_generator = InvGenerator(self.config,func,self.logger,self.llm_config,generator)
             inv_generator.run()
 
         # Postcondition generation (enable as needed)
@@ -393,10 +384,13 @@ class FunctionProcessor:
             self.logger.info(f'Starting to generate ACSL specification for {func.name}')
             # generator.create_specification()
 
-            if self.config.auto_post:
-                generator.create_specification()
-            else:
+            # use_se=False forces LLM globally; otherwise SE only for
+            # loop-free functions (loops are unsound for SE).
+            has_loop = bool(re.search(r'\b(for|while)\b', func.code or ""))
+            if not self.config.use_se or has_loop:
                 generator.create_specification_by_llm()
+            else:
+                generator.create_specification()
         
         else:
             self.logger.info(f'Starting to generate ACSL specification for {func.name}')
@@ -491,10 +485,6 @@ class FunctionProcessor:
         self._log_overall_timing()
         self._log_token_stats()
 
-        # Collect correct results
-        if self.config.collect and self.first_pass['satisfy'] is not None:
-            self._collect_results(main_func.file_path)
-        
 
     def _handle_existing_function(self, func: FunctionInfo):
         """Handle already initialized functions"""
@@ -652,23 +642,6 @@ class FunctionProcessor:
 
         verifier = SpecVerifier(self.config,self.logger)
         verifier.run(self.config.function_name)   # Pass complete path
-
-    def _collect_results(self,input_file_path:str):
-        self.logger.info("collecting results")
-       
-        output_file_path = self.config.output_path
-
-        with open(input_file_path, 'r', encoding='utf-8') as f:
-            input_code = f.read()
-        with open(output_file_path, 'r', encoding='utf-8') as f:
-            output_code = f.read()
-
-        collector = Collector(llm_config=self.llm_config)
-
-        collector.add_specification_to_file(input_code,output_code,'add.json')
-
-
-      
 
 # Usage example
 if __name__ == '__main__':

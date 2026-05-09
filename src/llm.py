@@ -95,12 +95,15 @@ class OpenAILLM(BaseChatModel):
             self.messages.append({"role": "user", "content": user_input})
 
             # 调用 OpenAI API
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=self.messages,
-                temperature=self.temperature,
-                top_p = self.top_p
-            )
+            kwargs = {
+                "model": self.model_name,
+                "messages": self.messages,
+            }
+            # gpt-5 系列(reasoning models)只接受默认 temperature/top_p
+            if not str(self.model_name).startswith("gpt-5"):
+                kwargs["temperature"] = self.temperature
+                kwargs["top_p"] = self.top_p
+            response = self.client.chat.completions.create(**kwargs)
 
             assistant_response = response.choices[0].message.content
             

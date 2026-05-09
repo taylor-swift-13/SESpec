@@ -10,14 +10,14 @@ from config import MainConfig,LLMConfig
 from llm import *
 from convertor import SpecificationConvertor
 from Utils.main_class import FunctionInfo
-from vector_db import *
+from example_retriever import get_examples_for
 from spec_gen import SpecGenerator
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 class InvGenerator:
-    def __init__(self,config:MainConfig,info:FunctionInfo,logger:logging.Logger,vector_db:LangChainVectorDB,llm_config:LLMConfig,spec_gen:SpecGenerator = None):
-        
+    def __init__(self,config:MainConfig,info:FunctionInfo,logger:logging.Logger,llm_config:LLMConfig,spec_gen:SpecGenerator = None):
+
         self.config =config
         self.info = info
         self.convertor = SpecificationConvertor(info, llm_config)
@@ -25,22 +25,13 @@ class InvGenerator:
         self.llm_config = llm_config
         self.llm = Chatbot(llm_config)
 
-        # Auxiliary "describe this loop" RAG-query LLM uses the same model
-        # as the main pipeline so it honors the user's --models setting.
-        self.query_llm_config = llm_config
-        self.query_llm = Chatbot(self.query_llm_config)
-
-        
         self.spec_gen = spec_gen
         self.error_history = []
-       
 
         self.pass_count = self.config.pass_count
         self.first_pass = None
 
-        self.vector_db = vector_db
-        
-    
+
     
     def update_loop_content(self,code,new_loop_content,ridx):
         # Split code into single character list
@@ -249,7 +240,7 @@ class InvGenerator:
 
     def append_assignments_annotations(self,annotations):
         updated_code = []
-        invariant_annotation = f"loop assigns PLACE_HOLDER_ASSIGNMENTS;" 
+        invariant_annotation = f"loop assigns PLACE_HOLDER_ASSIGNMENTS;"
         found_first_annotation = False
 
         for line in annotations.splitlines():
@@ -265,6 +256,74 @@ class InvGenerator:
 
        # Join the list back into a single string and return
         return "\n".join(updated_code)
+
+
+    def compute_loop_assigns(self, loop_content):
+        """Static analysis: collect every L-value written in the loop body
+        and emit a concrete `loop assigns ...;` clause. Deterministic — no LLM.
+
+        Captures:
+          - simple/compound assignment LHS (`x = ...`, `p->f += ...`, `a[i] *= ...`)
+          - pre/post increment & decrement (`i++`, `--p->len`)
+        Normalizes any `[idx]` form to `[..]` (ACSL "any cell").
+        Returns "" if no writes detected.
+        """
+        body = re.sub(r"/\*[\s\S]*?\*/", "", loop_content or "")
+        body = re.sub(r"//.*", "", body)
+
+        # Strip the loop header so its update expression (e.g. `i++` in `for(...)`)
+        # still counts but the condition expressions don't pollute the scan.
+        m = re.search(r"\b(for|while|do)\b", body)
+        if m and m.group(1) == "for":
+            # for ( init ; cond ; update ) { body }
+            paren_start = body.find("(", m.end())
+            if paren_start != -1:
+                depth = 1; i = paren_start + 1
+                while i < len(body) and depth > 0:
+                    if body[i] == "(": depth += 1
+                    elif body[i] == ")": depth -= 1
+                    i += 1
+                # leave the for-update inside body so its `i++` is captured
+                # but skip the cond/init by not splitting them out — regex below
+                # also matches inside the header which is fine since header
+                # writes are loop writes too.
+
+        lvalue = r"[A-Za-z_]\w*(?:\s*->\s*[A-Za-z_]\w*|\s*\.\s*[A-Za-z_]\w*|\s*\[[^\]]*\])*"
+        targets = []
+
+        def add(t):
+            t = t.strip()
+            if not t:
+                return
+            t_norm = re.sub(r"\s+", "", t)
+            t_norm = re.sub(r"\[[^\]]*\]", "[..]", t_norm)
+            if t_norm not in targets:
+                targets.append(t_norm)
+
+        for m in re.finditer(rf"({lvalue})\s*(?:=(?!=)|\+=|-=|\*=|/=|%=|<<=|>>=|&=|\|=|\^=)", body):
+            add(m.group(1))
+        for m in re.finditer(rf"({lvalue})\s*(?:\+\+|--)", body):
+            add(m.group(1))
+        for m in re.finditer(rf"(?:\+\+|--)\s*({lvalue})", body):
+            add(m.group(1))
+
+        if not targets:
+            return ""
+        return f"loop assigns {', '.join(targets)};"
+
+
+    def append_concrete_assigns(self, annotations, assigns_clause):
+        """Insert a concrete `loop assigns ...;` clause right after the first /*@."""
+        if not assigns_clause:
+            return annotations
+        out = []
+        inserted = False
+        for line in annotations.splitlines():
+            out.append(line)
+            if not inserted and '/*@' in line:
+                out.append(f"          {assigns_clause}")
+                inserted = True
+        return "\n".join(out)
 
     
 
@@ -1019,28 +1078,20 @@ class InvGenerator:
         return prompt
     
         
-    def get_examples(self,loop_code):
+    def get_examples(self, loop_code):
+        # Classify the whole function (not just the loop) so structural
+        # signals like self-referential structs and recursive calls are
+        # visible. Fall back to loop_code if file_path read fails.
+        try:
+            with open(self.info.file_path, "r", encoding="utf-8") as fh:
+                source = fh.read()
+        except (OSError, AttributeError):
+            source = loop_code or ""
 
-        query = self.query_llm.chat(f'Please brief explain what the following code do: {loop_code}')
-        if self.config.recursive_loop:
-            results = search_and_return(self.vector_db, query=query,target_category='loop invariant',target_type='recursive')
-        else:
-            results = search_and_return(self.vector_db, query=query,target_category='loop invariant')
-            
-        contents = '\n\n'.join(results)
-        examples = f'''
-Examples:
-You must use these follow examples as a reference to complete the task, with the following requirements:
-    - You may use the invariant generation logic from these examples as a guide for your own invariant.
-    - You may directly use the predicates or functions defined in these examples.
-    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
-    ```
-    {contents}
-    ```
-'''
+        category, examples = get_examples_for(source)
+        self.logger.info(f"examples category: {category}")
         self.logger.info("examples:")
         self.logger.info(examples)
-        
         return examples
 
 
@@ -1122,33 +1173,34 @@ You must use these follow examples as a reference to complete the task, with the
 
             simple = False
 
-            if self.config.template:
+            # Structural template is part of the SE pipeline: when use_se is on
+            # we run the deterministic analysis (assigns + read-only arrays) and
+            # bake it into the loop annotation. When use_se is off, skip straight
+            # to the LLM-only path.
+            if self.config.use_se:
 
-                #annotations  = self.append_assignments_annotations(annotations)
+                # Deterministic loop-assigns: scan the loop body and emit a
+                # concrete `loop assigns ...;` clause. No LLM involvement.
+                assigns_clause = self.compute_loop_assigns(loop_content)
+                annotations = self.append_concrete_assigns(annotations, assigns_clause)
                 if self.config.debug:
+                    self.logger.info(f"computed loop assigns: {assigns_clause}")
                     self.logger.info("after assignments")
                     self.logger.info(annotations)
 
                 if array_names:
                     for array_name in array_names:
                         annotations = self.append_array_annotations(annotations,array_name,unchanged_arrays)
-                
-            if not self.config.template:
+
+            else:
 
                 if self.config.think:
                     cot = self.get_cot(_code)
                     if self.config.debug:
                         self.logger.info(f'think in natural language: {cot}')
-                    
-                    # if self.error_history:
-                    #     error_examples = '\n\n'.join(self.error_history)
-                    #     cot = self.avoid_error(error_examples)
-                    #     if self.config.debug:
-                    #         self.logger.info(f'understand the error and avoid it: {cot}')
-
 
                 simple = True
-            
+
             if not inner_flags[idx] and not simple:
                 
                 if self.config.think:
@@ -1224,41 +1276,21 @@ You must use these follow examples as a reference to complete the task, with the
 
             elif self.config.recursive_loop:
 
-                if self.config.use_db:
-                    examples = self.get_examples(loop_content)
-                    user_prompt = self.get_user_prompt_db(annotations_list[0],pre_condition,examples)
-                    annotations_list[0] = self.get_annotations(user_prompt)
-                else:
-                    user_prompt = self.get_user_prompt_traival(annotations_list[0],pre_condition)
-                    annotations_list[0] = self.get_annotations(user_prompt)
+                examples = self.get_examples(loop_content)
+                user_prompt = self.get_user_prompt_db(annotations_list[0],pre_condition,examples)
+                annotations_list[0] = self.get_annotations(user_prompt)
 
             else:
-            # Get user prompt
-                
-                if self.config.use_db:
+                examples = self.get_examples(loop_content)
 
+                user_prompt_0 = self.get_user_prompt_db(annotations_list[0],pre_condition,examples)
+                user_prompt_1 = self.get_user_prompt_db_template(annotations_list[1],pre_condition,examples)
+                user_prompt_2 = self.get_user_prompt_db_verification(annotations_list[2],pre_condition,examples)
 
-                    examples = self.get_examples(loop_content)
+                annotations_list[0] = self.get_annotations(user_prompt_0)
+                annotations_list[1] = self.get_annotations(user_prompt_1)
+                annotations_list[2] = self.get_annotations(user_prompt_2)
 
-                    user_prompt_0 = self.get_user_prompt_db(annotations_list[0],pre_condition,examples)
-                    user_prompt_1 = self.get_user_prompt_db_template(annotations_list[1],pre_condition,examples)
-                    user_prompt_2 = self.get_user_prompt_db_verification(annotations_list[2],pre_condition,examples)
-
-                    annotations_list[0] = self.get_annotations(user_prompt_0)
-                    annotations_list[1] = self.get_annotations(user_prompt_1)
-                    annotations_list[2] = self.get_annotations(user_prompt_2)
-
-                   
-                else:   
-
-                    user_prompt_0 = self.get_user_prompt_traival(annotations_list[0],pre_condition)
-                    user_prompt_1 = self.get_user_prompt_template(annotations_list[1],pre_condition)
-                    user_prompt_2 = self.get_user_prompt_verification(annotations_list[2],pre_condition)
-
-                    annotations_list[0] = self.get_annotations(user_prompt_0)
-                    annotations_list[1] = self.get_annotations(user_prompt_1)
-                    annotations_list[2] = self.get_annotations(user_prompt_2)   
-                                                                                                                                                                                                                                                                                                                                                                                                                                                
 
 
 
