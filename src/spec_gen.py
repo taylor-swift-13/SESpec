@@ -38,7 +38,10 @@ class SpecGenerator:
         self.config = config
         self.logger = logger
         self.precond_manager = precond_manager
-        self.ignore_list = ['main','test','bar','foo']
+        # Skip pre/post-condition generation only for the program entry
+        # point (`main`); other side-effect-free void functions are detected
+        # dynamically via _is_side_effect_free() below.
+        self.ignore_list = ['main']
 
         self.llm_config = llm_config
         self.llm = Chatbot(llm_config)
@@ -53,8 +56,28 @@ class SpecGenerator:
 
     def create_precondition(self) -> str:
         """
-        Generate precondition to be inserted into temporary .c file
+        Generate precondition to be inserted into temporary .c file.
+
+        Self-detect: if the source operates on a recursive data structure
+        (linked list, tree, ...), structural precondition synthesis cannot
+        express the well-formedness predicates required (lseg / listrep / ...).
+        Skip the structural pass entirely and emit an empty contract; the
+        downstream LLM stages (inv_gen + specgen) fill it in via the
+        recursive_ds examples.
         """
+        try:
+            from example_retriever import classify
+            file_path = getattr(self.function_info, 'file_path', None)
+            if file_path:
+                with open(file_path, 'r', encoding='utf-8') as fh:
+                    if classify(fh.read()) == 'recursive_ds':
+                        self.logger.info(
+                            f'recursive_ds detected — skipping structural precondition for {self.function_info.name}'
+                        )
+                        return '/*@\nRequire emp\nEnsure Results(__return)\n*/'
+        except Exception as e:
+            self.logger.info(f'recursive_ds classification skipped: {e}')
+
         with_list = []
         require_list = []
         syntax_str = ''
@@ -62,15 +85,11 @@ class SpecGenerator:
         def parse_parameters_assertion(parameter_list:[List[Parameter]], with_list:list[str], require_list:list[str], syntax_str:str, value_str:str):
             if not parameter_list:
                 return '', f'Require emp\n'
-            
+
             for parameter in parameter_list:
-                
+
                 # Pointer, non-struct, non-array parameter
 
-                if parameter.is_recursive:
-                    self.logger.info(f'parameter.name:{parameter.name} is recursive')
-                    continue
-                
                 if parameter.is_ptr and not parameter.is_struct and parameter.array_length == -1:
                     
                     with_list.append(f'{value_str}{parameter.name}_v')
@@ -639,42 +658,136 @@ class SpecGenerator:
         return code
 
     def _remove_duplicate_definitions(self, content: str) -> str:
+        """Remove duplicate `struct X { ... };` / `typedef struct ... {} X;`
+        definitions to avoid compilation errors. Only matches lines that
+        actually OPEN a definition (have `{` on the same line); a line like
+        `struct SLL *tail;` or `struct SLL * main1(...)` is NOT a definition
+        and must NOT be skipped.
         """
-        Remove duplicate type definitions (struct definitions) from the content to avoid compilation errors.
-        """
+        # A real struct DEFINITION header: "struct <name> {" or
+        # "typedef struct <name> {" — only whitespace allowed between the
+        # name and "{". Anything else (function header, field declaration,
+        # parameter list) is NOT a definition.
+        def_open_re = re.compile(
+            r'^\s*(?:typedef\s+)?struct\s+(\w+)\s*\{', re.MULTILINE
+        )
         lines = content.split('\n')
-        seen_definitions = set()
-        filtered_lines = []
-        skip_lines = False
-        brace_count = 0
-        
+        seen = set()
+        filtered = []
+        skip_until_brace_close = False
+        brace_depth = 0
+
         for line in lines:
-            # Check if this line starts a struct definition
-            struct_match = re.search(r'(?:typedef\s+)?struct\s+(\w+)', line)
-            if struct_match:
-                struct_name = struct_match.group(1)
-                if struct_name in seen_definitions:
-                    # Skip this duplicate definition
-                    skip_lines = True
-                    brace_count = line.count('{') - line.count('}')
-                    continue
-                else:
-                    seen_definitions.add(struct_name)
-                    skip_lines = False
-                    brace_count = 0
-            
-            # If we're skipping a duplicate struct definition, count braces
-            if skip_lines:
-                brace_count += line.count('{') - line.count('}')
-                if brace_count <= 0:
-                    # End of struct definition
-                    skip_lines = False
-                    brace_count = 0
+            if skip_until_brace_close:
+                brace_depth += line.count('{') - line.count('}')
+                if brace_depth <= 0:
+                    skip_until_brace_close = False
+                    brace_depth = 0
+                    # Also drop a trailing typedef-name line like `} Foo;`
+                    if re.match(r'\s*\}[^;]*;', line):
+                        continue
                 continue
-            
-            filtered_lines.append(line)
-        
-        return '\n'.join(filtered_lines)
+
+            m = def_open_re.match(line)
+            if m:
+                name = m.group(1)
+                if name in seen:
+                    # Begin skipping this duplicate definition body
+                    skip_until_brace_close = True
+                    brace_depth = line.count('{') - line.count('}')
+                    if brace_depth <= 0:
+                        skip_until_brace_close = False
+                        brace_depth = 0
+                    continue
+                seen.add(name)
+
+            filtered.append(line)
+
+        return '\n'.join(filtered)
+
+    def _is_side_effect_free(self) -> bool:
+        """Detect whether the current function has observable side effects:
+        pointer-member writes (p->f = ...), index writes (p[i] = ...), or
+        explicit deref writes ((*p) = ...). Mirrors main._auto_set_only_loop
+        but operates on this generator's function rather than the entry func.
+        """
+        code = self.function_info.code or ""
+        side_effect_patterns = [
+            r'[A-Za-z_]\w*\s*->\s*[A-Za-z_]\w*\s*(?:\[[^\]]*\])?\s*[+\-*/%&|^]?=(?!=)',
+            r'(?<![A-Za-z_\[])[A-Za-z_]\w*\s*\[[^\]]+\]\s*[+\-*/%&|^]?=(?!=)',
+            r'\(\s*\*\s*[A-Za-z_]\w*\s*\)\s*[+\-*/%&|^]?=(?!=)',
+        ]
+        return not any(re.search(p, code) for p in side_effect_patterns)
+
+
+    def _ensure_acsl_requires(self, content: str) -> str:
+        """If `content` has no ACSL `requires` clause adjacent to the function
+        definition, synthesize one and inject it right before the function.
+
+        Path:
+          - non-recursive_ds (numeric / array / recursive_program):
+            translate QCP DSL Require produced by create_precondition.
+          - recursive_ds (linked list / tree):
+            QCP gives `Require emp` (we skip), so call an LLM precondgen
+            with recursive_ds examples to produce predicate + requires
+            ACSL directly.
+        Idempotent — does nothing when a `requires` is already present.
+        """
+        func_name = self.function_info.name
+        m = re.search(
+            rf"(?:[A-Za-z_][\w\*\s]*?\s)+{re.escape(func_name)}\s*\(",
+            content,
+        )
+        if not m:
+            return content
+        before = content[:m.start()]
+        if re.search(r"requires\s+", before[-2000:]):
+            return content
+
+        convertor = SpecificationConvertor(self.function_info, self.llm_config)
+
+        # Classify source. LLM precondgen handles array + recursive_ds
+        # (memory access / overflow / inductive predicate territory). The
+        # other categories (numeric / recursive_program) keep the structural
+        # QCP→ACSL translation since their preconditions are simple bounds.
+        category = ""
+        src = ""
+        try:
+            from example_retriever import classify, get_examples_for
+            file_path = getattr(self.function_info, 'file_path', None)
+            if file_path:
+                with open(file_path, 'r', encoding='utf-8') as fh:
+                    src = fh.read()
+                category = classify(src)
+        except Exception as e:
+            self.logger.info(f"category check skipped: {e}")
+
+        acsl_requires = ""
+        if category in ("array", "recursive_ds"):
+            # Pass examples only for recursive_ds (lseg/listrep patterns).
+            # For array the prompt's built-in array example suffices and we
+            # don't want to bloat the prompt unnecessarily.
+            examples_block = ""
+            if category == "recursive_ds" and src:
+                try:
+                    _, examples_block = get_examples_for(src)
+                except Exception as e:
+                    self.logger.info(f"examples loading failed: {e}")
+            try:
+                acsl_requires = convertor.precondgen_annotations(content, examples_block)
+                if acsl_requires:
+                    self.logger.info(f"{category} precondgen produced:\n{acsl_requires}")
+            except Exception as e:
+                self.logger.info(f"{category} precondgen failed: {e}")
+        else:
+            acsl_requires = convertor.inconvert_requires(self.function_info.annotation or "")
+            if acsl_requires and self.debug:
+                self.logger.info(f"injecting translated ACSL requires:\n{acsl_requires}")
+
+        if not acsl_requires:
+            return content
+        return before.rstrip() + "\n\n" + acsl_requires + "\n" + content[m.start():]
+
 
     def create_specification_by_llm(self) -> None:
 
@@ -684,15 +797,14 @@ class SpecGenerator:
 
         jump_flag = False
 
-        ignore_list = self.ignore_list
-
-
-        if any(keyword in self.function_info.name for keyword in ignore_list):
-            print('ignore main')
+        # Skip pre/post-condition generation only for:
+        #   1. the program entry point (`main`)
+        #   2. void functions with no observable side effects
+        if self.function_info.name in self.ignore_list:
+            print(f'ignore {self.function_info.name} (entry point)')
             jump_flag = True
-        # Handle functions with no parameters and void return
-        elif self.function_info.parameter_list == [] and self.function_info.func_type == 'void':
-            print('ignore void')
+        elif self.function_info.func_type == 'void' and self._is_side_effect_free():
+            print(f'ignore {self.function_info.name} (side-effect-free void)')
             jump_flag = True
         elif self.function_info.func_type == 'void':
             ensure_statement = '  assigns PLACE_HOLDER; \n  ensures PLACE_HOLDER;   '
@@ -701,6 +813,10 @@ class SpecGenerator:
 
 
         if not jump_flag:
+            # If the loop-annotated file has no function-level `requires`,
+            # synthesize an ACSL precondition by translating the QCP DSL
+            # `Require ...` produced by create_precondition.
+            content = self._ensure_acsl_requires(content)
             content = self.precond_manager.add_ensures_to_function(content, self.function_info.name,ensure_statement)
 
         if self.debug:
@@ -803,12 +919,14 @@ class SpecGenerator:
 
         groups = code.split('{')
 
-        ignore_list = self.ignore_list  
-
         jump_flag = False
 
-        if any(keyword in self.function_info.name for keyword in ignore_list):
+        if self.function_info.name in self.ignore_list:
             jump_flag = True
+        elif self.function_info.func_type == 'void' and self._is_side_effect_free():
+            jump_flag = True
+
+        if jump_flag:
             content = (
                 f'{required_type}\n'  + annotated_callee_str + only_pre +
                 f'\n{function_header}\n' + '{' + "{".join(groups[1:]))
@@ -1000,9 +1118,11 @@ class SpecGenerator:
 
             groups = code.split('{')
 
-            ignore_list = self.ignore_list  
-
-            if any(keyword in self.function_info.name for keyword in ignore_list):
+            skip = (
+                self.function_info.name in self.ignore_list
+                or (self.function_info.func_type == 'void' and self._is_side_effect_free())
+            )
+            if skip:
                 content = (
                     f'{required_type}\n'  + annotated_callee_str + only_pre +
                     f'\n{function_header}\n' + '{' + "{".join(groups[1:]))

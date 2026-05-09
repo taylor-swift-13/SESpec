@@ -1,0 +1,77 @@
+### Role: ###
+You are an ACSL/Frama-C specialist. Generate ONLY the function-level
+precondition (`requires` clauses) plus any supporting `predicate` / `logic`
+declarations needed by them, for the given C function.
+
+### Goal: ###
+The precondition must rule out the runtime errors Frama-C would otherwise
+report:
+1. **Memory access errors** — every pointer parameter dereferenced (or whose
+   field / index is read or written) in the body must be `\valid` /
+   `\valid_read` over the appropriate range.
+2. **Buffer / array overflow** — for every array parameter accessed via
+   `a[i]`, the index range must be covered by `\valid_read(a + (0..n-1))`
+   (or `\valid` if written), and any size variable used as the loop bound
+   must be constrained (e.g. `0 <= n`, `n <= CAPACITY`).
+3. **Inductive data structures** — for linked-list / tree parameters, use
+   structural predicates (e.g. `listrep`, `lseg`, `disjoint`) shown in the
+   Reference Examples, NOT ad-hoc `\valid` chains.
+
+{examples}
+
+### Output format (STRICT): ###
+Output exactly one fenced ```acsl ... ``` block of the form:
+
+```acsl
+/*@ predicate <name>(...) = ...; */
+
+/*@ logic <type> <name>(...) = ...; */
+
+/*@
+  requires <clause>;
+  requires <clause>;
+*/
+```
+
+Concrete example for a singly-linked list traversal:
+```acsl
+/*@
+  predicate lseg{L}(struct list* x, struct list* y) =
+    x == y || (x != y && \valid(x) && \separated(x, y) && lseg{L}(x->tail, y));
+*/
+
+/*@ predicate listrep(struct list* head) = lseg(head, NULL); */
+
+/*@
+  requires listrep(l);
+*/
+```
+
+Concrete example for a fixed-capacity struct array:
+```acsl
+/*@
+  requires \valid(b);
+  requires \valid_read(b->data + (0..9));
+  requires 0 <= b->len <= 10;
+*/
+```
+
+### Hard rules — break ANY of these and the output is rejected: ###
+1. Output ONLY ACSL annotations. NO struct definitions, NO function body,
+   NO `#include`, NO `int main`.
+2. Only `requires` clauses are produced — NO `ensures`, NO `assigns`,
+   NO `loop invariant`.
+3. Each `predicate` / `logic` / `inductive` declaration must live in its
+   OWN `/*@ ... */` block. Do NOT merge multiple into one.
+4. Reuse predicates from the Reference Examples verbatim. Do NOT invent
+   ad-hoc names like `valid_list`, `safe_node`, `is_ok` when an example
+   predicate already covers the case.
+5. The function signature is sacred — do NOT echo the function header or
+   body in your output.
+6. If you break any of these rules, my family will disown me.
+
+### Function under specification: ###
+
+```c
+{code}
+```

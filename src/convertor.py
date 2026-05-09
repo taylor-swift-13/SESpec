@@ -1044,6 +1044,149 @@ class SpecificationConvertor:
         return before+after
     
 
+    def precondgen_annotations(self, code: str, examples: str = "") -> str:
+        """LLM precondition generator for recursive data structure programs.
+        Returns an ACSL block (predicates + requires) extracted from the
+        single ```acsl fenced block the model must produce. Empty string on
+        any failure / unparseable response — caller treats it as no-op.
+        """
+        with open("prompt/func/precondgen.txt", "r", encoding="utf-8") as fh:
+            template = fh.read()
+        prompt = template.format(code=code, examples=examples)
+
+        llm = Chatbot(self.llm_config)
+        try:
+            response = llm.chat(prompt)
+        except Exception as e:
+            print(f"precondgen API call failed: {e}")
+            return ""
+        response = re.sub(r"<think>[\s\S]*?</think>", "", response, flags=re.DOTALL)
+        response = re.sub(r">\s*Reasoning\s*[\s\S]*?(?=\n\n|$)", "", response, flags=re.IGNORECASE)
+        # Pull the ACSL block — accept ```acsl, ```c, or any unlabeled fence.
+        blocks = re.findall(r"```(?:acsl|c)?\s*([\s\S]*?)```", response)
+        if not blocks:
+            return ""
+        # Concatenate every /*@ ... */ across all fenced blocks (model may use
+        # one fence per declaration). Anything outside /*@ ... */ is dropped —
+        # this is what protects us from a model that tries to echo the
+        # function body.
+        acsl_chunks = []
+        for blk in blocks:
+            acsl_chunks.extend(re.findall(r"/\*@[\s\S]*?\*/", blk))
+        return "\n\n".join(acsl_chunks)
+
+
+    def inconvert_requires(self, qcp_annotation: str) -> str:
+        """Translate the QCP DSL `Require ...` clauses produced by
+        `create_precondition` into an ACSL `requires` block.
+
+        Mapping:
+          Require emp                              → (empty)
+          Require *p == p_v                        → requires \\valid(p);
+          Require **p == p_v                       → requires \\valid(p);
+          Require (p->f) == p_f_v                  → requires \\valid(p);
+          Require store_int_array(a, n, a_l)       → requires \\valid_read(a + (0..n-1));
+                                                     requires n >= 0;
+          Require A && B                           → split into multiple requires
+          numeric / boolean conjuncts (n>0 etc.)   → copied verbatim
+        """
+        if not qcp_annotation:
+            return ""
+
+        m = re.search(r"Require\s+(.+?)(?:\n|\*/)", qcp_annotation, re.DOTALL)
+        if not m:
+            return ""
+        body = m.group(1).strip()
+        if not body or body == "emp":
+            return ""
+
+        def split_top_level_and(s):
+            parts, depth, start = [], 0, 0
+            i = 0
+            while i < len(s):
+                c = s[i]
+                if c in "([":
+                    depth += 1
+                elif c in ")]":
+                    depth -= 1
+                elif depth == 0 and s[i:i + 2] == "&&":
+                    parts.append(s[start:i].strip())
+                    i += 2
+                    start = i
+                    continue
+                i += 1
+            tail = s[start:].strip()
+            if tail:
+                parts.append(tail)
+            return parts
+
+        def strip_outer_parens(t):
+            t = t.strip()
+            while len(t) >= 2 and t[0] == '(' and t[-1] == ')':
+                inner = t[1:-1]
+                # only strip if the parens balance at the outermost level
+                d, bal = 0, True
+                for ch in inner:
+                    if ch == '(':
+                        d += 1
+                    elif ch == ')':
+                        d -= 1
+                        if d < 0:
+                            bal = False
+                            break
+                if not bal or d != 0:
+                    break
+                t = inner.strip()
+            return t
+
+        clauses = []
+        seen = set()
+
+        def add(c):
+            c = c.strip().rstrip(';').strip()
+            if c and c not in seen:
+                seen.add(c)
+                clauses.append(c)
+
+        for raw in split_top_level_and(body):
+            conj = strip_outer_parens(raw)
+            if not conj:
+                continue
+
+            # store_int_array(a, n, a_l)  →  \valid_read(a + (0..n-1)) + n >= 0
+            m2 = re.match(r"store_int_array\s*\(\s*([^,]+?)\s*,\s*([^,]+?)\s*,\s*[^\)]+\)\s*$", conj)
+            if m2:
+                arr, n = m2.group(1).strip(), m2.group(2).strip()
+                add(f"\\valid_read({arr} + (0..{n}-1))")
+                # Struct-field arrays (e.g. pIp->pkv): also require the parent
+                # pointer to be valid so the field deref is well-defined.
+                if "->" in arr or "." in arr:
+                    root = re.match(r"^(\w+)", arr)
+                    if root:
+                        add(f"\\valid({root.group(1)})")
+                continue
+
+            # <ptr-expr> == <ghost>_v   →   \valid(<root pointer>)
+            m3 = re.match(r"^(.+?)\s*==\s*[A-Za-z_]\w*_v\s*$", conj)
+            if m3:
+                lhs = strip_outer_parens(m3.group(1))
+                # *p, **p, ***p  →  \valid(p)
+                stripped = lhs.lstrip('*').strip()
+                stripped = strip_outer_parens(stripped)
+                # p->f, p->f.g, p[i]   →  \valid(<root>)
+                m4 = re.match(r"^(\w+)", stripped)
+                if m4:
+                    add(f"\\valid({m4.group(1)})")
+                continue
+
+            # Pure numeric / boolean — keep as-is
+            add(conj)
+
+        if not clauses:
+            return ""
+        return "/*@\n" + "\n".join(f"  requires {c};" for c in clauses) + "\n*/"
+
+
     def inconvert_annotations(self, annotations):
 
 
