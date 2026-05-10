@@ -549,43 +549,29 @@ class FunctionProcessor:
         for t in range(self.pass_count):
             self.logger.info(f'TRY TIME: {t}')
 
-            verifier = SpecVerifier(self.config,self.logger)
-            verifier.run(self.config.function_name)   # Pass complete path
+            def _grade_with_spec_verifier():
+                verifier = SpecVerifier(self.config, self.logger)
+                verifier.run(self.config.function_name)
+                post_result = verifier.post_result
+                assert_result = verifier.assert_result
+                loop_result = verifier.loop_result
+                instance_result = verifier.instance_result
+                syntax_error = verifier.syntax_error
+                valid_ = all(post_result) and all(loop_result) and all(instance_result)
+                syntax_ = syntax_error == ''
+                satisfy_ = all(assert_result)
+                return syntax_, valid_, satisfy_
 
-            post_result = verifier.post_result 
-            assert_result = verifier.assert_result 
-            loop_result = verifier.loop_result
-            instance_result = verifier.instance_result
-            syntax_error = verifier.syntax_error 
+            syntax, valid, satisfy = _grade_with_spec_verifier()
 
-                        # Determine verification result
-            valid =  all(post_result) and all(loop_result) and all(instance_result)
-            syntax = syntax_error ==''
-            satisfy =  all(assert_result)
-
-                   # Save this round result
-            results.append({
-                    "round": t + 1,   # Start counting from 1
-                    "valid": valid,
-                    "syntax": syntax,
-                    "satisfy": satisfy
-                })
-
-                # If it's the first time satisfied, record it
-            
-            if syntax and first_syntax_round is None:
-                first_syntax_round = t + 1
-            if syntax and valid and first_valid_round is None:
-                first_valid_round = t + 1
-            if syntax and valid and satisfy and first_satisfy_round is None:
-                first_satisfy_round = t + 1
-
-
-            if not syntax or not valid or not satisfy:
+            if not (syntax and valid and satisfy):
+                # spec_gen 救火：内部已经会走 refine_count 轮自我修复，可能在
+                # 这一次调用里就把 output 修通过了。所以救火完必须再 verify
+                # 一次，让 first_*_round 反映最终输出，而不是这一轮入口的状态。
                 main_func = next(
-                f for f in self.function_info_list 
-                if f.name == self.config.function_name
-            )
+                    f for f in self.function_info_list
+                    if f.name == self.config.function_name
+                )
                 generator = SpecGenerator(
                     main_func,
                     self.function_info_list,
@@ -596,6 +582,25 @@ class FunctionProcessor:
                     self.precond_manager
                 )
                 generator.create_specification_by_llm()
+                syntax, valid, satisfy = _grade_with_spec_verifier()
+
+            results.append({
+                "round": t + 1,
+                "valid": valid,
+                "syntax": syntax,
+                "satisfy": satisfy,
+            })
+
+            if syntax and first_syntax_round is None:
+                first_syntax_round = t + 1
+            if syntax and valid and first_valid_round is None:
+                first_valid_round = t + 1
+            if syntax and valid and satisfy and first_satisfy_round is None:
+                first_satisfy_round = t + 1
+
+            if not (syntax and valid and satisfy):
+                # 这一轮即使 spec_gen 救了一次还没全部通过，留到下一轮再试。
+                continue
             else:
                 # Print final specification
                 main_func = next(

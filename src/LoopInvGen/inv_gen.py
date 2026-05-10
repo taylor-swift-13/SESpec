@@ -1387,11 +1387,26 @@ class InvGenerator:
 
                 if not inner_flags[idx]:
                     valid = False
+                    # Track the best-scoring intermediate candidate so a later
+                    # LLM iteration that makes things worse can't overwrite it.
+                    # Score is (syntax_ok, valid_ratio, satisfy_ratio) tuple
+                    # compared lexicographically; tie → newer wins.
+                    best_annotations = annotations
+                    best_score = (False, 0.0, 0.0)
+
+                    def _grade(verifier):
+                        v = verifier.validate_result or []
+                        w = verifier.verify_result or []
+                        syntax_ok = verifier.syntax_error == ''
+                        valid_ratio = (sum(1 for x in v if x) / len(v)) if v else 0.0
+                        satisfy_ratio = (sum(1 for x in w if x) / len(w)) if w else 0.0
+                        return syntax_ok, valid_ratio, satisfy_ratio
+
                     for _ in range(self.config.refine_count):
 
                         verifier = OutputVerifier(self.config,self.logger)
                         verifier.run(file_name)   # Pass complete path
-                        
+
                         # Get verification result (assuming it returns a list)
                         validate_result = verifier.validate_result
                         verify_result = verifier.verify_result
@@ -1401,13 +1416,17 @@ class InvGenerator:
                         valid = bool(validate_result) and all(validate_result)
                         syntax = syntax_error ==''
                         satisfy =  all(verify_result)
-                        
+
+                        score = _grade(verifier)
+                        if score >= best_score:
+                            best_annotations = annotations
+                            best_score = score
 
                         if not syntax:
-                            
+
                             annotations = self.repair(syntax_error,annotations,output_c_file_path)
 
-                        
+
                         elif  not valid or (not satisfy and idx == sorted_indices[-1] and self.config.only_loop):
 
                             error_list = verifier.valid_error_list + verifier.verify_error_list
@@ -1424,9 +1443,20 @@ class InvGenerator:
                             correct_flag = True
                             break
 
-
-                        annotations  = self.hudini(valid,file_name,annotations,output_c_file_path)
-          
+                    if not correct_flag:
+                        # Refine budget exhausted without all-pass — restore the
+                        # best candidate seen so far, then run Houdini once to
+                        # drop any remaining non-inductive invariants.
+                        annotations = best_annotations
+                        with open(output_c_file_path, 'w', encoding='utf-8') as file:
+                            file.write(annotations)
+                        if self.config.debug:
+                            self.logger.info(
+                                f'refine exhausted; rolling back to best candidate '
+                                f'(syntax={best_score[0]}, valid={best_score[1]:.2f}, satisfy={best_score[2]:.2f}) '
+                                f'and running Houdini'
+                            )
+                        annotations = self.hudini(False, file_name, annotations, output_c_file_path)
 
                     if correct_flag:
                         break

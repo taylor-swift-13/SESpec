@@ -1104,22 +1104,45 @@ class SpecGenerator:
         self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
 
 
+        # Track the best candidate seen across refine iterations so a later
+        # LLM call that makes things worse cannot overwrite the best output.
+        # Score = (syntax_ok, valid_ratio, satisfy_ratio); ties → newer wins.
+        best_content = content
+        best_score = (False, 0.0, 0.0)
+        correct_flag = False
+
+        def _grade(verifier):
+            post = verifier.post_result or []
+            asrt = verifier.assert_result or []
+            loop = verifier.loop_result or []
+            inst = getattr(verifier, 'instance_result', None) or []
+            syntax_ok = verifier.syntax_error == ''
+            total_v = post + loop + inst
+            valid_ratio = (sum(1 for x in total_v if x) / len(total_v)) if total_v else 0.0
+            satisfy_ratio = (sum(1 for x in asrt if x) / len(asrt)) if asrt else 0.0
+            return syntax_ok, valid_ratio, satisfy_ratio
+
         for _ in range(self.config.refine_count):
 
                 verifier = SpecVerifier(self.config,self.logger)
-                verifier.run(self.function_info.name) 
-                    
+                verifier.run(self.function_info.name)
+
                 # Get verification results (assuming list is returned)
                 post_result = verifier.post_result
                 assert_result = verifier.assert_result
                 loop_result = verifier.loop_result
                 syntax_error = verifier.syntax_error
-                
+
 
                     # Determine verification results
                 valid = bool(post_result) and all(post_result) and all(loop_result)
                 syntax = syntax_error ==''
                 satisfy =  all(assert_result)
+
+                score = _grade(verifier)
+                if score >= best_score:
+                    best_content = content
+                    best_score = score
 
                 if not syntax:
 
@@ -1145,7 +1168,19 @@ class SpecGenerator:
                     self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
 
                 else:
+                    correct_flag = True
                     break
+
+        if not correct_flag and best_score > (False, 0.0, 0.0):
+            # Refine exhausted without all-pass; roll back to the best
+            # candidate so we don't ship a worse-than-best output.
+            content = best_content
+            self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
+            if self.debug:
+                self.logger.info(
+                    f'spec refine exhausted; rolling back to best candidate '
+                    f'(syntax={best_score[0]}, valid={best_score[1]:.2f}, satisfy={best_score[2]:.2f})'
+                )
 
 
         # Debug output
