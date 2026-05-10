@@ -874,6 +874,176 @@ class SpecGenerator:
                 results.append((kind, name, full, m.start()))
         return results
 
+    def compute_function_assigns(self) -> str:
+        """Static analysis: scan the target function body for every l-value
+        written that is **caller-visible** (goes through a pointer, struct
+        field, or array index — bare local-variable assignments are
+        excluded), then union with each callee's already-emitted `assigns`
+        clause. Returns the comma-separated location list (no leading
+        `assigns ` keyword and no trailing `;`). Empty string if the function
+        has no observable writes.
+
+        Mirrors `inv_gen.compute_loop_assigns` (line 261) but at function
+        scope: function-level `assigns` only lists state visible to the
+        caller, so we filter out plain identifier writes (e.g.
+        `int absfx1 = ...; absfx1 = -...`) which would otherwise leak
+        local-variable names into the contract and trigger
+        `unbound logic variable <local>` errors in Frama-C.
+        """
+        body = self.function_info.code or ''
+        body = re.sub(r'/\*[\s\S]*?\*/', '', body)
+        body = re.sub(r'//.*', '', body)
+
+        # Allow optional leading `*` or `(*` for explicit-deref l-values like
+        # `*(pIp->ret) = ...` and `*p = ...`.
+        lvalue = (
+            r'\*?\(?\s*\*?\s*[A-Za-z_]\w*'
+            r'(?:\s*->\s*[A-Za-z_]\w*'
+            r'|\s*\.\s*[A-Za-z_]\w*'
+            r'|\s*\[[^\]]*\])*\)?'
+        )
+        targets = []
+
+        def is_caller_visible(t):
+            """Reject bare-identifier writes (locals/params-by-value).
+            Accept anything that goes through `->`, `.`, `[`, `*` (i.e.
+            reaches caller-visible memory)."""
+            return bool(re.search(r'->|\.|\[|\*', t))
+
+        def add(t):
+            t = (t or '').strip()
+            if not t:
+                return
+            if not is_caller_visible(t):
+                return
+            t_norm = re.sub(r'\s+', '', t)
+            t_norm = re.sub(r'\[[^\]]*\]', '[..]', t_norm)
+            if t_norm not in targets:
+                targets.append(t_norm)
+
+        for m in re.finditer(rf'({lvalue})\s*(?:=(?!=)|\+=|-=|\*=|/=|%=|<<=|>>=|&=|\|=|\^=)', body):
+            add(m.group(1))
+        for m in re.finditer(rf'({lvalue})\s*(?:\+\+|--)', body):
+            add(m.group(1))
+        for m in re.finditer(rf'(?:\+\+|--)\s*({lvalue})', body):
+            add(m.group(1))
+
+        # Union with each callee's `assigns` clause (already emitted into
+        # output/<callee>.c by an earlier pipeline step).
+        for callee_name in (self.function_info.callee_set or set()):
+            callee_path = f'{self.output_path}/{callee_name}.c'
+            if not os.path.exists(callee_path):
+                continue
+            try:
+                with open(callee_path, 'r', encoding='utf-8') as fh:
+                    callee_content = fh.read()
+            except OSError:
+                continue
+            _, contract, _, _ = self._find_function_block(callee_content, callee_name)
+            if not contract:
+                continue
+            am = re.search(r'\bassigns\s+([^;]+);', contract)
+            if not am:
+                continue
+            for part in am.group(1).split(','):
+                part = part.strip()
+                if not part or part == r'\nothing':
+                    continue
+                # Callee assigns are already caller-visible by construction
+                # (they were filtered when the callee was processed); accept
+                # without re-applying the local filter so e.g. `\result` or
+                # `*p` from a callee aren't dropped.
+                t_norm = re.sub(r'\s+', '', part)
+                t_norm = re.sub(r'\[[^\]]*\]', '[..]', t_norm)
+                if t_norm not in targets:
+                    targets.append(t_norm)
+
+        return ', '.join(targets)
+
+    def _drop_failing_ensures(self, content: str, post_result):
+        """Strip `ensures` clauses in the TARGET function's contract whose
+        corresponding ``post_result[i]`` is False, in source order.
+        Other functions' contracts are untouched.
+        """
+        if not post_result or all(post_result):
+            return content
+        pre, contract, func_def, trail = self._find_function_block(
+            content, self.function_info.name
+        )
+        if not contract.strip():
+            return content
+        pattern = re.compile(r'^(\s*)ensures\b[\s\S]*?;[^\n]*\n', re.MULTILINE)
+        idx = [0]
+
+        def replacer(m):
+            if idx[0] < len(post_result):
+                keep = post_result[idx[0]]
+                idx[0] += 1
+                return m.group(0) if keep else ''
+            return m.group(0)
+
+        new_contract = pattern.sub(replacer, contract)
+        return pre + new_contract + func_def + trail
+
+    def _drop_failing_loop_invariants(self, content: str, loop_result):
+        """Strip `loop invariant` clauses (anywhere in the file) whose
+        corresponding ``loop_result[i]`` is False, in source order.
+        """
+        if not loop_result or all(loop_result):
+            return content
+        pattern = re.compile(r'^(\s*)loop\s+invariant\b[\s\S]*?;[^\n]*\n', re.MULTILINE)
+        idx = [0]
+
+        def replacer(m):
+            if idx[0] < len(loop_result):
+                keep = loop_result[idx[0]]
+                idx[0] += 1
+                return m.group(0) if keep else ''
+            return m.group(0)
+
+        return pattern.sub(replacer, content)
+
+    def _houdini_spec(self, content: str) -> str:
+        """Final-stage Houdini for the spec layer: iteratively drop failing
+        ``ensures`` (in the target's contract) and ``loop invariant``
+        clauses until the SpecVerifier accepts the remaining set, the file
+        becomes broken syntactically, or no further drops are possible.
+
+        Always called at the end of ``create_specification_by_llm`` to
+        ensure the final ``output/<func>.c`` is at least as good as what
+        SpecVerifier can certify, even if the LLM refine loop bottomed out
+        on a hallucination.
+        """
+        output_dir = self.output_path
+        target = self.function_info.name
+
+        for _ in range(5):
+            # Persist current state for the verifier to inspect.
+            self.create_c_file(output_dir, f'{target}.c', content)
+
+            verifier = SpecVerifier(self.config, self.logger)
+            verifier.run(target)
+            post_result = verifier.post_result or []
+            loop_result = verifier.loop_result or []
+            syntax_ok = verifier.syntax_error == ''
+
+            if syntax_ok and all(post_result) and all(loop_result):
+                break  # Houdini converged — current set is verifiably valid
+
+            if not syntax_ok:
+                # Syntax already broken — Houdini can only delete clauses,
+                # which won't fix syntax errors elsewhere. Bail out.
+                break
+
+            before = content
+            content = self._drop_failing_ensures(content, post_result)
+            content = self._drop_failing_loop_invariants(content, loop_result)
+            if content == before:
+                break  # nothing left to drop — stop to avoid infinite loop
+
+        self.create_c_file(output_dir, f'{target}.c', content)
+        return content
+
     def _merge_target_only(self, old_content: str, llm_output: str) -> str:
         """Splice the target function's contract+body from ``llm_output`` into
         ``old_content``. Everything else in ``old_content`` (typedefs, logic
@@ -1106,9 +1276,30 @@ class SpecGenerator:
 
         # Track the best candidate seen across refine iterations so a later
         # LLM call that makes things worse cannot overwrite the best output.
-        # Score = (syntax_ok, valid_ratio, satisfy_ratio); ties → newer wins.
+        # Sort key:
+        #   (1) score = (syntax_ok, valid_ratio, satisfy_ratio)
+        #   (2) clause_count of the target function's contract — same-score
+        #       candidates with more ensures/requires/assigns/loop invariant
+        #       lines win, so we don't drop a richer spec for a poorer one
+        #   (3) iter_index t — newer wins on full tie
         best_content = content
-        best_score = (False, 0.0, 0.0)
+        best_key = ((False, 0.0, 0.0), 0, -1)
+        # Snapshot best's verifier output so a later iteration that scores
+        # lower can roll content back to best AND reuse best's error list
+        # for the next refine prompt — refine should always operate on the
+        # cleanest known state, not on the latest LLM-corrupted state.
+        best_state = {
+            'syntax_error': '',
+            'post_result': [],
+            'assert_result': [],
+            'loop_result': [],
+            'assigns_result': [],
+            'instance_result': [],
+            'post_error_list': [],
+            'assert_error_list': [],
+            'loop_error_list': [],
+            'assigns_error_list': [],
+        }
         correct_flag = False
 
         def _grade(verifier):
@@ -1116,13 +1307,26 @@ class SpecGenerator:
             asrt = verifier.assert_result or []
             loop = verifier.loop_result or []
             inst = getattr(verifier, 'instance_result', None) or []
+            assigns = getattr(verifier, 'assigns_result', None) or []
             syntax_ok = verifier.syntax_error == ''
-            total_v = post + loop + inst
+            # valid bucket = "contract-level proof obligations": post / loop /
+            # callee instance / assigns. Each is a goal that fails when the
+            # contract is wrong. assigns lives here (not in satisfy) because
+            # an assigns failure means the contract under-claims, a
+            # contract-level fix.
+            total_v = post + loop + inst + assigns
             valid_ratio = (sum(1 for x in total_v if x) / len(total_v)) if total_v else 0.0
+            # satisfy bucket = real `assert` proof obligations only.
             satisfy_ratio = (sum(1 for x in asrt if x) / len(asrt)) if asrt else 0.0
             return syntax_ok, valid_ratio, satisfy_ratio
 
-        for _ in range(self.config.refine_count):
+        def _count_target_clauses(text):
+            # Only count clauses inside the TARGET function's own contract;
+            # callee-spec clauses don't reflect this candidate's quality.
+            _, contract, _, _ = self._find_function_block(text or '', self.function_info.name)
+            return len(re.findall(r'\b(ensures|requires|assigns|loop\s+invariant)\b', contract))
+
+        for t in range(self.config.refine_count):
 
                 verifier = SpecVerifier(self.config,self.logger)
                 verifier.run(self.function_info.name)
@@ -1131,57 +1335,109 @@ class SpecGenerator:
                 post_result = verifier.post_result
                 assert_result = verifier.assert_result
                 loop_result = verifier.loop_result
+                assigns_result = getattr(verifier, 'assigns_result', None) or []
                 syntax_error = verifier.syntax_error
 
 
-                    # Determine verification results
-                valid = bool(post_result) and all(post_result) and all(loop_result)
+                    # Determine verification results.
+                    # `assigns` joined the valid bucket once it was split out
+                    # from `assert_result`; include it in the gate so an
+                    # assigns failure triggers refine_spec, not break.
+                valid = (
+                    bool(post_result) and all(post_result)
+                    and all(loop_result) and all(assigns_result)
+                )
                 syntax = syntax_error ==''
                 satisfy =  all(assert_result)
 
                 score = _grade(verifier)
-                if score >= best_score:
+                cur_key = (score, _count_target_clauses(content), t)
+                if cur_key >= best_key:
                     best_content = content
-                    best_score = score
+                    best_key = cur_key
+                    # Snapshot the full verifier state when we accept a new
+                    # best so the next iteration can refine from this state.
+                    best_state = {
+                        'syntax_error': syntax_error,
+                        'post_result': list(post_result or []),
+                        'assert_result': list(assert_result or []),
+                        'loop_result': list(loop_result or []),
+                        'assigns_result': list(assigns_result),
+                        'instance_result': list(getattr(verifier, 'instance_result', None) or []),
+                        'post_error_list': list(verifier.post_error_list or []),
+                        'assert_error_list': list(verifier.assert_error_list or []),
+                        'loop_error_list': list(verifier.loop_error_list or []),
+                        'assigns_error_list': list(getattr(verifier, 'assigns_error_list', None) or []),
+                    }
 
-                if not syntax:
+                if syntax and valid and satisfy:
+                    correct_flag = True
+                    break
+
+                # Roll back to best before refining: if this iteration
+                # regressed (broken syntax / lower valid_ratio than best),
+                # the LLM should not be asked to "fix" the broken state —
+                # it should instead operate on the cleanest known version
+                # with that version's error feedback. When the current
+                # state IS best, this is a no-op.
+                if cur_key < best_key:
+                    content = best_content
+                    self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
+                    if self.debug:
+                        self.logger.info(
+                            f'spec refine iter {t}: rolling back to best before refine '
+                            f'(this iter score < best)'
+                        )
+
+                refine_syntax_error = best_state['syntax_error']
+                refine_post_result = best_state['post_result']
+                refine_error_list = (
+                    best_state['post_error_list']
+                    + best_state['assert_error_list']
+                    + best_state['loop_error_list']
+                    + best_state['assigns_error_list']
+                )
+
+                if refine_syntax_error:
 
                     old_full = content
-                    llm_output = self.repair_spec(syntax_error, content)
+                    llm_output = self.repair_spec(refine_syntax_error, content)
                     content = self._merge_target_only(old_full, llm_output)
                     self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
 
-                elif not valid or not satisfy:
+                else:
 
-                    error_list = verifier.post_error_list + verifier.assert_error_list + verifier.loop_error_list
-
-                    content = self.mark_failed_postcondition(content, post_result)
+                    content = self.mark_failed_postcondition(content, refine_post_result)
 
                     self.logger.info(f'postconditon before refine: \n{content}')
 
                     old_full = content
-                    llm_output = self.refine_spec(error_list, content)
+                    llm_output = self.refine_spec(refine_error_list, content)
                     content = self._merge_target_only(old_full, llm_output)
 
                     self.logger.info(f'postconditon after refine: \n{content}')
 
                     self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
 
-                else:
-                    correct_flag = True
-                    break
-
-        if not correct_flag and best_score > (False, 0.0, 0.0):
+        if not correct_flag and best_key > ((False, 0.0, 0.0), 0, -1):
             # Refine exhausted without all-pass; roll back to the best
             # candidate so we don't ship a worse-than-best output.
             content = best_content
             self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
             if self.debug:
+                best_score, best_count, best_t = best_key
                 self.logger.info(
                     f'spec refine exhausted; rolling back to best candidate '
-                    f'(syntax={best_score[0]}, valid={best_score[1]:.2f}, satisfy={best_score[2]:.2f})'
+                    f'(syntax={best_score[0]}, valid={best_score[1]:.2f}, '
+                    f'satisfy={best_score[2]:.2f}, clauses={best_count}, iter={best_t})'
                 )
 
+        # Final Houdini pass — drop any `ensures` (target contract only) or
+        # `loop invariant` clauses still failing verification. This is the
+        # spec-layer counterpart to inv_gen's `hudini` and runs even when
+        # `correct_flag` is True (no-op in that case since nothing fails).
+        if not jump_flag:
+            content = self._houdini_spec(content)
 
         # Debug output
         if self.debug:
@@ -1275,7 +1531,12 @@ class SpecGenerator:
 
                 elif not valid or not satisfy:
 
-                    error_list = verifier.post_error_list + verifier.assert_error_list + verifier.loop_error_list
+                    error_list = (
+                        verifier.post_error_list
+                        + verifier.assert_error_list
+                        + verifier.loop_error_list
+                        + getattr(verifier, 'assigns_error_list', [])
+                    )
 
                     content = self.mark_failed_postcondition(content, post_result)
 
@@ -1394,55 +1655,77 @@ class SpecGenerator:
         self.create_c_file(self.annotated_loop_c_file_path, f'{self.function_info.name}.c', content)
 
     def create_specification(self):
+        # SE-success path: SE produces ensures (via QCP→ACSL), `assigns` is
+        # filled in by static analysis (compute_function_assigns). LLM is
+        # never invoked here. The legacy `if_assigns()` branch that used
+        # `modify_specification_by_llm` to ask the LLM to write `assigns`
+        # for ptr-struct parameters is removed — static analysis covers
+        # both ptr-struct and non-ptr-struct functions uniformly.
+        required_type = self.create_required_type()
 
-        if self.if_assigns():
+        annotated_callee_str = self.create_callee_specifications(self.function_info.callee_set)
 
-            self.modify_specification_by_llm()
-            
+        if required_type in annotated_callee_str:
+            required_type = ''
+
+        function_header = self.function_info.code.split('{')[0]
+
+        file_path = f"{self.generated_loop_c_file_path}/{self.function_info.name}.c"
+
+        convertor = SpecificationConvertor(self.function_info, self.llm_config)
+
+        if self.function_info.require:
+            only_pre = f'''/*@
+            {self.function_info.require}
+            */'''
         else:
-            required_type = self.create_required_type()
+            only_pre = str()
 
-            annotated_callee_str = self.create_callee_specifications(self.function_info.callee_set)
+        self.function_info.specification = convertor.inconvert_annotations(self.function_info.annotation)
 
-            if required_type in annotated_callee_str:
-                required_type = ''
-        
-            function_header = self.function_info.code.split('{')[0]
-                
-            file_path = f"{self.generated_loop_c_file_path}/{self.function_info.name}.c"
-
-            convertor = SpecificationConvertor(self.function_info, self.llm_config)
-            
-            if self.function_info.require:
-                only_pre = f'''/*@
-                {self.function_info.require}
-                */'''
-            else:
-                only_pre = str()
-
-            self.function_info.specification = convertor.inconvert_annotations(self.function_info.annotation)
-                        
-            code = extract_function(file_path,self.function_info)[0][2]
-
-            groups = code.split('{')
-
-            skip = (
-                self.function_info.name in self.ignore_list
-                or (self.function_info.func_type == 'void' and self._is_side_effect_free())
+        # SE-only path with `use_se=True`: SE's QCP→ACSL translation
+        # produces ensures clauses but not an `assigns` clause. Inject a
+        # statically-computed one (mirror of `inv_gen.compute_loop_assigns`)
+        # so the contract is complete without involving the LLM.
+        if (
+            self.function_info.specification
+            and getattr(self.config, 'use_se', True)
+            and not re.search(r'\bassigns\b', self.function_info.specification)
+        ):
+            computed = self.compute_function_assigns()
+            assigns_clause = (
+                f'\nassigns {computed};' if computed else '\nassigns \\nothing;'
             )
-            if skip:
-                content = (
-                    f'{required_type}\n'  + annotated_callee_str + only_pre +
-                    f'\n{function_header}\n' + '{' + "{".join(groups[1:]))
-            else:
-                content = (
-                    f'{required_type}\n' + annotated_callee_str +
-                    f'\n{self.function_info.specification}\n{function_header}\n' + '{' + "{".join(groups[1:]))
-        
+            idx = self.function_info.specification.rfind('*/')
+            if idx != -1:
+                self.function_info.specification = (
+                    self.function_info.specification[:idx]
+                    + assigns_clause
+                    + '\n'
+                    + self.function_info.specification[idx:]
+                )
 
-            if self.debug:
-                print(f'automated generated ACSL specification of {self.function_info.name}.c : \n{content}')
-            self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
+        code = extract_function(file_path,self.function_info)[0][2]
+
+        groups = code.split('{')
+
+        skip = (
+            self.function_info.name in self.ignore_list
+            or (self.function_info.func_type == 'void' and self._is_side_effect_free())
+        )
+        if skip:
+            content = (
+                f'{required_type}\n'  + annotated_callee_str + only_pre +
+                f'\n{function_header}\n' + '{' + "{".join(groups[1:]))
+        else:
+            content = (
+                f'{required_type}\n' + annotated_callee_str +
+                f'\n{self.function_info.specification}\n{function_header}\n' + '{' + "{".join(groups[1:]))
+
+
+        if self.debug:
+            print(f'automated generated ACSL specification of {self.function_info.name}.c : \n{content}')
+        self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
 
     def create_looped_c_file(self):
 

@@ -1389,10 +1389,24 @@ class InvGenerator:
                     valid = False
                     # Track the best-scoring intermediate candidate so a later
                     # LLM iteration that makes things worse can't overwrite it.
-                    # Score is (syntax_ok, valid_ratio, satisfy_ratio) tuple
-                    # compared lexicographically; tie → newer wins.
+                    # Sort key:
+                    #   (1) score = (syntax_ok, valid_ratio, satisfy_ratio)
+                    #   (2) clause_count = #(loop invariant ...)
+                    #   (3) iter_index t — newer wins on full tie
+                    # Tuple-lex `>=` natively orders by these in priority.
                     best_annotations = annotations
-                    best_score = (False, 0.0, 0.0)
+                    best_key = ((False, 0.0, 0.0), 0, -1)
+                    # Snapshot best's verifier state so the next refine can
+                    # operate on the cleanest known candidate plus the
+                    # error feedback that was generated for it, instead of
+                    # whatever broken state the latest iter produced.
+                    best_state = {
+                        'syntax_error': '',
+                        'validate_result': [],
+                        'verify_result': [],
+                        'valid_error_list': [],
+                        'verify_error_list': [],
+                    }
 
                     def _grade(verifier):
                         v = verifier.validate_result or []
@@ -1402,7 +1416,10 @@ class InvGenerator:
                         satisfy_ratio = (sum(1 for x in w if x) / len(w)) if w else 0.0
                         return syntax_ok, valid_ratio, satisfy_ratio
 
-                    for _ in range(self.config.refine_count):
+                    def _count_invariants(text):
+                        return len(re.findall(r'\bloop\s+invariant\b', text or ''))
+
+                    for t in range(self.config.refine_count):
 
                         verifier = OutputVerifier(self.config,self.logger)
                         verifier.run(file_name)   # Pass complete path
@@ -1418,30 +1435,59 @@ class InvGenerator:
                         satisfy =  all(verify_result)
 
                         score = _grade(verifier)
-                        if score >= best_score:
+                        cur_key = (score, _count_invariants(annotations), t)
+                        if cur_key >= best_key:
                             best_annotations = annotations
-                            best_score = score
+                            best_key = cur_key
+                            best_state = {
+                                'syntax_error': syntax_error,
+                                'validate_result': list(validate_result or []),
+                                'verify_result': list(verify_result or []),
+                                'valid_error_list': list(verifier.valid_error_list or []),
+                                'verify_error_list': list(verifier.verify_error_list or []),
+                            }
 
-                        if not syntax:
-
-                            annotations = self.repair(syntax_error,annotations,output_c_file_path)
-
-
-                        elif  not valid or (not satisfy and idx == sorted_indices[-1] and self.config.only_loop):
-
-                            error_list = verifier.valid_error_list + verifier.verify_error_list
-
-                            if valid:
-                                annotations  = self.strength(error_list,annotations,output_c_file_path)
-
-                            elif (satisfy and idx == sorted_indices[-1] and self.config.only_loop):
-                                annotations  = self.adjust(validate_result,error_list,annotations,output_c_file_path,pre_condition)
-                            else:
-                                annotations  = self.regen(validate_result,error_list,annotations,output_c_file_path,pre_condition)
-
-                        else:
+                        if syntax and valid and satisfy:
                             correct_flag = True
                             break
+
+                        # Roll back to best before refining: when this iter
+                        # regressed (e.g. LLM broke syntax), don't ask LLM
+                        # to "fix" the broken state. Instead, restore the
+                        # cleanest known candidate and refine on it with
+                        # that candidate's error feedback. No-op when
+                        # current state IS best.
+                        if cur_key < best_key:
+                            annotations = best_annotations
+                            with open(output_c_file_path, 'w', encoding='utf-8') as file:
+                                file.write(annotations)
+                            if self.config.debug:
+                                self.logger.info(
+                                    f'inv refine iter {t}: rolling back to best before refine'
+                                )
+
+                        refine_syntax_error = best_state['syntax_error']
+                        refine_validate_result = best_state['validate_result']
+                        refine_error_list = (
+                            best_state['valid_error_list']
+                            + best_state['verify_error_list']
+                        )
+                        refine_valid = bool(refine_validate_result) and all(refine_validate_result)
+                        refine_satisfy = all(best_state['verify_result'])
+
+                        if refine_syntax_error:
+
+                            annotations = self.repair(refine_syntax_error, annotations, output_c_file_path)
+
+                        elif not refine_valid or (not refine_satisfy and idx == sorted_indices[-1] and self.config.only_loop):
+
+                            if refine_valid:
+                                annotations = self.strength(refine_error_list, annotations, output_c_file_path)
+
+                            elif (refine_satisfy and idx == sorted_indices[-1] and self.config.only_loop):
+                                annotations = self.adjust(refine_validate_result, refine_error_list, annotations, output_c_file_path, pre_condition)
+                            else:
+                                annotations = self.regen(refine_validate_result, refine_error_list, annotations, output_c_file_path, pre_condition)
 
                     if not correct_flag:
                         # Refine budget exhausted without all-pass — restore the
@@ -1451,10 +1497,12 @@ class InvGenerator:
                         with open(output_c_file_path, 'w', encoding='utf-8') as file:
                             file.write(annotations)
                         if self.config.debug:
+                            best_score, best_count, best_t = best_key
                             self.logger.info(
                                 f'refine exhausted; rolling back to best candidate '
-                                f'(syntax={best_score[0]}, valid={best_score[1]:.2f}, satisfy={best_score[2]:.2f}) '
-                                f'and running Houdini'
+                                f'(syntax={best_score[0]}, valid={best_score[1]:.2f}, '
+                                f'satisfy={best_score[2]:.2f}, invariants={best_count}, '
+                                f'iter={best_t}) and running Houdini'
                             )
                         annotations = self.hudini(False, file_name, annotations, output_c_file_path)
 

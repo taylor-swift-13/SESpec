@@ -556,8 +556,12 @@ class FunctionProcessor:
                 assert_result = verifier.assert_result
                 loop_result = verifier.loop_result
                 instance_result = verifier.instance_result
+                assigns_result = getattr(verifier, 'assigns_result', None) or []
                 syntax_error = verifier.syntax_error
-                valid_ = all(post_result) and all(loop_result) and all(instance_result)
+                # `assigns` was split off from `assert_result` so it joins
+                # the valid (contract-level) bucket here.
+                valid_ = (all(post_result) and all(loop_result)
+                          and all(instance_result) and all(assigns_result))
                 syntax_ = syntax_error == ''
                 satisfy_ = all(assert_result)
                 return syntax_, valid_, satisfy_

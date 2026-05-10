@@ -14,10 +14,12 @@ class SpecVerifier:
         self.syntax_bool = None
         self.loop_error_list = []
         self.assert_error_list = []
+        self.assigns_error_list = []
         self.post_error_list = []
         self.instance_error_list = []
         self.loop_result = []
         self.assert_result =[]
+        self.assigns_result = []
         self.post_result =[]
         self.instance_result=[]
        
@@ -180,7 +182,10 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
         return results
 
     def filter_goal_assertion(self, contents):
-        return [line for line in contents if line.strip().startswith("Goal Assertion ") or line.strip().startswith("Goal Assigns ")]
+        return [line for line in contents if line.strip().startswith("Goal Assertion ")]
+
+    def filter_goal_assigns(self, contents):
+        return [line for line in contents if line.strip().startswith("Goal Assigns ")]
 
     def filter_invariant(self, contents):
         return [line for line in contents if line.strip().startswith("Goal Establishment of Invariant") or line.strip().startswith("Goal Preservation of Invariant")]
@@ -269,7 +274,30 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                 print('Assertion:')
                 print(self.assert_result)
                 print('')
-            # self.print_errors(self.assert_error_list)
+
+            # `Goal Assigns ...` is a SEPARATE proof obligation about the
+            # function's `assigns` clause; the legacy code merged it into
+            # `assert_result` and polluted the satisfy metric. Track it on
+            # its own field so callers can decide whether assigns failures
+            # count as `valid`-bucket (under-claim → contract-level fix) or
+            # `satisfy`-bucket (assertion failure).
+            filter_assigns = self.filter_goal_assigns(contents)
+            self.assigns_result = self.check_target(filter_assigns)
+
+            for item in filter_assigns:
+                if 'Valid' not in item:
+                    assigns_error_msg = item
+                    error_location_msg, error_content_msg = self.extract_semantic_error(assigns_error_msg)
+                    self.assigns_error_list.append((assigns_error_msg.strip(), error_location_msg, error_content_msg))
+
+            if self.logger:
+                self.logger.info('Assigns:')
+                self.logger.info(self.assigns_result)
+                self.logger.info('')
+            else:
+                print('Assigns:')
+                print(self.assigns_result)
+                print('')
 
             filter_postconds = self.filter_post_condition(contents)
             self.post_result = self.check_target(filter_postconds)
