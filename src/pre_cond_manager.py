@@ -71,14 +71,18 @@ class PreconditionsManager:
         Returns:
             修改后的文件内容
         """
-        # 构建函数注释的正则表达式
+        # 构建函数注释的正则表达式。
+        # 注意：comment body 必须禁止跨越另一个 `*/`，否则在 callee 的合约后
+        # 出现目标函数时，正则会从 callee 的 /*@ 一路吃到目标函数的 */，使
+        # match.group(1) 含有 callee 合约里的 `ensures`，把后续插入逻辑误判为
+        # 「已存在 ensures，不需要再插」—— 目标函数就拿不到 PLACE_HOLDER。
         function_comment_pattern = re.compile(
-            r"(/\*@\s*"              # 匹配 /*@ 开始
-            r"([\s\S]*?)"           # 非贪婪匹配注释内容
-            r"\*/\s*"               # 匹配 */ 结束
-            r"(?:[\w\s\*]+\s+)*"    # 匹配可能的函数返回Type (非捕获)
-            rf"{re.escape(function_name)}\s*\("  # 匹配指定函数名
-            r"[^)]*\)\s*\{?)"       # 匹配参数列表和可能的函数体左花括号
+            r"(/\*@\s*"              # /*@ 开始
+            r"((?:(?!\*/)[\s\S])*?)"  # 注释内容（不允许包含 */）
+            r"\*/\s*"                # */ 结束
+            r"(?:[\w\s\*]+\s+)*"     # 可能的函数返回类型 (非捕获)
+            rf"{re.escape(function_name)}\s*\("  # 指定函数名
+            r"[^)]*\)\s*\{?)"        # 参数列表和可能的函数体左花括号
         )
         
         def replace_function_comment(match):

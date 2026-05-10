@@ -1085,7 +1085,8 @@ class SpecificationConvertor:
           Require *p == p_v                        → requires \\valid(p);
           Require **p == p_v                       → requires \\valid(p);
           Require (p->f) == p_f_v                  → requires \\valid(p);
-          Require store_int_array(a, n, a_l)       → requires \\valid_read(a + (0..n-1));
+          Require store_int_array(a, n, a_l)       → requires \\valid(&a[0] + (0..n-1));
+                                                     requires \\forall integer i; 0 <= i < n ==> 0 <= a[i] <= 100;
                                                      requires n >= 0;
           Require A && B                           → split into multiple requires
           numeric / boolean conjuncts (n>0 etc.)   → copied verbatim
@@ -1153,15 +1154,26 @@ class SpecificationConvertor:
             if not conj:
                 continue
 
-            # store_int_array(a, n, a_l)  →  \valid_read(a + (0..n-1)) + n >= 0
+            # store_int_array(a, n, a_l)  →  \valid(&a[0] + (0..n-1)) + n >= 0
+            #
+            # ACSL does NOT implicitly decay a C array to a pointer, so when
+            # `a` is a struct array field (e.g. pIp->pkv : int[10]) writing
+            # `\valid(a + (0..n-1))` triggers
+            #   "no implicit conversion between a C array and a pointer.
+            #    ... Ignoring logic specification of function ..."
+            # Always emit `&a[0]` (or strip a leading `&` first if QCP already
+            # produced `&pIp->pkv`) so the term is unambiguously `int*`.
             m2 = re.match(r"store_int_array\s*\(\s*([^,]+?)\s*,\s*([^,]+?)\s*,\s*[^\)]+\)\s*$", conj)
             if m2:
                 arr, n = m2.group(1).strip(), m2.group(2).strip()
-                add(f"\\valid_read({arr} + (0..{n}-1))")
+                array_value = arr[1:].strip() if arr.startswith("&") else arr
+                arr_ptr = f"&{array_value}[0]"
+                add(f"\\valid({arr_ptr} + (0..{n}-1))")
+                add(f"\\forall integer i; 0 <= i < {n} ==> 0 <= {array_value}[i] <= 100")
                 # Struct-field arrays (e.g. pIp->pkv): also require the parent
                 # pointer to be valid so the field deref is well-defined.
-                if "->" in arr or "." in arr:
-                    root = re.match(r"^(\w+)", arr)
+                if "->" in array_value or "." in array_value:
+                    root = re.match(r"^(\w+)", array_value)
                     if root:
                         add(f"\\valid({root.group(1)})")
                 continue
@@ -1178,6 +1190,21 @@ class SpecificationConvertor:
                 if m4:
                     add(f"\\valid({m4.group(1)})")
                 continue
+
+            # QCP snapshot equalities for scalar fields/locals, e.g.
+            # pIp->len == pIp_len. These introduce ghost names that are not
+            # valid ACSL preconditions; memory validity is handled by the
+            # corresponding pointer/array clauses. Keep ordinary x == y
+            # constraints unless the RHS is exactly the flattened LHS name.
+            m_snapshot = re.match(
+                r"^([A-Za-z_]\w*(?:\s*(?:->|\.)\s*[A-Za-z_]\w*)*)\s*==\s*([A-Za-z_]\w*)$",
+                conj,
+            )
+            if m_snapshot:
+                lhs = re.sub(r"\s*(?:->|\.)\s*", "_", m_snapshot.group(1).strip())
+                rhs = m_snapshot.group(2).strip()
+                if rhs == lhs:
+                    continue
 
             # Pure numeric / boolean — keep as-is
             add(conj)
@@ -1645,8 +1672,33 @@ ensures {result};
         with open("prompt/func/specgen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
+        # When the function body contains a loop, instruct the model to
+        # symbolically continue execution from the *last* loop invariant
+        # (combined with the negation of the loop condition) through the
+        # remaining straight-line code until the function returns, and use the
+        # resulting state as the postcondition.
+        loop_guide = ''
+        if re.search(r'\bloop\s+invariant\b', annotations) or re.search(
+            r'\b(for|while|do)\s*[\(\{]', annotations
+        ):
+            loop_guide = (
+                "### Loop-aware postcondition derivation: ###\n"
+                "The function below contains at least one loop. To produce a sound "
+                "`ensures` clause:\n"
+                "- Take the **last** `loop invariant` of the loop together with the "
+                "**negation of the loop condition** (loop-exit state).\n"
+                "- Symbolically execute every statement after the loop, propagating "
+                "the state through assignments, branches, and any nested loops "
+                "(applying the same rule recursively).\n"
+                "- The `ensures` clause must describe the resulting state at the "
+                "function's return point — not the state mid-loop.\n"
+                "- Do not weaken the postcondition: every fact derivable from the "
+                "loop-exit state plus the post-loop code must be reflected, "
+                "including return values and any memory written after the loop.\n"
+            )
+
         # 替换模板中的 {code} 占位符
-        specgen_prompt = prompt_template.format(code = annotations)
+        specgen_prompt = prompt_template.format(code=annotations, loop_guide=loop_guide)
 
         return specgen_prompt
 

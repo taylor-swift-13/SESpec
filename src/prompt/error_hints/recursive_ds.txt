@@ -1,0 +1,18 @@
+### Category-specific pitfalls — Recursive data structures (linked list / tree, self-referential struct) ###
+
+D1. `NULL` is a C macro, not a bound ACSL identifier. Inside `/*@ ... */` use `\null` (or `(void*)0`). Frama-C reports `unbound logic variable NULL` / `Cannot resolve variable NULL`. This bites every linked-list / tree contract that mentions sentinels.
+
+D2. Field references must match the struct definition EXACTLY. `Cannot find field <name> in type struct <S>` means you wrote `p->next` when the struct field is actually `tail` (or vice versa) — different list / tree benchmarks use different field names. Re-read the struct declaration and use the exact spelling; never guess.
+
+D3. Inductive predicates (`lseg`, `listrep`, `treerep`, …) must be defined with a label parameter, e.g. `predicate lseg{L}(struct list* x, struct list* y) = ...;` and recursive calls inside the body must use the same label `lseg{L}(x->tail, y)`. Calling `lseg(x->tail, y)` without a label inside an `{L}`-parameterized predicate is ill-formed.
+
+D4. `axiom` / `axiomatic` AND `inductive` blocks are forbidden (see Universal A10). For `lseg` / `listrep` use a **direct recursive `predicate`**:
+
+  ```
+  /*@ predicate lseg{L}(struct list* x, struct list* y) =
+        x == y || (x != y && \valid(x) && lseg{L}(x->tail, y)); */
+
+  /*@ predicate listrep(struct list* head) = lseg(head, \null); */
+  ```
+
+  For length / size / count, use a recursive `logic` function — never invent an unbound name like `lseg_length` without defining it first.

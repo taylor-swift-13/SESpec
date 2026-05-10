@@ -44,7 +44,7 @@ class LLMConfig:
     api_model:str = "claude-3-7-sonnet-20250219" # API model name, e.g., "gpt-4o"
     api_key:str = os.environ.get("OPENAI_API_KEY", "")
     base_url:str = "https://yunwu.ai/v1"
-    api_temperature = 0.7 # Temperature parameter for API calls
+    api_temperature = 0.2 # Temperature parameter for API calls
     api_top_p=0.7
     think_mode_enabled = False
     

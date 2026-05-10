@@ -275,6 +275,13 @@ class LoopProcessor:
             if result.stderr:
                 print(result.stderr.strip())
                 self.get_loop_entries(result.stderr)
+            elif result.stdout:
+                print(result.stdout.strip())
+                self.get_loop_entries(result.stdout)
+
+            # Always materialize the loop JSON so downstream consumers do not
+            # fail on a missing file when symexec emits no stderr output.
+            if self.loop_contents is not None:
                 self.write_loops_to_json()
 
         except Exception as e:

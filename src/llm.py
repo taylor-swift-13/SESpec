@@ -99,10 +99,14 @@ class OpenAILLM(BaseChatModel):
                 "model": self.model_name,
                 "messages": self.messages,
             }
-            # gpt-5 系列(reasoning models)只接受默认 temperature/top_p
-            if not str(self.model_name).startswith("gpt-5"):
+            # gpt-5 系列(reasoning models)只接受默认 temperature/top_p,
+            # 使用 max_completion_tokens (reasoning tokens 也算在内)。
+            if str(self.model_name).startswith("gpt-5"):
+                kwargs["max_completion_tokens"] = 8000
+            else:
                 kwargs["temperature"] = self.temperature
                 kwargs["top_p"] = self.top_p
+                kwargs["max_tokens"] = 4000
             response = self.client.chat.completions.create(**kwargs)
 
             assistant_response = response.choices[0].message.content

@@ -654,4 +654,3 @@ if __name__ == '__main__':
         function_name=args.function,
         root_dir=args.root_dir
     )
-

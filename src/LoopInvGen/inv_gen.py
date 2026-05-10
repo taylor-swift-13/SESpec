@@ -742,18 +742,6 @@ class InvGenerator:
         return user_prompt
 
 
-    def get_user_prompt(self, loop_content,pre_condition):
-
-        # Read prompt template from file
-        with open("prompt/loop/gen.txt", "r", encoding="utf-8") as file:
-            prompt_template = file.read()
-
-        # Replace {code} placeholder in template
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition)
-
-        return user_prompt
-    
-
     def get_simgen_prompt(self, loop_content):
          # Read prompt template from file
         with open("prompt/loop/simgen.txt", "r", encoding="utf-8") as file:
@@ -764,13 +752,49 @@ class InvGenerator:
         return simgen_prompt
     
 
+    def _load_category_hints(self) -> str:
+        """Concatenate the universal hint block with the category-specific one
+        chosen by `example_retriever.classify`. Falls back to universal-only
+        if classification is unavailable."""
+        hints_dir = "prompt/error_hints"
+        try:
+            with open(f"{hints_dir}/universal.txt", "r", encoding="utf-8") as f:
+                universal = f.read()
+        except OSError:
+            universal = ""
+
+        category = ""
+        try:
+            from example_retriever import classify
+            file_path = getattr(self.info, 'file_path', None)
+            if file_path:
+                with open(file_path, "r", encoding="utf-8") as fh:
+                    category = classify(fh.read())
+        except Exception:
+            category = ""
+
+        category_block = ""
+        if category in ("numeric", "array", "recursive_ds", "recursive_program"):
+            try:
+                with open(f"{hints_dir}/{category}.txt", "r", encoding="utf-8") as f:
+                    category_block = f.read()
+            except OSError:
+                category_block = ""
+
+        parts = [p for p in (universal, category_block) if p]
+        return "\n\n".join(parts)
+
     def get_error_prompt(self,error_message, c_code):
          # Read prompt template from file
         with open("prompt/error.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
-        # Replace {code} placeholder in template
-        error_prompt = prompt_template.format(error_str = error_message , c_code= c_code)
+        category_hints = self._load_category_hints()
+        error_prompt = prompt_template.format(
+            error_str=error_message,
+            c_code=c_code,
+            category_hints=category_hints,
+        )
         return error_prompt
     
     def get_adjust_prompt(self,error_message, c_code):
@@ -1124,15 +1148,28 @@ class InvGenerator:
 
        
         for idx in sorted_indices:
-            
+
             if self.config.debug:
                 self.logger.debug(f"INNER_FLAG: {inner_flags[idx]}")
-            
+
             if idx == sorted_indices[0]:
-                code = self.get_c_code(self.info.file_path)
-            else:
-                code = self.get_c_code(output_c_file_path)
-        
+                # First iteration: seed the 3_output file from the source so
+                # the SE-translated ACSL `requires` can be injected BEFORE we
+                # build any loop-invariant placeholder skeleton. Without this,
+                # the function-level contract would only land in the file
+                # after the placeholders are filled, defeating the early
+                # injection invariant.
+                src_code = self.get_c_code(self.info.file_path)
+                with open(output_c_file_path, 'w', encoding='utf-8') as fh:
+                    fh.write(src_code)
+
+            # Inject the SE-derived precondition (translated from QCP DSL to
+            # ACSL `requires`) before any placeholder is constructed. The
+            # injector is idempotent — once a /*@ requires ... */ block is
+            # attached to the function it returns the file unchanged.
+            self.spec_gen._inject_acsl_requires_before_loop_gen()
+            code = self.get_c_code(output_c_file_path)
+
             loop = self.get_json_at_index(json_file,idx)
             loop_content = processor.get_loop_content(code,idx)
             pre_condition =loop.get('condition')
@@ -1470,19 +1507,6 @@ class InvGenerator:
         response = self.llm.chat(prompt)
 
         return response   
-
-    def avoid_error(self,error_examples):
-
-
-        with open('prompt/loop/avoid_error.txt', 'r', encoding='utf-8') as f:
-            prompt_template = f.read()
-        
-        prompt = prompt_template.format(error_examples=error_examples)
-
-        response = self.llm.chat(prompt)
-
-        return response   
-
 
     def run_pass(self):
         file_name = self.info.name

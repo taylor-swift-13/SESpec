@@ -1,7 +1,7 @@
 """Category-based example retrieval (replaces vector DB / chroma).
 
 Programs get classified into one of four buckets by static inspection of the
-source, then every `.c` file under `VectorDB/examples/<category>/` is returned
+source, then every `.c` file under `examples/<category>/` is returned
 as the "Examples" block for the LLM prompt.
 
 Categories (priority order):
@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from typing import List, Tuple
 
-EXAMPLES_ROOT = Path(__file__).resolve().parent / "VectorDB" / "examples"
+EXAMPLES_ROOT = Path(__file__).resolve().parent / "examples"
 CATEGORIES: Tuple[str, ...] = ("numeric", "array", "recursive_ds", "recursive_program")
 
 _C_KEYWORDS = {

@@ -657,25 +657,74 @@ class SpecGenerator:
         
         return code
 
+    def _dedup_acsl_global_decls(self, content: str) -> str:
+        """Drop duplicate top-level `/*@ predicate <name> ... */`, `/*@ logic
+        <type> <name> ... */`, and `/*@ inductive <name> ... */` blocks.
+        Frama-C rejects redeclaring the same predicate/logic with the same
+        profile (`predicate X is already declared with the same profile`).
+
+        A block is dropped only when EVERY named declaration it contains has
+        already been seen in an earlier block; otherwise it is kept whole so
+        we don't accidentally lose a fresh declaration that happens to share
+        the comment with a duplicate.
+        """
+        if not content:
+            return content
+        seen = set()  # set of (kind, name)
+        out = []
+        i = 0
+        n = len(content)
+        block_re = re.compile(r'/\*@.*?\*/', re.DOTALL)
+        last_end = 0
+        for m in block_re.finditer(content):
+            block = m.group(0)
+            decls = []
+            for pm in re.finditer(r'\bpredicate\s+(\w+)\s*[\(\{]', block):
+                decls.append(('predicate', pm.group(1)))
+            for lm in re.finditer(r'\blogic\s+\w+(?:\s*\**)?\s+(\w+)\s*\(', block):
+                decls.append(('logic', lm.group(1)))
+            for am in re.finditer(r'\binductive\s+(\w+)\s*[\(\{]', block):
+                decls.append(('inductive', am.group(1)))
+            out.append(content[last_end:m.start()])
+            if decls and all(d in seen for d in decls):
+                # Drop the entire duplicate block (and trailing whitespace).
+                trail_end = m.end()
+                while trail_end < n and content[trail_end] in ' \t':
+                    trail_end += 1
+                if trail_end < n and content[trail_end] == '\n':
+                    trail_end += 1
+                last_end = trail_end
+                continue
+            for d in decls:
+                seen.add(d)
+            out.append(block)
+            last_end = m.end()
+        out.append(content[last_end:])
+        return ''.join(out)
+
     def _remove_duplicate_definitions(self, content: str) -> str:
         """Remove duplicate `struct X { ... };` / `typedef struct ... {} X;`
-        definitions to avoid compilation errors. Only matches lines that
-        actually OPEN a definition (have `{` on the same line); a line like
-        `struct SLL *tail;` or `struct SLL * main1(...)` is NOT a definition
-        and must NOT be skipped.
+        definitions to avoid compilation errors. Also drops duplicate
+        top-level ACSL `predicate` / `logic` / `inductive` blocks.
+
+        Handles both K&R style (`{` on next line) and same-line `{` styles.
+        Field declarations like `struct SLL *tail;` and function headers like
+        `struct SLL * main1(...)` are NOT treated as definitions.
         """
-        # A real struct DEFINITION header: "struct <name> {" or
-        # "typedef struct <name> {" — only whitespace allowed between the
-        # name and "{". Anything else (function header, field declaration,
-        # parameter list) is NOT a definition.
-        def_open_re = re.compile(
-            r'^\s*(?:typedef\s+)?struct\s+(\w+)\s*\{', re.MULTILINE
-        )
+        # A definition starts with `struct <name>` or `typedef struct <name>`
+        # with NO `*`, `(`, or identifier-other-than-whitespace between the
+        # name and the opening `{`. The `{` may live on the same line or on a
+        # later line (with only whitespace / blank lines in between).
         lines = content.split('\n')
+        head_re = re.compile(r'^\s*(?:typedef\s+)?struct\s+(\w+)\s*(\{)?\s*$')
         seen = set()
         filtered = []
         skip_until_brace_close = False
         brace_depth = 0
+        # Indices of lines that may be the start of a multi-line definition
+        # but whose `{` we have not seen yet. Held so that we can DROP the
+        # name line if it turns out to be a duplicate.
+        pending_name_line = None  # (line_index_in_filtered, name)
 
         for line in lines:
             if skip_until_brace_close:
@@ -683,27 +732,205 @@ class SpecGenerator:
                 if brace_depth <= 0:
                     skip_until_brace_close = False
                     brace_depth = 0
-                    # Also drop a trailing typedef-name line like `} Foo;`
                     if re.match(r'\s*\}[^;]*;', line):
                         continue
                 continue
 
-            m = def_open_re.match(line)
+            if pending_name_line is not None:
+                stripped = line.strip()
+                if stripped == '':
+                    filtered.append(line)
+                    continue
+                if stripped.startswith('{'):
+                    # Confirmed multi-line struct definition. Decide dedup.
+                    idx, name = pending_name_line
+                    pending_name_line = None
+                    if name in seen:
+                        # Drop the name line we previously tentatively kept.
+                        del filtered[idx]
+                        skip_until_brace_close = True
+                        brace_depth = line.count('{') - line.count('}')
+                        if brace_depth <= 0:
+                            skip_until_brace_close = False
+                            brace_depth = 0
+                        continue
+                    seen.add(name)
+                    filtered.append(line)
+                    continue
+                # Not a real definition (e.g. `struct SLL *p;`) — clear
+                # pending and fall through to normal handling.
+                pending_name_line = None
+
+            m = head_re.match(line)
             if m:
                 name = m.group(1)
-                if name in seen:
-                    # Begin skipping this duplicate definition body
-                    skip_until_brace_close = True
-                    brace_depth = line.count('{') - line.count('}')
-                    if brace_depth <= 0:
-                        skip_until_brace_close = False
-                        brace_depth = 0
+                opens_now = m.group(2) is not None
+                if opens_now:
+                    if name in seen:
+                        skip_until_brace_close = True
+                        brace_depth = line.count('{') - line.count('}')
+                        if brace_depth <= 0:
+                            skip_until_brace_close = False
+                            brace_depth = 0
+                        continue
+                    seen.add(name)
+                    filtered.append(line)
                     continue
-                seen.add(name)
+                # Name on this line, `{` expected on a later line — defer.
+                filtered.append(line)
+                pending_name_line = (len(filtered) - 1, name)
+                continue
 
             filtered.append(line)
 
-        return '\n'.join(filtered)
+        deduped = '\n'.join(filtered)
+        return self._dedup_acsl_global_decls(deduped)
+
+    def _find_function_block(self, content: str, name: str):
+        """Locate ``name``'s span and return four pieces:
+        ``(preamble, contract, func_def, trailer)``.
+
+        ``contract`` is the immediately-preceding `/*@ ... */` (or `/* ... */`)
+        block plus the whitespace between it and the signature, or empty
+        string if no contract precedes the signature. ``func_def`` is the
+        signature plus the matching brace body. Returns
+        ``(content, "", "", "")`` when the function is not found.
+        """
+        if not content or not name:
+            return content, "", "", ""
+        # Return-type fragment: an identifier followed by any mix of
+        # whitespace / `*` / `[N]`. Repeated 1+ times so multi-word types
+        # like `struct SLL *` or `unsigned long` are captured. (The earlier
+        # form `[A-Za-z_][\w\*\[\]]*` failed on a standalone `*` between
+        # `SLL` and the name.)
+        sig_re = re.compile(
+            r'(?:^|[\s;}])((?:[A-Za-z_]\w*[\s\*\[\]]+)+'
+            + re.escape(name)
+            + r'\s*\([^;{}]*\)\s*\{)'
+        )
+        m = sig_re.search(content)
+        if not m:
+            return content, "", "", ""
+        sig_start = m.start(1)
+
+        # Find the matching closing brace.
+        body_open = m.end(1) - 1
+        depth = 1
+        i = body_open + 1
+        body_end = -1
+        while i < len(content):
+            c = content[i]
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    body_end = i + 1
+                    break
+            i += 1
+        if body_end == -1:
+            return content, "", "", ""
+
+        # Look back for an attached /*@ ... */ (or /* ... */) contract.
+        upstream = content[:sig_start]
+        upstream_stripped = upstream.rstrip()
+        contract_start = sig_start
+        if upstream_stripped.endswith('*/'):
+            opener = upstream_stripped.rfind('/*', 0, len(upstream_stripped) - 2)
+            if opener != -1:
+                contract_start = opener
+
+        preamble = content[:contract_start]
+        contract = content[contract_start:sig_start]
+        func_def = content[sig_start:body_end]
+        trailer = content[body_end:]
+        return preamble, contract, func_def, trailer
+
+    def _extract_global_decls(self, content: str):
+        """Find every top-level `/*@ predicate <name>(...) ... */`,
+        `/*@ logic <type> <name>(...) ... */`, and `/*@ inductive <name> ... */`
+        block. Returns a list of ``(kind, name, full_block, span_start)`` so
+        callers can reason about source order and uniqueness.
+        """
+        if not content:
+            return []
+        results = []
+        for m in re.finditer(r'/\*@.*?\*/', content, re.DOTALL):
+            block = m.group(0)
+            decls = []
+            for pm in re.finditer(r'\bpredicate\s+(\w+)\s*[\(\{]', block):
+                decls.append(('predicate', pm.group(1)))
+            for lm in re.finditer(r'\blogic\s+\w+(?:\s*\**)?\s+(\w+)\s*\(', block):
+                decls.append(('logic', lm.group(1)))
+            for am in re.finditer(r'\binductive\s+(\w+)\s*[\(\{]', block):
+                decls.append(('inductive', am.group(1)))
+            if not decls:
+                continue
+            end = m.end()
+            full = content[m.start():end]
+            if end < len(content) and content[end] == '\n':
+                full += '\n'
+            for kind, name in decls:
+                results.append((kind, name, full, m.start()))
+        return results
+
+    def _merge_target_only(self, old_content: str, llm_output: str) -> str:
+        """Splice the target function's contract+body from ``llm_output`` into
+        ``old_content``. Everything else in ``old_content`` (typedefs, logic
+        functions, every callee's contract+body, trailer) is preserved
+        verbatim, EXCEPT that any NEW top-level `predicate` / `logic` /
+        `inductive` declaration introduced by the LLM (and not already in
+        ``old_content``) is hoisted into the preamble so the new contract can
+        legally reference it.
+
+        Splicing only happens when ``llm_output`` contains a complete target
+        block — i.e. both an attached `/*@ ... */` contract AND a function
+        definition. If the LLM omits either part the splice is rejected and
+        ``old_content`` is returned unchanged: the existing PLACE_HOLDERs
+        stay in place for the next refine iteration to retry. No silent
+        fallback that mixes old contract with new body.
+        """
+        if not llm_output:
+            return old_content
+        target = self.function_info.name
+        _, new_contract, new_func, _ = self._find_function_block(llm_output, target)
+        if not new_func or not new_contract.strip():
+            if self.debug:
+                missing = "function definition" if not new_func else "contract"
+                self.logger.info(
+                    f'_merge_target_only: LLM output for {target} missing {missing}; keeping old_content'
+                )
+            return old_content
+        old_pre, _, old_func, old_trail = self._find_function_block(old_content, target)
+        if not old_func:
+            if self.debug:
+                self.logger.info(
+                    f'_merge_target_only: target {target} not in old_content; using LLM output'
+                )
+            return llm_output
+
+        # Hoist new top-level decls from llm_output into old_pre. Only blocks
+        # that appear BEFORE the target function in the LLM output (so we
+        # don't grab anything inside the target's contract or body) and whose
+        # (kind, name) is not already present in old_content.
+        existing = {(k, n) for k, n, _, _ in self._extract_global_decls(old_content)}
+        target_pos_llm = llm_output.find(new_func)
+        added = []
+        added_keys = set()
+        for kind, name, block, start in self._extract_global_decls(llm_output):
+            if (kind, name) in existing or (kind, name) in added_keys:
+                continue
+            if target_pos_llm != -1 and start >= target_pos_llm:
+                continue
+            added.append(block)
+            added_keys.add((kind, name))
+        hoist = ''.join(added)
+        if self.debug:
+            if hoist:
+                names = ', '.join(f'{k}:{n}' for k, n in added_keys)
+                self.logger.info(f'_merge_target_only: hoisted new global decls -> {names}')
+            self.logger.info(f'_merge_target_only: spliced {target} contract+body from LLM')
+        return old_pre + hoist + new_contract + new_func + old_trail
 
     def _is_side_effect_free(self) -> bool:
         """Detect whether the current function has observable side effects:
@@ -741,15 +968,25 @@ class SpecGenerator:
         if not m:
             return content
         before = content[:m.start()]
-        if re.search(r"requires\s+", before[-2000:]):
-            return content
+        # Only treat the IMMEDIATELY-preceding /*@ ... */ comment as this
+        # function's contract — earlier callees have their own contracts that
+        # must NOT be confused with this function's. (The previous
+        # last-2000-chars heuristic picked up Check's `requires` and made the
+        # injector falsely believe boo already had a contract.)
+        before_stripped = before.rstrip()
+        if before_stripped.endswith("*/"):
+            opener = before_stripped.rfind("/*", 0, len(before_stripped) - 2)
+            if opener != -1:
+                attached_contract = before_stripped[opener:]
+                if re.search(r"\brequires\b", attached_contract):
+                    return content
 
         convertor = SpecificationConvertor(self.function_info, self.llm_config)
 
-        # Classify source. LLM precondgen handles array + recursive_ds
-        # (memory access / overflow / inductive predicate territory). The
-        # other categories (numeric / recursive_program) keep the structural
-        # QCP→ACSL translation since their preconditions are simple bounds.
+        # Classify source. In the SE path, reserve LLM precondgen for
+        # recursive data structures only; array preconditions should come from
+        # the structural QCP→ACSL translation. When SE is disabled globally,
+        # keep the existing LLM fallback behavior for arrays.
         category = ""
         src = ""
         try:
@@ -763,7 +1000,12 @@ class SpecGenerator:
             self.logger.info(f"category check skipped: {e}")
 
         acsl_requires = ""
-        if category in ("array", "recursive_ds"):
+        use_llm_precondgen = (
+            category == "recursive_ds"
+            or (category == "array" and not self.config.use_se)
+        )
+
+        if use_llm_precondgen:
             # Pass examples only for recursive_ds (lseg/listrep patterns).
             # For array the prompt's built-in array example suffices and we
             # don't want to bloat the prompt unnecessarily.
@@ -787,6 +1029,23 @@ class SpecGenerator:
         if not acsl_requires:
             return content
         return before.rstrip() + "\n\n" + acsl_requires + "\n" + content[m.start():]
+
+    def _inject_acsl_requires_into_file(self, file_path: str) -> None:
+        """Write function-level ACSL requires into a specific intermediate file."""
+        content = self.precond_manager.read_file_content(file_path)
+        if not content:
+            return
+        updated = self._ensure_acsl_requires(content)
+        if updated != content:
+            directory = os.path.dirname(file_path)
+            filename = os.path.basename(file_path)
+            self.create_c_file(directory, filename, updated)
+
+    def _inject_acsl_requires_before_loop_gen(self) -> None:
+        """Write function-level ACSL requires into the 3_output file only."""
+        self._inject_acsl_requires_into_file(
+            f"{self.generated_loop_c_file_path}/{self.function_info.name}.c"
+        )
 
 
     def create_specification_by_llm(self) -> None:
@@ -825,9 +1084,15 @@ class SpecGenerator:
         convertor = SpecificationConvertor(self.function_info, self.llm_config)
 
 
-        # Generate specification annotations
+        # Generate specification annotations.
+        # LLM input: full file. LLM output: only the target function block
+        # (per specgen.txt rule). _merge_target_only splices the new target
+        # block back into the original full file so any callee contracts the
+        # LLM may have rewritten/dropped are restored verbatim.
         if not jump_flag:
-            content = convertor.specgen_annotations(content)
+            old_full = content
+            llm_output = convertor.specgen_annotations(content)
+            content = self._merge_target_only(old_full, llm_output)
 
         if self.debug:
             self.logger.info(f'content after specgen: \n{content}')
@@ -858,7 +1123,9 @@ class SpecGenerator:
 
                 if not syntax:
 
-                    content = self.repair_spec(syntax_error, content)
+                    old_full = content
+                    llm_output = self.repair_spec(syntax_error, content)
+                    content = self._merge_target_only(old_full, llm_output)
                     self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
 
                 elif not valid or not satisfy:
@@ -869,19 +1136,21 @@ class SpecGenerator:
 
                     self.logger.info(f'postconditon before refine: \n{content}')
 
-                    content = self.refine_spec(error_list,content)
+                    old_full = content
+                    llm_output = self.refine_spec(error_list, content)
+                    content = self._merge_target_only(old_full, llm_output)
 
                     self.logger.info(f'postconditon after refine: \n{content}')
 
                     self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
-                    
+
                 else:
                     break
 
-       
+
         # Debug output
         if self.debug:
-            
+
              self.logger.info(f'model generated specification of {self.function_info.name}.c is: \n{content}')
 
     def modify_specification_by_llm(self) -> None:
@@ -964,7 +1233,9 @@ class SpecGenerator:
 
                 if not syntax:
 
-                    content = self.repair_spec(syntax_error, content)
+                    old_full = content
+                    llm_output = self.repair_spec(syntax_error, content)
+                    content = self._merge_target_only(old_full, llm_output)
                     self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
 
                 elif not valid or not satisfy:
@@ -975,12 +1246,14 @@ class SpecGenerator:
 
                     self.logger.info(f'postconditon before refine: \n{content}')
 
-                    content = self.refine_spec(error_list,content)
+                    old_full = content
+                    llm_output = self.refine_spec(error_list, content)
+                    content = self._merge_target_only(old_full, llm_output)
 
                     self.logger.info(f'postconditon after refine: \n{content}')
 
                     self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
-                    
+
                 else:
                     break
 
@@ -1148,13 +1421,49 @@ class SpecGenerator:
     
 
     
+    def _load_category_hints(self) -> str:
+        """Concatenate the universal hint block with the category-specific one
+        chosen by `example_retriever.classify`. Falls back to universal-only
+        if classification is unavailable."""
+        hints_dir = "prompt/error_hints"
+        try:
+            with open(f"{hints_dir}/universal.txt", "r", encoding="utf-8") as f:
+                universal = f.read()
+        except OSError:
+            universal = ""
+
+        category = ""
+        try:
+            from example_retriever import classify
+            file_path = getattr(self.function_info, 'file_path', None)
+            if file_path:
+                with open(file_path, "r", encoding="utf-8") as fh:
+                    category = classify(fh.read())
+        except Exception:
+            category = ""
+
+        category_block = ""
+        if category in ("numeric", "array", "recursive_ds", "recursive_program"):
+            try:
+                with open(f"{hints_dir}/{category}.txt", "r", encoding="utf-8") as f:
+                    category_block = f.read()
+            except OSError:
+                category_block = ""
+
+        parts = [p for p in (universal, category_block) if p]
+        return "\n\n".join(parts)
+
     def repair_spec(self,error_message, c_code):
         """Call model to generate ACSL specification"""
         with open("prompt/error.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
-        # Replace {code} placeholder in template
-        error_prompt = prompt_template.format(error_str = error_message , c_code= c_code)
+        category_hints = self._load_category_hints()
+        error_prompt = prompt_template.format(
+            error_str=error_message,
+            c_code=c_code,
+            category_hints=category_hints,
+        )
 
         try:
             """Call OpenAI API to get ACSL annotations"""
@@ -1209,30 +1518,63 @@ class SpecGenerator:
         if required_type in annotated_callee_str:
             required_type = ''
 
-        # Build input file path
+        # Read the 3_output file directly so we pick up any predicate / logic /
+        # inductive blocks AND the function-level `requires` clauses produced
+        # by the early SE / LLM precondgen injection. The previous
+        # implementation rebuilt the template from `function_info.require` +
+        # a bare `PLACE_HOLDER` and silently dropped the injected contract,
+        # so the loop-invariant LLM never saw the precondition.
         input_path = f"{self.generated_loop_c_file_path}/{self.function_info.name}.c"
-        
-        # Extract function code
-        code = extract_function(input_path, self.function_info)[0][2]
+        try:
+            with open(input_path, 'r', encoding='utf-8') as fh:
+                full = fh.read()
+        except OSError:
+            full = ''
 
-        
-        # Handle test functions
-        if not require_str:
-            definitions_str = ''
-            content = (
-                f'{required_type}\n' + f'{definitions_str}\n' + annotated_callee_str + 
-                f'{code}'
-            )
-           
-        # Handle functions with no parameters and void return
-        else :
+        preamble, contract, func_def, _ = self._find_function_block(
+            full, self.function_info.name
+        )
+        if not func_def:
+            # Fall back to in-memory function code if the file isn't readable.
+            func_def = self.function_info.code
+            preamble = ''
+            contract = ''
+
+        # Pull every /*@ ... */ block in the preamble that defines a
+        # logic / predicate / inductive symbol — these are the early-injected
+        # background declarations the LLM must see when filling invariants.
+        pred_blocks = []
+        for m in re.finditer(r'/\*@.*?\*/', preamble, re.DOTALL):
+            block = m.group(0)
+            if re.search(r'\b(predicate|logic|inductive)\b', block):
+                pred_blocks.append(block)
+        pred_blocks_str = ('\n'.join(pred_blocks) + '\n') if pred_blocks else ''
+
+        # Decide which function-level contract to feed the LLM.
+        if contract.strip():
+            # Use the contract from the file; it carries the early-injected
+            # `requires` clauses (e.g. `requires listrep(l);` for recursive_ds).
+            template = contract
+        elif require_str:
             template = f'''/*@
     {require_str}
     */
     '''
+        else:
+            template = ''
+
+        # Handle test functions
+        if not template.strip():
             content = (
-                f'{required_type}\n' + f'{definitions_str}\n' + annotated_callee_str +
-                f'{template}\n{code}'
+                f'{required_type}\n' + pred_blocks_str + f'{definitions_str}\n'
+                + annotated_callee_str + f'{func_def}'
+            )
+
+        # Handle functions with no parameters and void return
+        else:
+            content = (
+                f'{required_type}\n' + pred_blocks_str + f'{definitions_str}\n'
+                + annotated_callee_str + f'{template}\n{func_def}'
             )
         
        
@@ -1240,5 +1582,6 @@ class SpecGenerator:
         if self.debug:
             
              self.logger.info('Content of loop template: ' + content)
+             self.logger.info('ACSL loop skeleton before LLM:\n' + content)
 
         return content

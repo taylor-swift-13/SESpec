@@ -1,0 +1,57 @@
+### Universal ACSL pitfalls (apply to every program type) ###
+
+A1. Assignment operators (`=`, `+=`, `-=`, `*=`, `/=`, `%=`, `<<=`, `>>=`, `&=`, `|=`, `^=`, `++`, `--`) are NOT allowed inside ACSL annotations. Frama-C reports `Assignment operators not allowed in annotations`. Use `==` for equality, `\old` / `\at(_, Pre)` for previous values, and rewrite increments as `x + 1` (e.g. `ensures \result == \old(x) + 1;`).
+
+A2. Three kinds of declarations MUST live in their OWN `/*@ ... */` comment — one per block, never combined:
+
+  - `assert` — `/*@ assert P; assert Q; */` triggers `Only one code annotation is allowed per comment`. Split into `/*@ assert P; */ /*@ assert Q; */`.
+  - `predicate <name>(...) = ...;` — each predicate definition in its own `/*@ predicate ... */`.
+  - `logic <type> <name>(...) = ...;` — each logic-function definition in its own `/*@ logic ... */`.
+
+  Every other clause — `requires`, `ensures`, `assigns`, `loop invariant`, `loop assigns`, `loop variant` — is allowed to repeat or coexist within ONE `/*@ ... */` block, and SHOULD do so. Do NOT split function or loop contracts across multiple comment blocks; that breaks the parser.
+
+A3. Inside `/*@ ... */` you cannot use C-style `//` or `/* ... */` comments. Drop them.
+
+A4. The ACSL preprocessor processes the comment body — leaving `'` or `"` unbalanced errors as `Can't preprocess annotation: unterminated char` / `unterminated string`. Do not put apostrophes or quoted strings in contracts.
+
+A5. Do not invent `requires` / `ensures` keywords inside `/*@ assert ... */` — only `assert` and `check` belong there.
+
+A6. Identifiers used in a contract clause must be in scope at THAT clause's evaluation point: function parameters and `\result` in `ensures` / `requires`; local variables only inside `/*@ assert ... */` placed in the body. `Cannot resolve variable <name>` typically means a function-local was referenced in a function-level contract — replace with the corresponding parameter / `\old` / `\at`.
+
+A7. Do NOT redefine the same `logic` / `predicate` symbol more than once in a single translation unit. `There is a definition already for X` means an earlier function's emitted spec already declared `X`; re-use callee-emitted helpers, do not redefine them. Hoist shared logic to the top once and reference it everywhere.
+
+A8. `assigns` cannot mix `\nothing` with concrete locations. `Mixing \nothing and a real location` means either use only `\nothing` (function modifies no caller-visible state) or list every modified l-value (`assigns p->f, *q;`). Empty body ⇒ `\nothing`; otherwise enumerate.
+
+A9. Logic functions and predicates that you reference must be defined in a preceding `/*@ logic ... */` or `/*@ predicate ... */` block, with consistent argument types.
+
+A9a. `logic` / `predicate` / `inductive` declarations live at FILE SCOPE — outside any function. NEVER place them inside a function body (between local variables and statements). The correct location is BEFORE the function whose contract uses them, on the same level as `typedef` / `#include`. Putting `/*@ logic integer sum(...) = ...; */` inside `void f() { ... }` makes the symbol invisible to Frama-C's logic resolver and any reference to it in the same function's contract resolves to "unbound".
+
+A10. `axiom` / `axiomatic` AND `inductive` blocks are FORBIDDEN. Use only:
+
+  (i) Direct recursive `predicate` (preferred for boolean/structural properties):
+      ```
+      /*@
+        predicate lseg{L}(struct list* x, struct list* y) =
+          x == y || (x != y && \valid(x) && lseg{L}(x->tail, y));
+      */
+      ```
+
+  (ii) Direct recursive `logic` function (for integer / structural values):
+      ```
+      /*@ logic integer length{L}(struct list* x) =
+            x == \null ? 0 : 1 + length{L}(x->tail); */
+      ```
+
+  ACSL accepts recursive `predicate` / `logic` definitions when the recursion is structural (e.g. on `x->tail`); no `inductive` block is needed. Do NOT mix forms for the same name (e.g. one `predicate lseg` and one `logic lseg`).
+
+A11. `\old(e)` vs `\at(e, Pre)` — both refer to the pre-state value of `e`, but they are NOT interchangeable in every context:
+
+  - **`\old(e)` is ONLY allowed inside a function `ensures` clause** (or, for behaviours, the corresponding postcondition slot). It is shorthand for "the value of `e` at the function's `Pre` label". Using `\old` inside `requires`, `loop invariant`, `loop assigns`, `assert`, `predicate`, or `logic` body errors with `\old undefined in this context` / `unbound logic variable old`.
+  - **`\at(e, Pre)` works in every annotation context** — `requires`, `ensures`, `loop invariant`, `assert`, `predicate`, `logic`, etc. — because it names the label explicitly. Use it whenever you are NOT inside an `ensures`.
+
+  Concrete rules of thumb:
+  - Inside a function-level `ensures`: prefer `\old(pIp->len)` (idiomatic, shorter). `\at(pIp->len, Pre)` is also correct.
+  - Inside a `loop invariant` / `loop assigns` / `assert`: you MUST write `\at(pIp->len, Pre)`; `\old(...)` will not compile here.
+  - Inside a `predicate` / `logic` body: use the explicit label parameter (e.g. `lseg{L}`) and `\at(_, L)`; `\old` is meaningless here.
+  - When applied to a pointer dereference: `\old(*p)` and `\at(*p, Pre)` evaluate `*p` at the pre-state. To talk about "the value pointed to by `p` evaluated NOW but using `p` from the pre-state", write `*\at(p, Pre)` instead — labels distribute the way you write them.
+  - Field-of-pointer: prefer `\at(pIp, Pre)->len` (the pointer at Pre, dereferenced now) over `\at(pIp->len, Pre)` when `pIp` itself is unchanged but you want to be unambiguous; the two are equivalent only when both `pIp` and `pIp->len` are unchanged.
