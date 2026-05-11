@@ -697,7 +697,16 @@ class InvGenerator:
             prompt_template = file.read()
         
 
-        predicate_guide = '- If the invariant you need requires a logical function or a predicate, please fill `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`'
+        predicate_guide = (
+            '- If your invariant references a logic function or predicate not already defined in the file '
+            '(e.g. `list_length(p)`, `sum(a, n)`, `sorted(a)`), you MUST add its complete definition as its '
+            'own top-level `/*@ logic <type> <name>(...) = ...; */` or `/*@ predicate <name>(...) = ...; */` '
+            'block, placed BEFORE the function. Referencing an undefined name fails with `unbound logic '
+            'function <name>. Ignoring ... annotation` and Frama-C silently drops the entire annotation. '
+            'If the file already has a placeholder `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`, fill it with '
+            'the definition; otherwise emit a new `/*@ ... */` block before the function. Prefer reusing '
+            'predicates already in the file (e.g. `listrep`, `lseg`) over inventing a new helper.'
+        )
 
         user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=examples,strength_guide='',predicate_guide=predicate_guide,verification_guide='')
 
@@ -713,7 +722,16 @@ class InvGenerator:
 
         strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
 
-        predicate_guide = '- If the invariant you need requires a logical function or a predicate, please fill `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`'
+        predicate_guide = (
+            '- If your invariant references a logic function or predicate not already defined in the file '
+            '(e.g. `list_length(p)`, `sum(a, n)`, `sorted(a)`), you MUST add its complete definition as its '
+            'own top-level `/*@ logic <type> <name>(...) = ...; */` or `/*@ predicate <name>(...) = ...; */` '
+            'block, placed BEFORE the function. Referencing an undefined name fails with `unbound logic '
+            'function <name>. Ignoring ... annotation` and Frama-C silently drops the entire annotation. '
+            'If the file already has a placeholder `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`, fill it with '
+            'the definition; otherwise emit a new `/*@ ... */` block before the function. Prefer reusing '
+            'predicates already in the file (e.g. `listrep`, `lseg`) over inventing a new helper.'
+        )
 
         user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=examples,strength_guide=strength_guide,predicate_guide=predicate_guide,verification_guide='')
 
@@ -730,7 +748,16 @@ class InvGenerator:
 
         strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
 
-        predicate_guide = '- If the invariant you need requires a logical function or a predicate, please fill `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`'
+        predicate_guide = (
+            '- If your invariant references a logic function or predicate not already defined in the file '
+            '(e.g. `list_length(p)`, `sum(a, n)`, `sorted(a)`), you MUST add its complete definition as its '
+            'own top-level `/*@ logic <type> <name>(...) = ...; */` or `/*@ predicate <name>(...) = ...; */` '
+            'block, placed BEFORE the function. Referencing an undefined name fails with `unbound logic '
+            'function <name>. Ignoring ... annotation` and Frama-C silently drops the entire annotation. '
+            'If the file already has a placeholder `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`, fill it with '
+            'the definition; otherwise emit a new `/*@ ... */` block before the function. Prefer reusing '
+            'predicates already in the file (e.g. `listrep`, `lseg`) over inventing a new helper.'
+        )
         
         verification_guide = '- Please first try to directly use the verification goal as the loop invariant at `PLACE_HOLDER_VERFICATION_GOAL`. Often, the verification goal (assertion) also holds throughout the loop; in that case, it can be used directly as the invariant.'
 

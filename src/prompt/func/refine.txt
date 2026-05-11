@@ -22,7 +22,27 @@ Frama-C reports verification failures grouped by category below. Each category h
 
 1. You MAY tighten the function-level preconditions `/*@ requires ... */` of the target function (the one whose error is reported) when this is necessary for verification to succeed (e.g. add a missing upper bound on a length field, narrow a range, add a `\valid` clause). Do not weaken existing preconditions and do not change the function signature; only add or strengthen `requires` on the TARGET function.
 
-2. The input above is the complete file as context, so callee contracts are visible — but they are read-only. Your output MUST contain only the modified target function block: its `/*@ ... */` contract (with whatever `requires`/`assigns`/`ensures` changes are needed to fix the reported errors) immediately followed by the function signature and body. Do NOT emit typedefs, logic-function declarations, callee functions, headers, or any other top-level construct. The harness splices the function block back into the original file, so anything outside the target function will be discarded.
+2. The input above is the complete file as context, so callee contracts are visible — but they are read-only. Your output MUST contain the modified target function block: its `/*@ ... */` contract (with whatever `requires`/`assigns`/`ensures` changes are needed to fix the reported errors) immediately followed by the function signature and body. Do NOT emit typedefs, callee function definitions, `#include`/headers, or `int main`. The harness splices the function block back into the original file, so any C/typedef text outside the target function will be discarded.
+
+2a. **Helper `/*@ predicate ... = ...; */` and `/*@ logic <type> ... = ...; */` definitions are allowed AND REQUIRED whenever the target contract references a name not already defined in the input file (or any callee's contract).** Emit each new definition as its own `/*@ ... */` block placed BEFORE the target function block. The harness hoists them into the file preamble automatically.
+
+   - If you see `unbound logic function X. Ignoring ...` in the errors above, EITHER add a `/*@ logic ... = ...; */` (or `/*@ predicate ... = ...; */`) defining X before the function, OR remove the clause that references X. Renaming X to a different undefined name will fail again.
+   - One definition per `/*@ ... */` block (universal A2).
+   - Prefer reusing predicates already in the file (e.g. `listrep`, `lseg`) over inventing new helpers.
+   - Inductive blocks are forbidden (universal A10); use direct recursive `predicate` or `logic`.
+
+   Example (target uses a new logic function `list_length`):
+   ```c
+   /*@ logic integer list_length{{L}}(struct SLL* x) =
+         x == \null ? 0 : 1 + list_length{{L}}(x->tail); */
+
+   /*@
+     requires listrep(l);
+     assigns \nothing;
+     ensures \result == l;
+   */
+   struct SLL * main1(struct SLL *l, int data) {{ ... }}
+   ```
 
 3. Do NOT modify `/*@ assert ... */` statements (verification goals).
 

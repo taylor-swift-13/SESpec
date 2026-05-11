@@ -12,7 +12,27 @@ Transform the following C code into ACSL-annotated version following these rules
 ### Rules: ###
 1. Only generate postconditions and assignments, do not modify existing invariants or preconditions，only fill in the `ensures PLACE_HOLDER` and `assigns PLACE_HOLDER`.
 
-1a. The input is a complete C file. It may contain other (callee) functions that already carry a verified ACSL contract; treat those callee contracts as read-only context — do not reproduce them. Your output MUST contain only the modified target function block: its `/*@ ... */` contract (with all `PLACE_HOLDER`s filled in) immediately followed by the function signature and body. Do NOT emit typedefs, logic-function declarations, callee functions, headers, or any other top-level construct in the output. The harness splices the function block back into the original file, so anything outside the target function will be discarded.
+1a. The input is a complete C file. It may contain other (callee) functions that already carry a verified ACSL contract; treat those callee contracts as read-only context — do not reproduce them. Your output MUST contain the modified target function block: its `/*@ ... */` contract (with all `PLACE_HOLDER`s filled in) immediately followed by the function signature and body. Do NOT emit typedefs, callee function definitions, `#include`/headers, or `int main` in the output. The harness splices the function block back into the original file, so any C/typedef text outside the target function will be discarded.
+
+1b. **Helper `/*@ predicate ... = ...; */` and `/*@ logic <type> ... = ...; */` definitions are allowed AND REQUIRED whenever the target contract references a name not already defined in the input file (or in any callee's contract).** Emit each new definition as its own `/*@ ... */` block placed BEFORE the target function block. The harness hoists them into the file preamble automatically, so they survive into the final spliced file and are visible to the contract.
+
+   - If your contract references a logic function such as `list_length(p)`, `sum(a, n)`, or a custom predicate such as `sorted(a)`, you MUST emit its full recursive definition before the function. The reference WITHOUT the definition fails verification with `unbound logic function <name>. Ignoring ... annotation`.
+   - One definition per `/*@ ... */` block — never merge multiple `predicate`/`logic` declarations into one comment (universal A2).
+   - If the property can be expressed using a predicate already in the file (e.g. `listrep`, `lseg`), prefer that over inventing a new helper.
+   - Inductive blocks are forbidden (universal A10); use direct recursive `predicate` or `logic`.
+
+   Example (target uses a new logic function `list_length`):
+   ```c
+   /*@ logic integer list_length{{L}}(struct SLL* x) =
+         x == \null ? 0 : 1 + list_length{{L}}(x->tail); */
+
+   /*@
+     requires listrep(l);
+     assigns \nothing;
+     ensures \result == l;
+   */
+   struct SLL * main1(struct SLL *l, int data) {{ ... }}
+   ```
 
 2. Do not generate any natural language explanations in ACSL annotations, only provide the annotated C code.
 
