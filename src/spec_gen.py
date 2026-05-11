@@ -1299,6 +1299,7 @@ class SpecGenerator:
             'assert_error_list': [],
             'loop_error_list': [],
             'assigns_error_list': [],
+            'instance_error_list': [],
         }
         correct_flag = False
 
@@ -1368,6 +1369,7 @@ class SpecGenerator:
                         'assert_error_list': list(verifier.assert_error_list or []),
                         'loop_error_list': list(verifier.loop_error_list or []),
                         'assigns_error_list': list(getattr(verifier, 'assigns_error_list', None) or []),
+                        'instance_error_list': list(getattr(verifier, 'instance_error_list', None) or []),
                     }
 
                 if syntax and valid and satisfy:
@@ -1391,12 +1393,15 @@ class SpecGenerator:
 
                 refine_syntax_error = best_state['syntax_error']
                 refine_post_result = best_state['post_result']
-                refine_error_list = (
-                    best_state['post_error_list']
-                    + best_state['assert_error_list']
-                    + best_state['loop_error_list']
-                    + best_state['assigns_error_list']
-                )
+                # Categorized error buckets — refine_spec renders each with
+                # its own per-category fix strategy in the prompt.
+                refine_buckets = {
+                    'post': best_state['post_error_list'],
+                    'assigns': best_state['assigns_error_list'],
+                    'instance': best_state['instance_error_list'],
+                    'loop': best_state['loop_error_list'],
+                    'assert': best_state['assert_error_list'],
+                }
 
                 if refine_syntax_error:
 
@@ -1412,7 +1417,7 @@ class SpecGenerator:
                     self.logger.info(f'postconditon before refine: \n{content}')
 
                     old_full = content
-                    llm_output = self.refine_spec(refine_error_list, content)
+                    llm_output = self.refine_spec(refine_buckets, content)
                     content = self._merge_target_only(old_full, llm_output)
 
                     self.logger.info(f'postconditon after refine: \n{content}')
@@ -1560,29 +1565,76 @@ class SpecGenerator:
 
 
 
-    def refine_spec(self, error_list, c_code):
-            """Call model to generate ACSL specification"""
+    # Refine-time error categories. Each entry: (bucket key, error-section
+    # heading, strategy file under prompt/func/refine_strategy/). Strategy
+    # text lives in its own .txt file so it can be edited without touching
+    # Python — and only the strategy file matching a non-empty bucket is
+    # loaded into the prompt (mirrors the `_load_category_hints` pattern).
+    _REFINE_BUCKET_LABELS = [
+        ('post',     'Postcondition (ensures) failures', 'post.txt'),
+        ('assigns',  'Assigns failures',                 'assigns.txt'),
+        ('instance', 'Callee precondition (Instance) failures', 'instance.txt'),
+        ('loop',     'Loop invariant failures',          'loop.txt'),
+        ('assert',   'Assertion failures',               'assert.txt'),
+    ]
 
-            def format_errors(error_list):
-                if not error_list:
-                    return "No errors found."
+    @staticmethod
+    def _load_refine_strategy(filename: str) -> str:
+        try:
+            with open(f"prompt/func/refine_strategy/{filename}", "r", encoding="utf-8") as f:
+                return f.read().rstrip()
+        except OSError:
+            return ""
 
-                error_str = []
+    def refine_spec(self, error_buckets, c_code):
+            """Call model to generate ACSL specification.
 
-                for index, (desc, location, content) in enumerate(error_list, start=1):
-                    desc = desc.splitlines()[0]
+            ``error_buckets`` is a dict[str, list[(desc, location, content)]]
+            with keys ``post`` / ``assigns`` / ``instance`` / ``loop`` /
+            ``assert`` (any may be empty/missing). Each non-empty bucket is
+            rendered as its own section, and ONLY the strategy blocks whose
+            bucket has at least one error are injected into the prompt — so
+            the LLM never sees fix guidance for a category it has no errors
+            in. Mirrors the `_load_category_hints` on-demand pattern.
+            """
 
-                    error_str.append(f"Error {index}: {desc}")
-                    error_str.append(f"Code: {content}")
-                    error_str.append("-" * 50)
+            # Backwards-compat: if a flat list slipped through, route it all
+            # into the generic 'post' bucket so the prompt still renders.
+            if isinstance(error_buckets, list):
+                error_buckets = {'post': error_buckets}
 
-                return "\n".join(error_str)
-            
-            
+            def format_bucket(label, errors):
+                if not errors:
+                    return ''
+                lines = [f'### {label} ###']
+                for i, item in enumerate(errors, 1):
+                    try:
+                        desc, _loc, code = item
+                    except (ValueError, TypeError):
+                        desc, code = str(item), ''
+                    desc = desc.splitlines()[0] if desc else ''
+                    lines.append(f'  {i}. {desc}')
+                    if code:
+                        lines.append(f'     code: {code}')
+                return '\n'.join(lines)
 
-            error_str = format_errors(error_list)
+            sections = [format_bucket(label, error_buckets.get(key) or [])
+                        for key, label, _file in self._REFINE_BUCKET_LABELS]
+            sections = [s for s in sections if s]
+            error_str = '\n\n'.join(sections) if sections else 'No errors found.'
 
-            prompt = self.get_refine_prompt(error_str, c_code)
+            # On-demand strategy blocks: load only the .txt files whose
+            # bucket actually has an error this round.
+            strategy_parts = []
+            for key, _label, fname in self._REFINE_BUCKET_LABELS:
+                if not error_buckets.get(key):
+                    continue
+                text = self._load_refine_strategy(fname)
+                if text:
+                    strategy_parts.append(text)
+            strategy_blocks = '\n\n'.join(strategy_parts)
+
+            prompt = self.get_refine_prompt(error_str, strategy_blocks, c_code)
 
             try:
                 """Call OpenAI API to get ACSL annotations"""
@@ -1606,13 +1658,16 @@ class SpecGenerator:
                 self.logger.error(f"API call failed: {e}")
                 return None
     
-    def get_refine_prompt(self,error_message, c_code):
+    def get_refine_prompt(self, error_message, strategy_blocks, c_code):
          # Read prompt template from file
         with open("prompt/func/refine.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
-        # Replace {code} placeholder in template
-        error_prompt = prompt_template.format(error_str = error_message , c_code= c_code)
+        error_prompt = prompt_template.format(
+            error_str=error_message,
+            strategy_blocks=strategy_blocks,
+            c_code=c_code,
+        )
         return error_prompt
     
     

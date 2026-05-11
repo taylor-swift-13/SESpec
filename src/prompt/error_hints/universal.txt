@@ -16,7 +16,18 @@ A4. The ACSL preprocessor processes the comment body — leaving `'` or `"` unba
 
 A5. Do not invent `requires` / `ensures` keywords inside `/*@ assert ... */` — only `assert` and `check` belong there.
 
-A6. Identifiers used in a contract clause must be in scope at THAT clause's evaluation point: function parameters and `\result` in `ensures` / `requires`; local variables only inside `/*@ assert ... */` placed in the body. `Cannot resolve variable <name>` typically means a function-local was referenced in a function-level contract — replace with the corresponding parameter / `\old` / `\at`.
+A6. Identifiers used in a contract clause must be in scope at THAT clause's evaluation point. **NEVER mention a local variable in `requires` / `ensures` / `assigns`** — locals (anything declared `int x;` / `T *p;` / `T arr[N];` *inside* the function body) cease to exist after the function returns. Frama-C reports them as `unbound logic variable <name>` or `Cannot resolve variable <name>` and silently drops the entire spec.
+
+  - Function-level `assigns` may ONLY list **caller-visible** locations: dereferences (`*p`), struct-field through pointer parameter (`p->f`), array indexing through pointer parameter (`p->arr[i]`, `a[i]`), or `\nothing`. If your function only modifies locals and returns, the correct clause is `assigns \nothing;`.
+  - Function-level `ensures` may use: parameters (their POST-call value, equal to PRE-call for non-pointer params), `\result`, `\old(...)` of pre-state expressions, fields reachable through pointer parameters. Do NOT use locals.
+  - Free logic / mathematical names that are NEITHER in the C source NOR defined in a `/*@ logic ... */` block also count as unbound. Don't invent names.
+  - To talk about something computed from locals that you want exposed, return it via `\result` and reference `\result`, or store it into a pointer parameter's target and reference `*p` / `p->field`.
+
+  Concrete fix patterns:
+  - WRONG: `int f(int n) { int c = 0; while (c < n) c++; }   // assigns c; ensures c == n;`
+  - RIGHT: `assigns \nothing;`  (locals are not visible; nothing to ensure about them)
+  - WRONG: `void g(int *p) { int tmp = *p; *p = tmp + 1; }   // assigns tmp; ensures tmp == \old(*p);`
+  - RIGHT: `assigns *p; ensures *p == \old(*p) + 1;`
 
 A7. Do NOT redefine the same `logic` / `predicate` symbol more than once in a single translation unit. `There is a definition already for X` means an earlier function's emitted spec already declared `X`; re-use callee-emitted helpers, do not redefine them. Hoist shared logic to the top once and reference it everywhere.
 
