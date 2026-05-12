@@ -95,6 +95,32 @@ def load_category(category: str) -> List[str]:
     return [p.read_text(encoding="utf-8") for p in sorted(folder.glob("*.c"))]
 
 
+def load_category_hints(source: str) -> str:
+    """Concatenate the universal hint block with the category-specific one
+    selected by ``classify(source)``. Returns an empty string if both files
+    are missing. Shared by spec_gen, convertor (specgen/refine), and error
+    repair so every prompt sees the same category-specific guidance —
+    previously only error.txt got this injection.
+    """
+    hints_dir = EXAMPLES_ROOT.parent / "prompt" / "error_hints"
+    universal = ""
+    try:
+        universal = (hints_dir / "universal.txt").read_text(encoding="utf-8")
+    except OSError:
+        pass
+
+    category = classify(source) if source else ""
+    category_block = ""
+    if category in CATEGORIES:
+        try:
+            category_block = (hints_dir / f"{category}.txt").read_text(encoding="utf-8")
+        except OSError:
+            pass
+
+    parts = [p for p in (universal, category_block) if p]
+    return "\n\n".join(parts)
+
+
 def get_examples_for(source: str) -> Tuple[str, str]:
     """Return (category, formatted prompt block)."""
     category = classify(source)

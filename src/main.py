@@ -370,7 +370,22 @@ class FunctionProcessor:
         # Postcondition generation (enable as needed)
         self.logger.info(f"\nGENERATE FUNCTION SPECIFICATION FOR {func.name}")
         self.logger.info('='* 50+'\n')
-        
+
+        # Self-recursive functions: skip SE entirely. QCP has no fixpoint
+        # support for recursion, and the underlying callee-traversal already
+        # has visited-set guards (spec_gen.py), but SE on a self-call will
+        # either hang or trivially return SymExec Failed. Go straight to the
+        # LLM specgen path so the recursive contract (decreases + ghost logic
+        # mirror + ensures \result == ...) is generated end-to-end.
+        is_recursive = func.name in (func.callee_set or set())
+        if is_recursive:
+            self.logger.info(
+                f'[recursive] {func.name} self-call detected — '
+                f'skipping SE, fallback to LLM specgen'
+            )
+            generator.create_specification_by_llm()
+            return
+
         post_cond = create_post(func.name,self.config.annotated_loop_c_file_path,self.conds)
 
 
@@ -391,7 +406,7 @@ class FunctionProcessor:
                 generator.create_specification_by_llm()
             else:
                 generator.create_specification()
-        
+
         else:
             self.logger.info(f'Starting to generate ACSL specification for {func.name}')
             generator.create_specification_by_llm()

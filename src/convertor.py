@@ -1697,8 +1697,30 @@ ensures {result};
                 "including return values and any memory written after the loop.\n"
             )
 
+        # Category-specific ACSL pitfalls (universal + program-type-specific
+        # hints). Critical for recursive programs: carries the `decreases`
+        # clause requirement and ghost-logic-mirror pattern that the LLM
+        # otherwise omits on first attempt (the hint previously only injected
+        # at syntax-error repair time, too late for cases that pass syntax
+        # check first try).
+        category_hints = ''
+        try:
+            from example_retriever import load_category_hints
+            file_path = getattr(self.function_info, 'file_path', None)
+            src = ''
+            if file_path:
+                with open(file_path, 'r', encoding='utf-8') as fh:
+                    src = fh.read()
+            category_hints = load_category_hints(src)
+        except Exception:
+            category_hints = ''
+
         # 替换模板中的 {code} 占位符
-        specgen_prompt = prompt_template.format(code=annotations, loop_guide=loop_guide)
+        specgen_prompt = prompt_template.format(
+            code=annotations,
+            loop_guide=loop_guide,
+            category_hints=category_hints,
+        )
 
         return specgen_prompt
 

@@ -293,20 +293,25 @@ class SpecGenerator:
         self.create_c_file(self.generated_loop_c_file_path, f'{self.function_info.name}.c',content)
     
 
-    def create_annotated_callee(self,callee_set: set) -> str:
+    def create_annotated_callee(self,callee_set: set, _visited=None) -> str:
         if len(callee_set) == 0:
             return ''
+        if _visited is None:
+            _visited = set()
         annotated_callee_list = []
         sub_callee_str = ''
         for callee_name in callee_set:
+            if callee_name in _visited:
+                continue
+            _visited.add(callee_name)
             for function_info in self.function_info_list:
                 if function_info.name == callee_name:
 
 
-                    
+
                     sub_callee_set = function_info.callee_set
                     if sub_callee_set != []:
-                        sub_callee_str += self.create_annotated_callee(sub_callee_set)
+                        sub_callee_str += self.create_annotated_callee(sub_callee_set, _visited)
 
                     function_header = function_info.code.split('{')[0]
                     # Extract new function
@@ -437,36 +442,42 @@ class SpecGenerator:
     
     
 
-    def create_callee_specifications_by_llm(self,callee_set: set) -> str:
+    def create_callee_specifications_by_llm(self,callee_set: set, _visited=None) -> str:
 
         if len(callee_set) == 0:
             return ''
+        if _visited is None:
+            _visited = set()
         annotated_callee_list = []
         sub_callee_str = ''
-        processed_callees = set()  # Track processed callees to avoid duplicates
-    
+
         for callee_name in callee_set:
-            if callee_name in processed_callees:
-                continue  # Skip already processed callees
-                
+            if callee_name in _visited:
+                continue                          # 防自递归 / 互递归 / 单层 dedupe 一并处理
+            _visited.add(callee_name)
+
             for function_info in self.function_info_list:
                 if function_info.name == callee_name:
 
                     sub_callee_set = function_info.callee_set
-                    
+
                     if sub_callee_set != []:
-                        sub_callee_str += self.create_callee_specifications_by_llm(sub_callee_set)
-                    
+                        sub_callee_str += self.create_callee_specifications_by_llm(sub_callee_set, _visited)
+
                     file_path = f"{self.output_path}/{callee_name}.c"
-                    
+
 
                     code = ''
 
-                    with open(file_path, "r", encoding="utf-8") as file:
-                        code = file.read()
-                    
-                    annotated_callee_list.append(code)
-                    processed_callees.add(callee_name)  # Mark as processed
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as file:
+                            code = file.read()
+                    except OSError:
+                        # 自递归时，自己的 output 文件还没生成；跳过空 callee 块。
+                        code = ''
+
+                    if code:
+                        annotated_callee_list.append(code)
 
                     break
         
@@ -476,20 +487,25 @@ class SpecGenerator:
     
     
     
-    def create_callee_specifications(self,callee_set) -> str:
+    def create_callee_specifications(self,callee_set, _visited=None) -> str:
 
         if len(callee_set) == 0:
             return ''
+        if _visited is None:
+            _visited = set()
         annotated_callee_list = []
         sub_callee_str = ''
         for callee_name in callee_set:
+            if callee_name in _visited:
+                continue
+            _visited.add(callee_name)
             for function_info in self.function_info_list:
                 if function_info.name == callee_name:
-                    
-                
+
+
                     sub_callee_set = function_info.callee_set
                     if sub_callee_set != []:
-                        sub_callee_str += self.create_callee_specifications(sub_callee_set)
+                        sub_callee_str += self.create_callee_specifications(sub_callee_set, _visited)
 
 
                     function_header = function_info.code.split('{')[0]
@@ -1172,15 +1188,18 @@ class SpecGenerator:
         acsl_requires = ""
         use_llm_precondgen = (
             category == "recursive_ds"
+            or category == "recursive_program"
             or (category == "array" and not self.config.use_se)
         )
 
         if use_llm_precondgen:
-            # Pass examples only for recursive_ds (lseg/listrep patterns).
-            # For array the prompt's built-in array example suffices and we
-            # don't want to bloat the prompt unnecessarily.
+            # Pass examples for recursive categories where the precondition
+            # pattern is non-trivial:
+            #   - recursive_ds → lseg / listrep structural predicates
+            #   - recursive_program → range bounds + ghost logic mirror
+            # For `array` the prompt's built-in array example suffices.
             examples_block = ""
-            if category == "recursive_ds" and src:
+            if category in ("recursive_ds", "recursive_program") and src:
                 try:
                     _, examples_block = get_examples_for(src)
                 except Exception as e:
@@ -1663,10 +1682,12 @@ class SpecGenerator:
         with open("prompt/func/refine.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
+        category_hints = self._load_category_hints()
         error_prompt = prompt_template.format(
             error_str=error_message,
             strategy_blocks=strategy_blocks,
             c_code=c_code,
+            category_hints=category_hints,
         )
         return error_prompt
     
@@ -1795,36 +1816,19 @@ class SpecGenerator:
 
     
     def _load_category_hints(self) -> str:
-        """Concatenate the universal hint block with the category-specific one
-        chosen by `example_retriever.classify`. Falls back to universal-only
-        if classification is unavailable."""
-        hints_dir = "prompt/error_hints"
+        """Thin wrapper around `example_retriever.load_category_hints` —
+        reads the target's source and delegates. Kept as an instance method
+        for callers that already have `self.function_info`."""
         try:
-            with open(f"{hints_dir}/universal.txt", "r", encoding="utf-8") as f:
-                universal = f.read()
-        except OSError:
-            universal = ""
-
-        category = ""
-        try:
-            from example_retriever import classify
+            from example_retriever import load_category_hints
             file_path = getattr(self.function_info, 'file_path', None)
+            src = ""
             if file_path:
                 with open(file_path, "r", encoding="utf-8") as fh:
-                    category = classify(fh.read())
+                    src = fh.read()
+            return load_category_hints(src)
         except Exception:
-            category = ""
-
-        category_block = ""
-        if category in ("numeric", "array", "recursive_ds", "recursive_program"):
-            try:
-                with open(f"{hints_dir}/{category}.txt", "r", encoding="utf-8") as f:
-                    category_block = f.read()
-            except OSError:
-                category_block = ""
-
-        parts = [p for p in (universal, category_block) if p]
-        return "\n\n".join(parts)
+            return ""
 
     def repair_spec(self,error_message, c_code):
         """Call model to generate ACSL specification"""

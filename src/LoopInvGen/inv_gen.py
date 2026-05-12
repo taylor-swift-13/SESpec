@@ -15,6 +15,35 @@ from spec_gen import SpecGenerator
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+
+# Shared guide strings injected into inv_gen.txt template. Kept module-level
+# so the two prompt builders below share the exact same text without each
+# carrying a ~12-line literal copy (previously duplicated 3 times in the
+# `_db*` methods).
+_PREDICATE_GUIDE = (
+    '- If your invariant references a logic function or predicate not already '
+    'defined in the file (e.g. `list_length(p)`, `sum(a, n)`, `sorted(a)`), '
+    'you MUST add its complete definition as its own top-level '
+    '`/*@ logic <type> <name>(...) = ...; */` or '
+    '`/*@ predicate <name>(...) = ...; */` block, placed BEFORE the function. '
+    'Referencing an undefined name fails with `unbound logic function <name>. '
+    'Ignoring ... annotation` and Frama-C silently drops the entire annotation. '
+    'If the file already has a placeholder `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`, '
+    'fill it with the definition; otherwise emit a new `/*@ ... */` block before '
+    'the function. Prefer reusing predicates already in the file (e.g. `listrep`, '
+    '`lseg`) over inventing a new helper.'
+)
+
+_VERIFICATION_GUIDE = (
+    '- Please first try to directly use the verification goal as the loop '
+    'invariant at `PLACE_HOLDER_VERFICATION_GOAL`. Often, the verification goal '
+    '(assertion) also holds throughout the loop; in that case, it can be used '
+    'directly as the invariant.'
+)
+
+_STRENGTH_GUIDE = '- Generate loop invariants with equality constraints as comprehensively as possible.'
+
+
 class InvGenerator:
     def __init__(self,config:MainConfig,info:FunctionInfo,logger:logging.Logger,llm_config:LLMConfig,spec_gen:SpecGenerator = None):
 
@@ -646,126 +675,43 @@ class InvGenerator:
             ht = ht +1
         return annotations
     
-    def get_user_prompt_traival(self, loop_content,pre_condition):
-        # Read prompt template from file
+    def get_user_prompt(self, loop_content, pre_condition, examples):
+        """Template A — basic invariant-gen prompt. Used for the use_se=False
+        path and as the baseline (slot 0) variant in the 3-way attempt.
+        No strength_guide, no verification_guide, only the predicate-defining
+        guide (so the LLM still knows to declare any helper it references)."""
         with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
-
-        # Replace {code} placeholder in template
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples='',strength_guide='',predicate_guide='',verification_guide='')
-
-        self.logger.debug("user_prompt_traival")
+        user_prompt = prompt_template.format(
+            content=loop_content,
+            pre_cond=pre_condition,
+            examples=examples,
+            strength_guide='',
+            predicate_guide=_PREDICATE_GUIDE,
+            verification_guide='',
+        )
+        self.logger.debug("user_prompt")
         self.logger.debug(user_prompt)
-
         return user_prompt
-    
-    def get_user_prompt_template(self, loop_content,pre_condition):
-        # Read prompt template from file
+
+    def get_user_prompt_template(self, loop_content, pre_condition, examples):
+        """Template B — enriched invariant-gen prompt for the use_se=True path.
+        Adds strength_guide; verification_guide is auto-injected when the loop
+        block contains an inline `/*@ assert ... */` so the LLM is nudged
+        toward using the verification goal itself as a loop invariant."""
         with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
-
-        strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
-
-        # Replace {code} placeholder in template
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples='',strength_guide=strength_guide,predicate_guide='',verification_guide='')
-
+        has_assert = bool(re.search(r'/\*@\s*assert\b', loop_content or ''))
+        user_prompt = prompt_template.format(
+            content=loop_content,
+            pre_cond=pre_condition,
+            examples=examples,
+            strength_guide=_STRENGTH_GUIDE,
+            predicate_guide=_PREDICATE_GUIDE,
+            verification_guide=(_VERIFICATION_GUIDE if has_assert else ''),
+        )
         self.logger.debug("user_prompt_template")
         self.logger.debug(user_prompt)
-
-
-        return user_prompt
-    
-    def get_user_prompt_verification(self, loop_content,pre_condition):
-        # Read prompt template from file
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
-            prompt_template = file.read()
-
-        strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
-
-        verification_guide = '- Please first try to directly use the verification goal as the loop invariant at `PLACE_HOLDER_VERFICATION_GOAL`. Often, the verification goal (assertion) also holds throughout the loop; in that case, it can be used directly as the invariant.'
-
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples='',strength_guide=strength_guide,predicate_guide='',verification_guide=verification_guide)
-
-        self.logger.debug("user_prompt_verification")
-        self.logger.debug(user_prompt)
-
-        return user_prompt
-    
-    def get_user_prompt_db(self, loop_content,pre_condition,examples):
-        # Read prompt template from file
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
-            prompt_template = file.read()
-        
-
-        predicate_guide = (
-            '- If your invariant references a logic function or predicate not already defined in the file '
-            '(e.g. `list_length(p)`, `sum(a, n)`, `sorted(a)`), you MUST add its complete definition as its '
-            'own top-level `/*@ logic <type> <name>(...) = ...; */` or `/*@ predicate <name>(...) = ...; */` '
-            'block, placed BEFORE the function. Referencing an undefined name fails with `unbound logic '
-            'function <name>. Ignoring ... annotation` and Frama-C silently drops the entire annotation. '
-            'If the file already has a placeholder `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`, fill it with '
-            'the definition; otherwise emit a new `/*@ ... */` block before the function. Prefer reusing '
-            'predicates already in the file (e.g. `listrep`, `lseg`) over inventing a new helper.'
-        )
-
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=examples,strength_guide='',predicate_guide=predicate_guide,verification_guide='')
-
-        self.logger.debug("user_prompt_db")
-        self.logger.debug(user_prompt)
-
-        return user_prompt
-    
-    def get_user_prompt_db_template(self, loop_content,pre_condition,examples):
-
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
-            prompt_template = file.read()
-
-        strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
-
-        predicate_guide = (
-            '- If your invariant references a logic function or predicate not already defined in the file '
-            '(e.g. `list_length(p)`, `sum(a, n)`, `sorted(a)`), you MUST add its complete definition as its '
-            'own top-level `/*@ logic <type> <name>(...) = ...; */` or `/*@ predicate <name>(...) = ...; */` '
-            'block, placed BEFORE the function. Referencing an undefined name fails with `unbound logic '
-            'function <name>. Ignoring ... annotation` and Frama-C silently drops the entire annotation. '
-            'If the file already has a placeholder `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`, fill it with '
-            'the definition; otherwise emit a new `/*@ ... */` block before the function. Prefer reusing '
-            'predicates already in the file (e.g. `listrep`, `lseg`) over inventing a new helper.'
-        )
-
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=examples,strength_guide=strength_guide,predicate_guide=predicate_guide,verification_guide='')
-
-        self.logger.debug("user_prompt_db_template")
-        self.logger.debug(user_prompt)
-
-        return user_prompt
-
-
-    def get_user_prompt_db_verification(self, loop_content,pre_condition,examples):
-
-        with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
-            prompt_template = file.read()
-
-        strength_guide = '- Generate loop invariants with equality constraints as comprehensively as possible.'
-
-        predicate_guide = (
-            '- If your invariant references a logic function or predicate not already defined in the file '
-            '(e.g. `list_length(p)`, `sum(a, n)`, `sorted(a)`), you MUST add its complete definition as its '
-            'own top-level `/*@ logic <type> <name>(...) = ...; */` or `/*@ predicate <name>(...) = ...; */` '
-            'block, placed BEFORE the function. Referencing an undefined name fails with `unbound logic '
-            'function <name>. Ignoring ... annotation` and Frama-C silently drops the entire annotation. '
-            'If the file already has a placeholder `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`, fill it with '
-            'the definition; otherwise emit a new `/*@ ... */` block before the function. Prefer reusing '
-            'predicates already in the file (e.g. `listrep`, `lseg`) over inventing a new helper.'
-        )
-        
-        verification_guide = '- Please first try to directly use the verification goal as the loop invariant at `PLACE_HOLDER_VERFICATION_GOAL`. Often, the verification goal (assertion) also holds throughout the loop; in that case, it can be used directly as the invariant.'
-
-        user_prompt = prompt_template.format(content=loop_content,pre_cond = pre_condition,examples=examples,strength_guide=strength_guide,predicate_guide=predicate_guide,verification_guide=verification_guide)
-
-        self.logger.debug("user_prompt_db_verification")
-        self.logger.debug(user_prompt)
-
         return user_prompt
 
 
@@ -1332,28 +1278,50 @@ class InvGenerator:
             
 
 
-            if  simple:
+            if simple:
 
                 self.logger.debug("handle simple loop")
                 user_prompt = self.get_simgen_prompt(annotations_list[0])
                 annotations_list[0] = self.get_annotations(user_prompt)
 
-            elif self.config.recursive_loop:
-
-                examples = self.get_examples(loop_content)
-                user_prompt = self.get_user_prompt_db(annotations_list[0],pre_condition,examples)
-                annotations_list[0] = self.get_annotations(user_prompt)
-
             else:
-                examples = self.get_examples(loop_content)
+                # Examples are category-specific reference invariants
+                # (parity, decrement-chain, listrep, …) loaded by
+                # `get_examples`. Skipping the load (use_examples=False) is
+                # available for ablation; the prompt template tolerates an
+                # empty `{examples}` substitution.
+                examples = (
+                    self.get_examples(loop_content)
+                    if getattr(self.config, 'use_examples', True)
+                    else ''
+                )
 
-                user_prompt_0 = self.get_user_prompt_db(annotations_list[0],pre_condition,examples)
-                user_prompt_1 = self.get_user_prompt_db_template(annotations_list[1],pre_condition,examples)
-                user_prompt_2 = self.get_user_prompt_db_verification(annotations_list[2],pre_condition,examples)
+                if not self.config.use_se:
+                    # use_se=False — single basic template (no strength /
+                    # verification guides). Apply to every annotation slot.
+                    for i in range(len(annotations_list)):
+                        user_prompt = self.get_user_prompt(
+                            annotations_list[i], pre_condition, examples
+                        )
+                        annotations_list[i] = self.get_annotations(user_prompt)
+                else:
+                    # use_se=True — slot 0 uses the basic template as a
+                    # baseline; slots 1/2 use the enriched template (with
+                    # strength_guide + auto-injected verification_guide when
+                    # the slot's annotation already carries `/*@ assert */`).
+                    user_prompt_0 = self.get_user_prompt(
+                        annotations_list[0], pre_condition, examples
+                    )
+                    user_prompt_1 = self.get_user_prompt_template(
+                        annotations_list[1], pre_condition, examples
+                    )
+                    user_prompt_2 = self.get_user_prompt_template(
+                        annotations_list[2], pre_condition, examples
+                    )
 
-                annotations_list[0] = self.get_annotations(user_prompt_0)
-                annotations_list[1] = self.get_annotations(user_prompt_1)
-                annotations_list[2] = self.get_annotations(user_prompt_2)
+                    annotations_list[0] = self.get_annotations(user_prompt_0)
+                    annotations_list[1] = self.get_annotations(user_prompt_1)
+                    annotations_list[2] = self.get_annotations(user_prompt_2)
 
 
 

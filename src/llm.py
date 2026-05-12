@@ -101,8 +101,11 @@ class OpenAILLM(BaseChatModel):
             }
             # gpt-5 系列(reasoning models)只接受默认 temperature/top_p,
             # 使用 max_completion_tokens (reasoning tokens 也算在内)。
+            # `reasoning_effort=minimal` 大幅减少推理 token，让 gpt-5 系列
+            # 在本流水线（7-17 次顺序调用）里实用。默认 `medium` 太慢。
             if str(self.model_name).startswith("gpt-5"):
                 kwargs["max_completion_tokens"] = 8000
+                kwargs["reasoning_effort"] = "minimal"
             else:
                 kwargs["temperature"] = self.temperature
                 kwargs["top_p"] = self.top_p

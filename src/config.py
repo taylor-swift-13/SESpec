@@ -36,6 +36,7 @@ class MainConfig:
     pass_count:int = 5
     think:bool = True
     use_se:bool = True  # False forces LLM for all postcondition generation; also disables structural loop-invariant template
+    use_examples:bool = True  # False disables loading category-specific examples into inv_gen prompts; useful for ablation
 
 @dataclass
 class LLMConfig:

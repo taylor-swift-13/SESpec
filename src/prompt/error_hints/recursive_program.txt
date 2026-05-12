@@ -2,6 +2,49 @@
 
 E1. The function calls itself, so the contract must hold inductively. `ensures` should be expressible in terms of inputs / `\result` only — do not reference internal recursion variables.
 
-E2. If you introduce a `logic` function mirroring the recursion (e.g. `logic integer fact(integer n) = ...;`), define it ONCE at the top of the file (see Universal A7) and let every `ensures` / call-site reference it.
+E2. If you introduce a `logic` function mirroring the recursion (e.g. `logic integer <name>(integer n) = ...;`), define it ONCE at the top of the file (see Universal A7) and let every `ensures` / call-site reference it.
 
 E3. The Universal pitfalls (assignment operators, comment boundary rules, scope rules) all still apply.
+
+E4. **`decreases` clause is REQUIRED** for Frama-C WP to discharge termination of the recursive call. `decreases <expr>;` is a non-negative integer expression that STRICTLY decreases on every recursive call. Pattern:
+
+  ```
+  /*@
+    requires n >= 0;
+    decreases n;
+    ensures \result == <logic_fn>(n);
+  */
+  int foo(int n) { if (n == 0) return base; return f(n-1) + n; }
+  ```
+
+  Common choices: a non-negative argument that the recursion reduces toward 0 (`n`, `m`, `len`, `b`, …). If two arguments shrink jointly use `\max(a, b)` or a lexicographic combination. Without `decreases`, Frama-C cannot prove the recursive call terminates and the contract is unprovable.
+
+  **Clause order is enforced.** Within a single `/*@ ... */` function-contract block the clauses MUST appear in this order:
+
+  ```
+  /*@
+    requires <...>;
+    decreases <...>;
+    assigns <...>;          // or allocates / frees
+    ensures <...>;
+  */
+  ```
+
+  Putting `decreases` AFTER `assigns` or `ensures` triggers `[annot-error] wrong order of clause in contract: decreases after post-condition, assigns or allocates`, and Frama-C silently drops the entire contract. Always place `decreases` immediately after `requires` and BEFORE any `assigns` / `ensures` clause.
+
+E5. **Ghost `/*@ logic integer <name>(...) = ...; */` mirroring the recursion** is the cleanest way to write `ensures \result == <name>(args)`. Emit ONE such logic function at file scope (its own `/*@ ... */` block, see universal A2), define it by structural recursion on the SAME argument that decreases in C, then reference it from `ensures`. Without a mirror, the postcondition must be expressed inductively against `\result` of a recursive call, which Frama-C struggles to discharge automatically.
+
+  Example:
+  ```
+  /*@ logic integer my_fact(integer n) =
+        n <= 0 ? 1 : n * my_fact(n - 1); */
+
+  /*@
+    requires n >= 0;
+    decreases n;
+    ensures \result == my_fact(n);
+  */
+  int factorial(int n) { if (n == 0) return 1; return n * factorial(n - 1); }
+  ```
+
+  Pick a logic-function name tied to THIS function — do not reuse names from other contracts in the same translation unit (universal A7: each logic symbol defined ONCE).
