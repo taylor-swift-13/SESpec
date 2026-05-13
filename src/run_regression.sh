@@ -29,6 +29,7 @@ JOBS=(
     "motivation2_seon  motivation_example  2  --use-se"
     "ligmm1_seon       LIG-MM              1  --use-se"
     "linear1_seon      linear              1  --use-se"
+    "linear3_seon      linear              3  --use-se"
 )
 
 declare -A PIDS=()

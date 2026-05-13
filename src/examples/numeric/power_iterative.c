@@ -1,3 +1,7 @@
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
 /*@
   logic integer power(integer base, integer exp) =
     exp <= 0 ? 1 : base * power(base, exp - 1);

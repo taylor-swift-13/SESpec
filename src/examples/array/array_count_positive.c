@@ -1,3 +1,7 @@
+// Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
 /*@
   logic integer cntpos(int* a, integer lo, integer hi) =
     lo >= hi ? 0

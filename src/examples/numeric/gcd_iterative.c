@@ -1,3 +1,7 @@
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
 /*@
   requires a >= 0 && b >= 0;
   requires a + b > 0;

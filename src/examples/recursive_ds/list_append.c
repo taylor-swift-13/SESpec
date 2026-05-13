@@ -1,3 +1,9 @@
+// Linked-list traversal: walk to the last cell, then splice. The right
+// invariants are SHAPE claims — `listrep(t)`, `listrep(u)`, `lseg(x, t)`
+// — built from `lseg` (cell-to-cell separated reachability) and
+// `listrep` (reachable from head to NULL). All three predicates carry
+// the `{L}` label so they remain well-formed under labels.
+
 #include <stdlib.h>
 
 struct list {

@@ -1,3 +1,7 @@
+// Recursive sum over an array slice. `decreases hi - lo` discharges
+// termination; the recursive `logic integer arrsum` mirrors the C
+// recursion so `ensures \result == arrsum(a, lo, hi)` is provable.
+
 /*@
   logic integer arrsum(int* a, integer lo, integer hi) =
     lo >= hi ? 0

@@ -1,3 +1,7 @@
+// Binary recursion. Same `decreases n` + matching `logic integer fib`
+// pattern as factorial; both recursive calls reduce the measure so the
+// termination obligation discharges.
+
 /*@
   logic integer fib(integer n) =
     n <= 0 ? 0 : (n == 1 ? 1 : fib(n - 1) + fib(n - 2));

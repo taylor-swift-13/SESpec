@@ -1252,14 +1252,12 @@ class InvGenerator:
                                     self.logger.info(annotations)
                                 
                                 annotations_list.append(annotations)
-
-                                
-                                annotations = self.append_verification_goal_annotations(annotations,path_cond,updated_loop_condition)
-                                if self.config.debug:
-                                    self.logger.info("after verification goal")
-                                    self.logger.info(annotations)
-
-                                annotations_list.append(annotations)
+                                # NOTE: previously a second slot was appended
+                                # here with `append_verification_goal_annotations`,
+                                # producing a SE+verification_goal candidate.
+                                # That slot is no longer constructed — the
+                                # single-slot selection below always picks
+                                # slot 0 or slot 1, never slot 2.
 
                                 
             else:
@@ -1267,7 +1265,33 @@ class InvGenerator:
 
             if self.config.recursive_loop:
                 annotations_list = [annotations_list[0]]
-            
+
+            # Single-slot selection: keep exactly one candidate template.
+            # Layout (after the verification_goal slot was retired):
+            #   [0] simple placeholder (no SE info, no PLACE_HOLDER_*)
+            #   [1] SE template WITHOUT verification_goal placeholder
+            #   [2+] cumulative variants from extra var_maps (discarded)
+            #
+            # Rule:
+            #   use_se=False (or inner_flags[idx]) → slot 0 (simple)
+            #   use_se=True                        → slot 1 (SE only)
+            #
+            # baseline data showed slot 1 was the de-facto winner whenever
+            # SE built it; slot 0 stays the fallback for the
+            # use_se=False / inner-loop path.
+            if simple or len(annotations_list) <= 1:
+                selected_idx = 0
+                slot_kind = 'simple placeholder'
+            else:
+                selected_idx = 1
+                slot_kind = 'SE only'
+            self.logger.info(
+                f'[inv-gen] single-slot mode: selected slot {selected_idx + 1}/'
+                f'{len(annotations_list)} ({slot_kind}); discarded '
+                f'{len(annotations_list) - 1} alternative slots'
+            )
+            annotations_list = [annotations_list[selected_idx]]
+
             for i,annotations in enumerate(annotations_list):
 
                 annotations = self.update_loop_content(code,annotations,idx)
@@ -1296,32 +1320,14 @@ class InvGenerator:
                     else ''
                 )
 
-                if not self.config.use_se:
-                    # use_se=False — single basic template (no strength /
-                    # verification guides). Apply to every annotation slot.
-                    for i in range(len(annotations_list)):
-                        user_prompt = self.get_user_prompt(
-                            annotations_list[i], pre_condition, examples
-                        )
-                        annotations_list[i] = self.get_annotations(user_prompt)
-                else:
-                    # use_se=True — slot 0 uses the basic template as a
-                    # baseline; slots 1/2 use the enriched template (with
-                    # strength_guide + auto-injected verification_guide when
-                    # the slot's annotation already carries `/*@ assert */`).
-                    user_prompt_0 = self.get_user_prompt(
-                        annotations_list[0], pre_condition, examples
-                    )
-                    user_prompt_1 = self.get_user_prompt_template(
-                        annotations_list[1], pre_condition, examples
-                    )
-                    user_prompt_2 = self.get_user_prompt_template(
-                        annotations_list[2], pre_condition, examples
-                    )
-
-                    annotations_list[0] = self.get_annotations(user_prompt_0)
-                    annotations_list[1] = self.get_annotations(user_prompt_1)
-                    annotations_list[2] = self.get_annotations(user_prompt_2)
+                # Single-slot mode: annotations_list was already sliced to
+                # length 1 above. Use the enriched template; its
+                # verification_guide is auto-injected when loop_content has
+                # an inline /*@ assert */, matching the slot we picked.
+                user_prompt = self.get_user_prompt_template(
+                    annotations_list[0], pre_condition, examples
+                )
+                annotations_list[0] = self.get_annotations(user_prompt)
 
 
 

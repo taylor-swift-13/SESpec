@@ -1,3 +1,7 @@
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
 /*@
   requires n >= 0;
   ensures \result >= 0;

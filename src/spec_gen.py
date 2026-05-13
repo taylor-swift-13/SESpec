@@ -1435,9 +1435,29 @@ class SpecGenerator:
 
                     self.logger.info(f'postconditon before refine: \n{content}')
 
+                    # Caller-level assert failures can only be fixed by editing
+                    # callee contracts (target-only edits can't reach the
+                    # callee `ensures` that the assert depends on). Unlock
+                    # full-file edit when the assert bucket has any error.
+                    allow_full_file = bool(refine_buckets.get('assert'))
+                    if allow_full_file and self.debug:
+                        self.logger.info(
+                            'spec refine: full-file edit unlocked (assert bucket non-empty)'
+                        )
                     old_full = content
-                    llm_output = self.refine_spec(refine_buckets, content)
-                    content = self._merge_target_only(old_full, llm_output)
+                    llm_output = self.refine_spec(refine_buckets, content, allow_full_file=allow_full_file)
+                    if allow_full_file and llm_output and llm_output.strip():
+                        # Full-file mode: the LLM was asked to return the
+                        # whole rewritten file. Use it directly if it looks
+                        # plausible (must contain the target function's
+                        # signature), otherwise fall back to the splice.
+                        target = self.function_info.name
+                        if re.search(rf'\b{re.escape(target)}\s*\([^;{{}}]*\)\s*\{{', llm_output):
+                            content = llm_output
+                        else:
+                            content = self._merge_target_only(old_full, llm_output)
+                    else:
+                        content = self._merge_target_only(old_full, llm_output)
 
                     self.logger.info(f'postconditon after refine: \n{content}')
 
@@ -1597,6 +1617,37 @@ class SpecGenerator:
         ('assert',   'Assertion failures',               'assert.txt'),
     ]
 
+    # Two output-format dialects baked into the refine prompt. The TARGET-only
+    # form (default) restricts edits to the target function's contract+body
+    # and the harness splices it back into the full file. The FULL-FILE form
+    # is unlocked when an `assert` failure appears in the error buckets —
+    # the caller's assertion can only be made provable by strengthening a
+    # callee's `ensures`, which target-only edits cannot reach.
+    _OUTPUT_FORMAT_TARGET_ONLY = (
+        "2. The input above is the complete file as context, so callee contracts "
+        "are visible — but they are read-only in this refine round. Your output "
+        "MUST contain the modified target function block: its `/*@ ... */` contract "
+        "(with whatever `requires`/`assigns`/`ensures` changes are needed to fix "
+        "the reported errors) immediately followed by the function signature and "
+        "body. Do NOT emit typedefs, callee function definitions, `#include`/"
+        "headers, or `int main`. The harness splices the function block back "
+        "into the original file, so any C/typedef text outside the target "
+        "function will be discarded."
+    )
+    _OUTPUT_FORMAT_FULL_FILE = (
+        "2. **FULL-FILE EDIT MODE** — the target function has a failing user "
+        "`/*@ assert ... */` whose proof typically depends on a CALLEE's `ensures`. "
+        "In this round you ARE allowed to modify any callee's contract directly "
+        "(strengthen its `ensures`, add a new `ensures` clause, etc.) AND/OR "
+        "modify the target. Your output MUST be the COMPLETE rewritten C file — "
+        "all typedefs, predicate/logic blocks, every function (callee contracts + "
+        "bodies, target contract + body), in original order. Do NOT drop existing "
+        "well-formed clauses. Do NOT emit `#include`/headers or `int main`. The "
+        "harness will write your output back as the new full file. Prefer the "
+        "MINIMAL set of callee-contract edits that establish the assert — typically "
+        "one additional `ensures` on one callee."
+    )
+
     @staticmethod
     def _load_refine_strategy(filename: str) -> str:
         try:
@@ -1605,7 +1656,7 @@ class SpecGenerator:
         except OSError:
             return ""
 
-    def refine_spec(self, error_buckets, c_code):
+    def refine_spec(self, error_buckets, c_code, allow_full_file=False):
             """Call model to generate ACSL specification.
 
             ``error_buckets`` is a dict[str, list[(desc, location, content)]]
@@ -1615,6 +1666,12 @@ class SpecGenerator:
             bucket has at least one error are injected into the prompt — so
             the LLM never sees fix guidance for a category it has no errors
             in. Mirrors the `_load_category_hints` on-demand pattern.
+
+            When ``allow_full_file=True`` (typically when the assert bucket
+            has errors), the prompt switches to full-file edit mode: the LLM
+            may modify callee contracts directly and is asked to return the
+            complete rewritten file. Caller is responsible for skipping the
+            target-only splice in that case.
             """
 
             # Backwards-compat: if a flat list slipped through, route it all
@@ -1653,7 +1710,7 @@ class SpecGenerator:
                     strategy_parts.append(text)
             strategy_blocks = '\n\n'.join(strategy_parts)
 
-            prompt = self.get_refine_prompt(error_str, strategy_blocks, c_code)
+            prompt = self.get_refine_prompt(error_str, strategy_blocks, c_code, allow_full_file=allow_full_file)
 
             try:
                 """Call OpenAI API to get ACSL annotations"""
@@ -1677,17 +1734,22 @@ class SpecGenerator:
                 self.logger.error(f"API call failed: {e}")
                 return None
     
-    def get_refine_prompt(self, error_message, strategy_blocks, c_code):
+    def get_refine_prompt(self, error_message, strategy_blocks, c_code, allow_full_file=False):
          # Read prompt template from file
         with open("prompt/func/refine.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
         category_hints = self._load_category_hints()
+        output_format_block = (
+            self._OUTPUT_FORMAT_FULL_FILE if allow_full_file
+            else self._OUTPUT_FORMAT_TARGET_ONLY
+        )
         error_prompt = prompt_template.format(
             error_str=error_message,
             strategy_blocks=strategy_blocks,
             c_code=c_code,
             category_hints=category_hints,
+            output_format_block=output_format_block,
         )
         return error_prompt
     
@@ -1870,7 +1932,25 @@ class SpecGenerator:
         # Create required type definitions
         required_type = self.create_required_type()
 
-        definitions_str = '''
+        # `trivial` category (scalar-only, no `*` / `/` / `%`) never needs
+        # a user-defined predicate or logic function — skip the placeholder
+        # so the prompt stays focused and the LLM isn't tempted to invent
+        # helpers (which it tends to write with bad `\at(x, Pre)`-without-
+        # label syntax).
+        is_trivial = False
+        try:
+            from example_retriever import classify
+            file_path = getattr(self.function_info, 'file_path', None)
+            if file_path:
+                with open(file_path, 'r', encoding='utf-8') as fh:
+                    is_trivial = classify(fh.read()) == 'trivial'
+        except Exception:
+            is_trivial = False
+
+        if is_trivial:
+            definitions_str = ''
+        else:
+            definitions_str = '''
         /*@
         PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION
         */

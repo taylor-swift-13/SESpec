@@ -1,6 +1,6 @@
 """Category-based example retrieval (replaces vector DB / chroma).
 
-Programs get classified into one of four buckets by static inspection of the
+Programs get classified into one of five buckets by static inspection of the
 source, then every `.c` file under `examples/<category>/` is returned
 as the "Examples" block for the LLM prompt.
 
@@ -9,7 +9,15 @@ Categories (priority order):
                           tree, etc.).
   2. recursive_program  — function body calls itself.
   3. array              — pointer parameter or `a[i]` index access.
-  4. numeric            — none of the above (scalar / control flow only).
+  4. trivial            — scalar-only, no `*` / `/` / `%`. Covers
+                          straight-line numeric code AND linear-numeric
+                          loops (e.g. `x = x + y; y = y + 1`). NO examples
+                          are injected and NO predicate / logic placeholder
+                          is emitted in the file — these programs never
+                          need user-defined helpers, and the generic
+                          numeric patterns add noise without lift.
+  5. numeric            — scalar with multiplicative / modular arithmetic
+                          (gcd, sqrt, power, parity, ...). Examples apply.
 """
 from __future__ import annotations
 
@@ -18,7 +26,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 EXAMPLES_ROOT = Path(__file__).resolve().parent / "examples"
-CATEGORIES: Tuple[str, ...] = ("numeric", "array", "recursive_ds", "recursive_program")
+CATEGORIES: Tuple[str, ...] = ("numeric", "array", "recursive_ds", "recursive_program", "trivial")
 
 _C_KEYWORDS = {
     "if", "else", "while", "for", "do", "switch", "case", "default",
@@ -30,6 +38,12 @@ _C_KEYWORDS = {
 def _strip_comments(src: str) -> str:
     src = re.sub(r"/\*[\s\S]*?\*/", "", src)
     src = re.sub(r"//.*", "", src)
+    # Also strip string / char literal contents — characters inside `"..."`
+    # or `'...'` (typically `#include "../foo.h"` or printf format strings)
+    # can contain `/`, `*`, `%` and would mislead the classifier heuristics
+    # below (especially `_has_complex_arithmetic`).
+    src = re.sub(r'"(?:[^"\\]|\\.)*"', '""', src)
+    src = re.sub(r"'(?:[^'\\]|\\.)*'", "''", src)
     return src
 
 
@@ -77,6 +91,15 @@ def _has_array_signature(s: str) -> bool:
     return False
 
 
+def _has_complex_arithmetic(s: str) -> bool:
+    """Detect multiplicative / modular ops that take a function out of the
+    linear-numeric regime: `*`, `/`, `%`. Caller must have already stripped
+    comments and ruled out pointer / array signatures, so any `*` here is
+    multiplication (not pointer deref) and any `/` is division (not the
+    comment opener)."""
+    return bool(re.search(r"[*/%]", s))
+
+
 def classify(source: str) -> str:
     s = _strip_comments(source or "")
     if _has_self_referential_struct(s):
@@ -85,6 +108,8 @@ def classify(source: str) -> str:
         return "recursive_program"
     if _has_array_signature(s):
         return "array"
+    if not _has_complex_arithmetic(s):
+        return "trivial"
     return "numeric"
 
 
@@ -122,8 +147,17 @@ def load_category_hints(source: str) -> str:
 
 
 def get_examples_for(source: str) -> Tuple[str, str]:
-    """Return (category, formatted prompt block)."""
+    """Return (category, formatted prompt block).
+
+    `trivial` is intentionally skipped — the whole point of that bucket is
+    to NOT pollute the prompt with the (gcd / sqrt / power / parity / ...)
+    numeric invariants that have nothing to do with straight-line code or
+    linear update loops. Returns an empty block so callers' `{examples}`
+    slot substitutes to nothing.
+    """
     category = classify(source)
+    if category == "trivial":
+        return category, ""
     files = load_category(category)
     contents = "\n\n".join(files) if files else "(no examples available)"
     block = f"""

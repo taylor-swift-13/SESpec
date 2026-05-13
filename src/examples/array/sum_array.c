@@ -1,3 +1,6 @@
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
 
 /*@
   logic integer sum(int* array, integer begin, integer end) =
