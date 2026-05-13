@@ -39,7 +39,7 @@ MATRIX_ROOT_DEFAULT = RESULTS_ROOT / "matrix_runs"
 PRESETS: Dict[str, Dict] = {
     "sespec_default": {
         "auto_annotation": True,
-        "refine_count": 5,
+        "refine_count": 9,
         "pass_count": 1,
         "think": False,
         "use_se": True,

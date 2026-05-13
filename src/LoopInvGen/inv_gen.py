@@ -841,7 +841,12 @@ class InvGenerator:
                     # error_str.append(f"Location: {location}")
                     error_str.append(f"Code: {content}")
                     if 'Establishment' in desc:
-                        error_str.append(f"Instruction: You need weaken the invariant to be valid under initial conditions{pre_cond}.")
+                        error_str.append(
+                            f"Instruction: The current precondition {pre_cond} cannot establish this invariant on loop entry. "
+                            f"Either (a) weaken the invariant so the existing precondition implies it on entry, "
+                            f"or (b) strengthen the function's `requires` precondition so it implies the invariant on entry — "
+                            f"pick whichever better matches the intended behavior."
+                        )
                     if 'Preservation' in desc:
                         error_str.append(f"Instruction: You need adjust the invariant to make sure it remains valid after each iteration.")
                     error_str.append("-" * 50)
@@ -1396,7 +1401,7 @@ class InvGenerator:
                     #   (3) iter_index t — newer wins on full tie
                     # Tuple-lex `>=` natively orders by these in priority.
                     best_annotations = annotations
-                    best_key = ((False, 0.0, 0.0), 0, -1)
+                    best_key = ((False, 0.0, 0.0), 0)
                     # Snapshot best's verifier state so the next refine can
                     # operate on the cleanest known candidate plus the
                     # error feedback that was generated for it, instead of
@@ -1420,26 +1425,41 @@ class InvGenerator:
                     def _count_invariants(text):
                         return len(re.findall(r'\bloop\s+invariant\b', text or ''))
 
-                    for t in range(self.config.refine_count):
+                    # Single flat refine loop. On 2 consecutive iters where
+                    # cur_key < best_key, rollback file to best + truncate
+                    # chat history to the snapshot at best time, then
+                    # continue. The loop ends with one Houdini call to drop
+                    # any still-failing invariants.
+                    refine_count = max(0, getattr(self.config, 'refine_count', 9))
+                    best_msg_count = self.llm.snapshot_history()
+                    regression_count = 0
 
-                        verifier = OutputVerifier(self.config,self.logger)
-                        verifier.run(file_name)   # Pass complete path
+                    for t in range(refine_count):
+                        verifier = OutputVerifier(self.config, self.logger)
+                        verifier.run(file_name)
 
-                        # Get verification result (assuming it returns a list)
                         validate_result = verifier.validate_result
                         verify_result = verifier.verify_result
                         syntax_error = verifier.syntax_error
-
-                        # Judge verification result
                         valid = bool(validate_result) and all(validate_result)
-                        syntax = syntax_error ==''
-                        satisfy =  all(verify_result)
+                        syntax = syntax_error == ''
+                        satisfy = all(verify_result)
 
                         score = _grade(verifier)
-                        cur_key = (score, _count_invariants(annotations), t)
-                        if cur_key >= best_key:
+                        inv_count = _count_invariants(annotations)
+                        cur_key = (score, inv_count)
+                        self.logger.info(
+                            f'[inv-gen] refine {t+1}/{refine_count} '
+                            f'score=(syntax={score[0]}, valid={score[1]:.2f}, '
+                            f'satisfy={score[2]:.2f}) clauses={inv_count}'
+                        )
+                        # Strict > = real progress; tie or worse counts as
+                        # regression (in-place stalling burns budget too).
+                        if cur_key > best_key:
                             best_annotations = annotations
                             best_key = cur_key
+                            best_msg_count = self.llm.snapshot_history()
+                            regression_count = 0
                             best_state = {
                                 'syntax_error': syntax_error,
                                 'validate_result': list(validate_result or []),
@@ -1447,68 +1467,64 @@ class InvGenerator:
                                 'valid_error_list': list(verifier.valid_error_list or []),
                                 'verify_error_list': list(verifier.verify_error_list or []),
                             }
+                        else:
+                            regression_count += 1
 
                         if syntax and valid and satisfy:
+                            self.logger.info(f'[inv-gen] converged at refine {t+1}')
                             correct_flag = True
                             break
 
-                        # Roll back to best before refining: when this iter
-                        # regressed (e.g. LLM broke syntax), don't ask LLM
-                        # to "fix" the broken state. Instead, restore the
-                        # cleanest known candidate and refine on it with
-                        # that candidate's error feedback. No-op when
-                        # current state IS best.
-                        if cur_key < best_key:
+                        # Regression rollback+prune: 2 consecutive iters
+                        # without strict improvement (same or lower than
+                        # best) → restore file to best AND truncate chat
+                        # history to the snapshot at best time. Pruning the
+                        # bad / stalled refine exchanges lets the next call
+                        # explore differently from the same clean slate.
+                        if regression_count >= 2:
+                            self.logger.info(
+                                f'[inv-gen] regression '
+                                f'(2 consecutive iters cur_key<=best_key); '
+                                f'rollback file + prune messages to best '
+                                f'snapshot (msgs={best_msg_count})'
+                            )
                             annotations = best_annotations
                             with open(output_c_file_path, 'w', encoding='utf-8') as file:
                                 file.write(annotations)
-                            if self.config.debug:
-                                self.logger.info(
-                                    f'inv refine iter {t}: rolling back to best before refine'
-                                )
+                            self.llm.truncate_history(best_msg_count)
+                            regression_count = 0
+                            continue
 
-                        refine_syntax_error = best_state['syntax_error']
-                        refine_validate_result = best_state['validate_result']
+                        # Use CURRENT verifier output as refine feedback so
+                        # chat history and on-disk file stay in sync.
                         refine_error_list = (
-                            best_state['valid_error_list']
-                            + best_state['verify_error_list']
+                            list(verifier.valid_error_list or [])
+                            + list(verifier.verify_error_list or [])
                         )
-                        refine_valid = bool(refine_validate_result) and all(refine_validate_result)
-                        refine_satisfy = all(best_state['verify_result'])
 
-                        if refine_syntax_error:
-
-                            annotations = self.repair(refine_syntax_error, annotations, output_c_file_path)
-
-                        elif not refine_valid or (not refine_satisfy and idx == sorted_indices[-1] and self.config.only_loop):
-
-                            if refine_valid:
+                        if syntax_error:
+                            annotations = self.repair(syntax_error, annotations, output_c_file_path)
+                        elif not valid or (not satisfy and idx == sorted_indices[-1] and self.config.only_loop):
+                            if valid:
                                 annotations = self.strength(refine_error_list, annotations, output_c_file_path)
-
-                            elif (refine_satisfy and idx == sorted_indices[-1] and self.config.only_loop):
-                                annotations = self.adjust(refine_validate_result, refine_error_list, annotations, output_c_file_path, pre_condition)
+                            elif (satisfy and idx == sorted_indices[-1] and self.config.only_loop):
+                                annotations = self.adjust(validate_result, refine_error_list, annotations, output_c_file_path, pre_condition)
                             else:
-                                annotations = self.regen(refine_validate_result, refine_error_list, annotations, output_c_file_path, pre_condition)
+                                annotations = self.regen(validate_result, refine_error_list, annotations, output_c_file_path, pre_condition)
 
+                    # Final Houdini: rollback to best and drop any still-
+                    # failing invariants. Runs once after the refine budget
+                    # is exhausted (no-op if already converged).
                     if not correct_flag:
-                        # Refine budget exhausted without all-pass — restore the
-                        # best candidate seen so far, then run Houdini once to
-                        # drop any remaining non-inductive invariants.
                         annotations = best_annotations
                         with open(output_c_file_path, 'w', encoding='utf-8') as file:
                             file.write(annotations)
-                        if self.config.debug:
-                            best_score, best_count, best_t = best_key
-                            self.logger.info(
-                                f'refine exhausted; rolling back to best candidate '
-                                f'(syntax={best_score[0]}, valid={best_score[1]:.2f}, '
-                                f'satisfy={best_score[2]:.2f}, invariants={best_count}, '
-                                f'iter={best_t}) and running Houdini'
-                            )
+                        self.logger.info(
+                            f'[inv-gen] refine exhausted → final Houdini '
+                            f'on best (score={best_key[0]}, clauses={best_key[1]})'
+                        )
                         annotations = self.hudini(False, file_name, annotations, output_c_file_path)
-
-                    if correct_flag:
-                        break
+                        best_annotations = annotations
             
 
             loop_invariant = annotations

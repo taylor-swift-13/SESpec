@@ -139,6 +139,17 @@ class OpenAILLM(BaseChatModel):
                 self.messages.pop()
             return f"生成响应失败: {e}"
 
+    def snapshot_history(self) -> int:
+        """Return the current message-count so callers can rewind here later."""
+        return len(self.messages)
+
+    def truncate_history(self, n: int) -> None:
+        """Drop messages after index `n` (keeps the first n messages).
+        Used to prune chat history back to the snapshot taken when best was
+        last updated — discards refine attempts that only made things worse."""
+        if 0 <= n <= len(self.messages):
+            self.messages = self.messages[:n]
+
 # 主控制类，根据配置选择使用哪种 LLM 实现
 class Chatbot:
     def __init__(self, config: LLMConfig):
@@ -151,7 +162,7 @@ class Chatbot:
         else:
             print("Warning: use_api_model is False, no LLM instance created")
             self.llm_instance = None
-        
+
 
     def chat(self, user_input: str) -> str:
         if self.llm_instance is None:
@@ -159,6 +170,13 @@ class Chatbot:
             return "Error: LLM instance not initialized"
         response = self.llm_instance.generate_response(user_input)
         return response
+
+    def snapshot_history(self) -> int:
+        return self.llm_instance.snapshot_history() if self.llm_instance else 0
+
+    def truncate_history(self, n: int) -> None:
+        if self.llm_instance is not None:
+            self.llm_instance.truncate_history(n)
 
 
 def get_token_stats() -> Dict:

@@ -1060,6 +1060,22 @@ class SpecGenerator:
         self.create_c_file(output_dir, f'{target}.c', content)
         return content
 
+    def _syntax_error_needs_full_file(self, error_message: str) -> bool:
+        """Detect Frama-C syntax errors that signal a problem outside the
+        target function (duplicate or missing top-level logic/predicate
+        decls). For these, ``_merge_target_only`` would strip the LLM's
+        outside-target fix; caller should unlock ``allow_full_file``."""
+        if not error_message:
+            return False
+        msg = error_message.lower()
+        return (
+            'already declared' in msg
+            or 'unbound logic function' in msg
+            or 'unbound logic variable' in msg
+            or 'unbound logic predicate' in msg
+            or 'unbound predicate' in msg
+        )
+
     def _merge_target_only(self, old_content: str, llm_output: str) -> str:
         """Splice the target function's contract+body from ``llm_output`` into
         ``old_content``. Everything else in ``old_content`` (typedefs, logic
@@ -1302,7 +1318,7 @@ class SpecGenerator:
         #       lines win, so we don't drop a richer spec for a poorer one
         #   (3) iter_index t — newer wins on full tie
         best_content = content
-        best_key = ((False, 0.0, 0.0), 0, -1)
+        best_key = ((False, 0.0, 0.0), 0)
         # Snapshot best's verifier output so a later iteration that scores
         # lower can roll content back to best AND reuse best's error list
         # for the next refine prompt — refine should always operate on the
@@ -1346,142 +1362,153 @@ class SpecGenerator:
             _, contract, _, _ = self._find_function_block(text or '', self.function_info.name)
             return len(re.findall(r'\b(ensures|requires|assigns|loop\s+invariant)\b', contract))
 
-        for t in range(self.config.refine_count):
+        # Single flat refine loop with regression rollback. On 2 consecutive
+        # iters where cur_key < best_key, rollback file to best + truncate
+        # chat history to the snapshot at best time, then continue. The
+        # loop ends with one Houdini call to drop any still-failing clauses
+        # (gated on `not jump_flag`).
+        refine_count = max(0, getattr(self.config, 'refine_count', 9))
+        best_msg_count = self.llm.snapshot_history()
+        regression_count = 0
 
-                verifier = SpecVerifier(self.config,self.logger)
-                verifier.run(self.function_info.name)
+        for t in range(refine_count):
+            verifier = SpecVerifier(self.config, self.logger)
+            verifier.run(self.function_info.name)
 
-                # Get verification results (assuming list is returned)
-                post_result = verifier.post_result
-                assert_result = verifier.assert_result
-                loop_result = verifier.loop_result
-                assigns_result = getattr(verifier, 'assigns_result', None) or []
-                syntax_error = verifier.syntax_error
+            post_result = verifier.post_result
+            assert_result = verifier.assert_result
+            loop_result = verifier.loop_result
+            assigns_result = getattr(verifier, 'assigns_result', None) or []
+            syntax_error = verifier.syntax_error
+            valid = (
+                bool(post_result) and all(post_result)
+                and all(loop_result) and all(assigns_result)
+            )
+            syntax = syntax_error == ''
+            satisfy = all(assert_result)
 
-
-                    # Determine verification results.
-                    # `assigns` joined the valid bucket once it was split out
-                    # from `assert_result`; include it in the gate so an
-                    # assigns failure triggers refine_spec, not break.
-                valid = (
-                    bool(post_result) and all(post_result)
-                    and all(loop_result) and all(assigns_result)
-                )
-                syntax = syntax_error ==''
-                satisfy =  all(assert_result)
-
-                score = _grade(verifier)
-                cur_key = (score, _count_target_clauses(content), t)
-                if cur_key >= best_key:
-                    best_content = content
-                    best_key = cur_key
-                    # Snapshot the full verifier state when we accept a new
-                    # best so the next iteration can refine from this state.
-                    best_state = {
-                        'syntax_error': syntax_error,
-                        'post_result': list(post_result or []),
-                        'assert_result': list(assert_result or []),
-                        'loop_result': list(loop_result or []),
-                        'assigns_result': list(assigns_result),
-                        'instance_result': list(getattr(verifier, 'instance_result', None) or []),
-                        'post_error_list': list(verifier.post_error_list or []),
-                        'assert_error_list': list(verifier.assert_error_list or []),
-                        'loop_error_list': list(verifier.loop_error_list or []),
-                        'assigns_error_list': list(getattr(verifier, 'assigns_error_list', None) or []),
-                        'instance_error_list': list(getattr(verifier, 'instance_error_list', None) or []),
-                    }
-
-                if syntax and valid and satisfy:
-                    correct_flag = True
-                    break
-
-                # Roll back to best before refining: if this iteration
-                # regressed (broken syntax / lower valid_ratio than best),
-                # the LLM should not be asked to "fix" the broken state —
-                # it should instead operate on the cleanest known version
-                # with that version's error feedback. When the current
-                # state IS best, this is a no-op.
-                if cur_key < best_key:
-                    content = best_content
-                    self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
-                    if self.debug:
-                        self.logger.info(
-                            f'spec refine iter {t}: rolling back to best before refine '
-                            f'(this iter score < best)'
-                        )
-
-                refine_syntax_error = best_state['syntax_error']
-                refine_post_result = best_state['post_result']
-                # Categorized error buckets — refine_spec renders each with
-                # its own per-category fix strategy in the prompt.
-                refine_buckets = {
-                    'post': best_state['post_error_list'],
-                    'assigns': best_state['assigns_error_list'],
-                    'instance': best_state['instance_error_list'],
-                    'loop': best_state['loop_error_list'],
-                    'assert': best_state['assert_error_list'],
+            score = _grade(verifier)
+            clause_count = _count_target_clauses(content)
+            cur_key = (score, clause_count)
+            self.logger.info(
+                f'[spec-gen] refine {t+1}/{refine_count} '
+                f'score=(syntax={score[0]}, valid={score[1]:.2f}, '
+                f'satisfy={score[2]:.2f}) clauses={clause_count}'
+            )
+            # Strict > = real progress; tie or worse counts as regression
+            # (in-place stalling burns budget too).
+            if cur_key > best_key:
+                best_content = content
+                best_key = cur_key
+                best_msg_count = self.llm.snapshot_history()
+                regression_count = 0
+                best_state = {
+                    'syntax_error': syntax_error,
+                    'post_result': list(post_result or []),
+                    'assert_result': list(assert_result or []),
+                    'loop_result': list(loop_result or []),
+                    'assigns_result': list(assigns_result),
+                    'instance_result': list(getattr(verifier, 'instance_result', None) or []),
+                    'post_error_list': list(verifier.post_error_list or []),
+                    'assert_error_list': list(verifier.assert_error_list or []),
+                    'loop_error_list': list(verifier.loop_error_list or []),
+                    'assigns_error_list': list(getattr(verifier, 'assigns_error_list', None) or []),
+                    'instance_error_list': list(getattr(verifier, 'instance_error_list', None) or []),
                 }
+            else:
+                regression_count += 1
 
-                if refine_syntax_error:
+            if syntax and valid and satisfy:
+                self.logger.info(f'[spec-gen] converged at refine {t+1}')
+                correct_flag = True
+                break
 
-                    old_full = content
-                    llm_output = self.repair_spec(refine_syntax_error, content)
-                    content = self._merge_target_only(old_full, llm_output)
-                    self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
+            # Regression rollback+prune: 2 consecutive iters without
+            # strict improvement (same or lower than best) → restore file
+            # to best AND truncate chat history to the snapshot at best
+            # time. Pruning the bad / stalled refine exchanges lets the
+            # next call explore differently from the same clean slate.
+            if regression_count >= 2:
+                self.logger.info(
+                    f'[spec-gen] regression '
+                    f'(2 consecutive iters cur_key<=best_key); '
+                    f'rollback file + prune messages to best snapshot '
+                    f'(msgs={best_msg_count})'
+                )
+                content = best_content
+                self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
+                self.llm.truncate_history(best_msg_count)
+                regression_count = 0
+                continue
 
-                else:
+            # Use CURRENT verifier state for refine feedback so the model's
+            # chat history and on-disk file stay in sync.
+            refine_buckets = {
+                'post': list(verifier.post_error_list or []),
+                'assigns': list(getattr(verifier, 'assigns_error_list', None) or []),
+                'instance': list(getattr(verifier, 'instance_error_list', None) or []),
+                'loop': list(verifier.loop_error_list or []),
+                'assert': list(verifier.assert_error_list or []),
+            }
 
-                    content = self.mark_failed_postcondition(content, refine_post_result)
-
-                    self.logger.info(f'postconditon before refine: \n{content}')
-
-                    # Caller-level assert failures can only be fixed by editing
-                    # callee contracts (target-only edits can't reach the
-                    # callee `ensures` that the assert depends on). Unlock
-                    # full-file edit when the assert bucket has any error.
-                    allow_full_file = bool(refine_buckets.get('assert'))
-                    if allow_full_file and self.debug:
-                        self.logger.info(
-                            'spec refine: full-file edit unlocked (assert bucket non-empty)'
-                        )
-                    old_full = content
-                    llm_output = self.refine_spec(refine_buckets, content, allow_full_file=allow_full_file)
-                    if allow_full_file and llm_output and llm_output.strip():
-                        # Full-file mode: the LLM was asked to return the
-                        # whole rewritten file. Use it directly if it looks
-                        # plausible (must contain the target function's
-                        # signature), otherwise fall back to the splice.
-                        target = self.function_info.name
-                        if re.search(rf'\b{re.escape(target)}\s*\([^;{{}}]*\)\s*\{{', llm_output):
-                            content = llm_output
-                        else:
-                            content = self._merge_target_only(old_full, llm_output)
+            if syntax_error:
+                old_full = content
+                # Syntax errors that point outside the target function
+                # (duplicate / unbound top-level decls) need full-file edit;
+                # _merge_target_only would otherwise strip the LLM's fix.
+                allow_full_file = self._syntax_error_needs_full_file(syntax_error)
+                if allow_full_file and self.debug:
+                    self.logger.info('spec repair: full-file edit unlocked (syntax error outside target)')
+                llm_output = self.repair_spec(syntax_error, content, allow_full_file=allow_full_file)
+                if allow_full_file and llm_output and llm_output.strip():
+                    target = self.function_info.name
+                    if re.search(rf'\b{re.escape(target)}\s*\([^;{{}}]*\)\s*\{{', llm_output):
+                        content = llm_output
                     else:
                         content = self._merge_target_only(old_full, llm_output)
+                else:
+                    content = self._merge_target_only(old_full, llm_output)
+                self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
+            else:
+                content = self.mark_failed_postcondition(content, post_result)
+                self.logger.info(f'postconditon before refine: \n{content}')
 
-                    self.logger.info(f'postconditon after refine: \n{content}')
+                allow_full_file = bool(refine_buckets.get('assert'))
+                if allow_full_file and self.debug:
+                    self.logger.info('spec refine: full-file edit unlocked (assert bucket non-empty)')
+                old_full = content
+                llm_output = self.refine_spec(refine_buckets, content, allow_full_file=allow_full_file)
+                if allow_full_file and llm_output and llm_output.strip():
+                    target = self.function_info.name
+                    if re.search(rf'\b{re.escape(target)}\s*\([^;{{}}]*\)\s*\{{', llm_output):
+                        content = llm_output
+                    else:
+                        content = self._merge_target_only(old_full, llm_output)
+                else:
+                    content = self._merge_target_only(old_full, llm_output)
 
-                    self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
+                self.logger.info(f'postconditon after refine: \n{content}')
+                self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
 
-        if not correct_flag and best_key > ((False, 0.0, 0.0), 0, -1):
-            # Refine exhausted without all-pass; roll back to the best
-            # candidate so we don't ship a worse-than-best output.
+        # Final Houdini: rollback to best and drop failing ensures /
+        # loop invariants. Runs once after the refine budget is exhausted
+        # (no-op if already converged). Gated on jump_flag (skip Houdini
+        # for entry-point / side-effect-free void).
+        if not correct_flag and not jump_flag:
             content = best_content
             self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
-            if self.debug:
-                best_score, best_count, best_t = best_key
-                self.logger.info(
-                    f'spec refine exhausted; rolling back to best candidate '
-                    f'(syntax={best_score[0]}, valid={best_score[1]:.2f}, '
-                    f'satisfy={best_score[2]:.2f}, clauses={best_count}, iter={best_t})'
-                )
-
-        # Final Houdini pass — drop any `ensures` (target contract only) or
-        # `loop invariant` clauses still failing verification. This is the
-        # spec-layer counterpart to inv_gen's `hudini` and runs even when
-        # `correct_flag` is True (no-op in that case since nothing fails).
-        if not jump_flag:
+            self.logger.info(
+                f'[spec-gen] refine exhausted → final Houdini on best '
+                f'(score={best_key[0]}, clauses={best_key[1]})'
+            )
             content = self._houdini_spec(content)
+            best_content = content
+
+        # Safety net: ensure on-disk file matches best_content (covers the
+        # jump_flag path where final Houdini was skipped).
+        if not correct_flag and best_key > ((False, 0.0, 0.0), 0):
+            content = best_content
+            self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
 
         # Debug output
         if self.debug:
@@ -1892,8 +1919,14 @@ class SpecGenerator:
         except Exception:
             return ""
 
-    def repair_spec(self,error_message, c_code):
-        """Call model to generate ACSL specification"""
+    def repair_spec(self, error_message, c_code, allow_full_file=False):
+        """Call model to generate ACSL specification.
+
+        When ``allow_full_file=True`` (e.g. the syntax error is a duplicate
+        or unbound top-level decl outside the target function), the caller
+        will use the LLM output verbatim if the target signature is found
+        in it; otherwise it falls back to ``_merge_target_only``.
+        """
         with open("prompt/error.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 
