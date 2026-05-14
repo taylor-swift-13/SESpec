@@ -1233,7 +1233,11 @@ class SpecGenerator:
             #   - recursive_program → range bounds + ghost logic mirror
             # For `array` the prompt's built-in array example suffices.
             examples_block = ""
-            if category in ("recursive_ds", "recursive_program") and src:
+            if (
+                getattr(self.config, 'use_examples', True)
+                and category in ("recursive_ds", "recursive_program")
+                and src
+            ):
                 try:
                     _, examples_block = get_examples_for(src)
                 except Exception as e:

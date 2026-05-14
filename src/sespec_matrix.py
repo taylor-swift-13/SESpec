@@ -325,6 +325,10 @@ def parse_args() -> argparse.Namespace:
                    help="Force-enable symbolic execution for loop-free postconds")
     p.add_argument("--no-se", dest="use_se", action="store_false",
                    help="Force-disable symbolic execution; use LLM for all postconds")
+    p.add_argument("--use-examples", dest="use_examples", action="store_true", default=None,
+                   help="Force-enable category-specific example loading in inv_gen/precondgen prompts")
+    p.add_argument("--no-examples", dest="use_examples", action="store_false",
+                   help="Force-disable example loading; useful for ablation")
     p.add_argument("--refine-count", type=int, default=None,
                    help="Override main.refine_count for every selected preset")
     return p.parse_args()
@@ -347,6 +351,8 @@ def main() -> int:
         settings = dict(PRESETS.get(label, PRESETS["sespec_default"]))
         if args.use_se is not None:
             settings["use_se"] = args.use_se
+        if args.use_examples is not None:
+            settings["use_examples"] = args.use_examples
         if args.refine_count is not None:
             settings["refine_count"] = args.refine_count
         for bench in args.bench:
