@@ -39,7 +39,7 @@ MATRIX_ROOT_DEFAULT = RESULTS_ROOT / "matrix_runs"
 PRESETS: Dict[str, Dict] = {
     "sespec_default": {
         "auto_annotation": True,
-        "refine_count": 9,
+        "refine_count": 3,
         "pass_count": 1,
         "think": False,
         "use_se": True,
@@ -325,6 +325,8 @@ def parse_args() -> argparse.Namespace:
                    help="Force-enable symbolic execution for loop-free postconds")
     p.add_argument("--no-se", dest="use_se", action="store_false",
                    help="Force-disable symbolic execution; use LLM for all postconds")
+    p.add_argument("--refine-count", type=int, default=None,
+                   help="Override main.refine_count for every selected preset")
     return p.parse_args()
 
 
@@ -345,6 +347,8 @@ def main() -> int:
         settings = dict(PRESETS.get(label, PRESETS["sespec_default"]))
         if args.use_se is not None:
             settings["use_se"] = args.use_se
+        if args.refine_count is not None:
+            settings["refine_count"] = args.refine_count
         for bench in args.bench:
             for case_id in args.cases:
                 for model in args.models:

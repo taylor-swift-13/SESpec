@@ -12,7 +12,6 @@ from LoopInvGen.inv_gen import InvGenerator
 from Utils.create_post_condition import create_post, update_annotation
 from Utils.extract_all import function_info_init,free_all_tu
 from Utils.main_class import *
-from Utils.remove_macro import process_all_c_files
 from specification_verify import SpecVerifier
 from config import MainConfig,LLMConfig
 from convertor import SpecificationConvertor
@@ -154,7 +153,6 @@ class FunctionProcessor:
         self.function_info_list: List[FunctionInfo] = []
         self.llm_config = LLMConfig(api_model=model_name)
         self.pending_functions: List[str] = []
-        self.top_function_info = None
         self.first_pass = None
         self.preconditions = preconditions
         self.precond_manager = None
@@ -249,12 +247,6 @@ class FunctionProcessor:
         self.logger.info("="*50)
 
         
-        
-
-    def _prepare_workspace(self):
-        """Preprocess workspace directory (macro processing)"""
-      
-        process_all_c_files(self.config.root_dir,self.config.input_path)
         
 
     def _initialize_function(self, func_name: str) -> FunctionInfo:
@@ -418,13 +410,15 @@ class FunctionProcessor:
         """Auto-set only_loop for side-effect-free void functions and int main.
 
         Side effects detected: pointer-member writes (`p->f = ...`), index writes
-        (`p[i] = ...`), and explicit deref writes (`(*p) = ...`), with compound
-        assignment variants. Local array index writes can register as false
-        positives; on uncertainty we keep only_loop=False (full pipeline).
+        (`p[i] = ...`), explicit deref writes (`(*p) = ...`), and writes to
+        global variables declared at file scope, with compound assignment
+        variants. Local array index writes can register as false positives; on
+        uncertainty we keep only_loop=False (full pipeline).
         """
         func_type = (func.func_type or "").strip()
         is_void = func_type == "void"
         is_int_main = func.name == "main" and re.match(r"^\s*int\b", func_type)
+
         if not (is_void or is_int_main):
             self.config.only_loop = False
             self.logger.info(f"[auto only_loop] False — {func.name} returns '{func_type}'")
@@ -436,12 +430,83 @@ class FunctionProcessor:
             r'(?<![A-Za-z_\[])[A-Za-z_]\w*\s*\[[^\]]+\]\s*[+\-*/%&|^]?=(?!=)',
             r'\(\s*\*\s*[A-Za-z_]\w*\s*\)\s*[+\-*/%&|^]?=(?!=)',
         ]
-        has_side_effects = any(re.search(p, code) for p in side_effect_patterns)
+        has_pointer_or_index_writes = any(re.search(p, code) for p in side_effect_patterns)
+        global_writes = self._global_writes_in_function(func)
+        has_side_effects = has_pointer_or_index_writes or bool(global_writes)
         self.config.only_loop = not has_side_effects
         verdict = "True" if self.config.only_loop else "False"
         kind = "void" if is_void else "int main"
-        reason = "no side effects" if not has_side_effects else "writes via pointer/array"
+        if global_writes:
+            reason = "writes global variable(s): " + ", ".join(sorted(global_writes))
+        elif has_pointer_or_index_writes:
+            reason = "writes via pointer/array"
+        else:
+            reason = "no side effects"
         self.logger.info(f"[auto only_loop] {verdict} — {kind} {func.name}: {reason}")
+
+    def _file_scope_variable_names(self, file_path: str) -> set[str]:
+        """Best-effort extraction of simple file-scope C variable declarations."""
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                source = f.read()
+        except OSError:
+            return set()
+
+        source = re.sub(r"/\*[\s\S]*?\*/", "", source)
+        source = re.sub(r"//.*", "", source)
+
+        names: set[str] = set()
+        stmt: list[str] = []
+        depth = 0
+        for ch in source:
+            if ch == "{":
+                if depth == 0:
+                    stmt = []
+                depth += 1
+                continue
+            if ch == "}":
+                depth = max(0, depth - 1)
+                continue
+            if depth != 0:
+                continue
+            stmt.append(ch)
+            if ch != ";":
+                continue
+
+            declaration = "".join(stmt).strip()
+            stmt = []
+            if not declaration or "(" in declaration:
+                continue
+            if re.match(r"^\s*(typedef|struct|union|enum)\b", declaration):
+                continue
+            if re.search(r"\bextern\b", declaration):
+                continue
+
+            declaration = declaration.rstrip(";")
+            for part in declaration.split(","):
+                part = part.split("=", 1)[0]
+                part = re.sub(r"\[[^\]]*\]", "", part)
+                part = part.replace("*", " ")
+                identifiers = re.findall(r"\b[A-Za-z_]\w*\b", part)
+                if identifiers:
+                    names.add(identifiers[-1])
+        return names
+
+    def _global_writes_in_function(self, func: FunctionInfo) -> set[str]:
+        global_names = self._file_scope_variable_names(func.file_path)
+        if not global_names:
+            return set()
+
+        code = func.code or ""
+        written: set[str] = set()
+        for name in global_names:
+            escaped = re.escape(name)
+            assignment = rf"(?<![A-Za-z0-9_]){escaped}\s*(?:\[[^\]]*\]\s*)?[+\-*/%&|^]?=(?!=)"
+            postfix = rf"(?<![A-Za-z0-9_]){escaped}\s*(?:\+\+|--)"
+            prefix = rf"(?:\+\+|--)\s*{escaped}(?![A-Za-z0-9_])"
+            if re.search(assignment, code) or re.search(postfix, code) or re.search(prefix, code):
+                written.add(name)
+        return written
 
     def run_analysis(self):
         """Execute main generation workflow"""
@@ -489,7 +554,6 @@ class FunctionProcessor:
         self._finalize()
 
         if not self.config.only_loop:
-            # self._verify()
             self._verify_pass()
 
         if not self.config.only_loop and self.config.generlization:
@@ -659,13 +723,6 @@ class FunctionProcessor:
 
         
 
-
-    def _verify(self):
-        self.logger.info(f"\nVERIFICATION FOR {self.config.function_name}")
-        self.logger.info('='* 50+'\n')
-
-        verifier = SpecVerifier(self.config,self.logger)
-        verifier.run(self.config.function_name)   # Pass complete path
 
 # Usage example
 if __name__ == '__main__':

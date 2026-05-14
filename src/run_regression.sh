@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run regression matrix invocations in parallel (use_se=on only):
-#   motivation_example/0, motivation_example/2, LIG-MM/1
+#   motivation_example/0, motivation_example/2, LIG-MM/1, linear/1, linear/3,
+#   sespec/4 (global-state smoke test)
 #
 # Usage:  OPENAI_API_KEY=... ./run_regression.sh
 #         (PATH must include frama-c — script prepends opam default bin)
@@ -13,6 +14,7 @@ PY="/home/yangfp/miniconda3/envs/SpecAutoGen/bin/python"
 TS="$(date +%Y%m%d_%H%M%S)"
 RESULTS_ROOT="${SRC}/results/matrix_runs/regression_${TS}"
 LOG_DIR="${RESULTS_ROOT}/_runner_logs"
+REFINE_COUNT="${REFINE_COUNT:-10}"
 
 mkdir -p "${LOG_DIR}"
 
@@ -30,6 +32,7 @@ JOBS=(
     "ligmm1_seon       LIG-MM              1  --use-se"
     "linear1_seon      linear              1  --use-se"
     "linear3_seon      linear              3  --use-se"
+    "sespec4_seon      sespec              4  --use-se"
 )
 
 declare -A PIDS=()
@@ -46,6 +49,7 @@ for spec in "${JOBS[@]}"; do
         --cases "${case_id}" \
         --models gpt-4o \
         --labels sespec_default \
+        --refine-count "${REFINE_COUNT}" \
         --workers 1 \
         ${se} \
         --matrix-root "${out}" \

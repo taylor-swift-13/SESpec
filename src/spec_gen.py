@@ -46,14 +46,6 @@ class SpecGenerator:
         self.llm_config = llm_config
         self.llm = Chatbot(llm_config)
 
-    def if_assigns(self) -> bool:
-
-        for parameter in self.function_info.parameter_list:
-            if parameter.is_ptr and parameter.is_struct:
-                return True
-        return False
-
-
     def create_precondition(self) -> str:
         """
         Generate precondition to be inserted into temporary .c file.
@@ -248,6 +240,101 @@ class SpecGenerator:
             required_type_list.append(type_info)
         required_type = '\n'.join(required_type_list)
         return required_type
+
+    def _source_top_level_context(self) -> str:
+        """Return top-level source context outside function definitions.
+
+        The function extractor stores only the target function body in
+        FunctionInfo.code. Frama-C still needs file-scope declarations such as
+        #include/#define lines, global variables, and prototypes. Preserve those
+        declarations from the original source file while stripping top-level
+        function bodies, which are emitted separately by the pipeline. Attached
+        ACSL/QCP contracts are part of those function bodies for this purpose:
+        preserving them as standalone top-level annotations produces invalid
+        Frama-C input.
+        """
+        file_path = getattr(self.function_info, 'file_path', None)
+        if not file_path:
+            return ''
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                source = f.read()
+        except OSError:
+            return ''
+
+        sig_re = re.compile(
+            r'(?:^|[\s;}])((?:[A-Za-z_]\w*[\s\*\[\]]+)+'
+            r'[A-Za-z_]\w*\s*\([^;{}]*\)\s*\{)'
+        )
+        spans = []
+        pos = 0
+        while True:
+            m = sig_re.search(source, pos)
+            if not m:
+                break
+            sig_start = m.start(1)
+            body_open = m.end(1) - 1
+            depth = 1
+            i = body_open + 1
+            body_end = -1
+            while i < len(source):
+                if source[i] == '{':
+                    depth += 1
+                elif source[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        body_end = i + 1
+                        break
+                i += 1
+            if body_end == -1:
+                break
+            context_start = self._attached_contract_start(source, sig_start)
+            spans.append((context_start, body_end))
+            pos = body_end
+
+        if not spans:
+            return source.strip()
+
+        pieces = []
+        last = 0
+        for start, end in spans:
+            pieces.append(source[last:start])
+            last = end
+        pieces.append(source[last:])
+        context = ''.join(pieces)
+        context = re.sub(r'\n{3,}', '\n\n', context).strip()
+        return context
+
+    def _attached_contract_start(self, source: str, sig_start: int) -> int:
+        """Include immediately preceding `/*@ ... */` blocks in a function span."""
+        start = sig_start
+        while True:
+            prefix = source[:start].rstrip()
+            if not prefix.endswith('*/'):
+                return start
+            opener = prefix.rfind('/*@')
+            if opener == -1:
+                return start
+            between = prefix[opener + 3:-2]
+            if '*/' in between:
+                return start
+            start = opener
+
+    def _prefix_with_source_context(self, required_type: str = '', annotated_callee_str: str = '') -> str:
+        parts = [self._source_top_level_context()]
+        if required_type and required_type not in parts[0]:
+            parts.append(required_type)
+        if annotated_callee_str:
+            parts.append(annotated_callee_str)
+        return '\n\n'.join(p.strip() for p in parts if p and p.strip())
+
+    def _qcp_prefix_with_source_context(self, headers: str, required_type: str = '', annotated_callee_str: str = '') -> str:
+        parts = [headers, self._source_top_level_context()]
+        if required_type and required_type not in parts[1]:
+            parts.append(required_type)
+        if annotated_callee_str:
+            parts.append(annotated_callee_str)
+        return '\n\n'.join(p.strip() for p in parts if p and p.strip())
     
     
     def create_generated_c_file(self):
@@ -281,10 +368,8 @@ class SpecGenerator:
 
             
             template = ''
-        content = (
-                f'{required_type}\n' + annotated_callee_str +
-                f'{template}\n{code}'
-            )
+        prefix = self._prefix_with_source_context(required_type, annotated_callee_str)
+        content = f'{prefix}\n\n{template}\n{code}' if prefix else f'{template}\n{code}'
         
 
         if self.debug:
@@ -366,9 +451,10 @@ class SpecGenerator:
         code = remove_comments_regex(self.function_info.code)
         groups = code.split('{')
 
-        content = (headers +
-                f'{required_type}\n' + annotated_callee_str +
-                f'\n{groups[0]}\n{self.function_info.annotation}' + '{' + "{".join(groups[1:]))
+        prefix = self._qcp_prefix_with_source_context(headers, required_type, annotated_callee_str)
+        content = (
+                f'{prefix}\n\n'
+                f'{groups[0]}\n{self.function_info.annotation}' + '{' + "{".join(groups[1:]))
         if self.debug:
             self.logger.info(f'Content of pre-annotated {self.function_info.name}.c file: \n{content}')
         self.create_c_file(self.annotated_c_file_path, f'{self.function_info.name}.c', content)
@@ -407,9 +493,10 @@ class SpecGenerator:
         code = remove_comments_regex(self.function_info.code)
         groups = code.split('{')
 
-        content = (headers +
-                f'{required_type}\n' + annotated_callee_str +
-                f'\n{groups[0]}\n{self.function_info.annotation}' + '{' + "{".join(groups[1:]))
+        prefix = self._qcp_prefix_with_source_context(headers, required_type, annotated_callee_str)
+        content = (
+                f'{prefix}\n\n'
+                f'{groups[0]}\n{self.function_info.annotation}' + '{' + "{".join(groups[1:]))
         if self.debug:
             print(f'Content of pre-annotated {self.function_info.name}.c file: \n{content}')
         self.create_c_file(self.annotated_c_file_path, f'{self.function_info.name}.c', content)
@@ -530,124 +617,6 @@ class SpecGenerator:
         return sub_callee_str + '\n' + '\n'.join(annotated_callee_list)
 
 
-
-
-        
-    # def create_specification_by_llm(self) -> None:
-    
-    #     # Create required type definitions
-    #     required_type = self.create_required_type()
-
-
-    #     definitions_str = '\n'.join(self.definitions)
-
-        
-    #     require_str = self.function_info.require
-        
-
-    #     # Create specifications for called functions
-    #     annotated_callee_str = self.create_callee_specifications_by_llm(
-    #         self.function_info.callee_set
-    #     )    
-
-    #     if required_type in annotated_callee_str:
-    #         required_type = ''
-
-    #     # Build input file path
-    #     input_path = f"{self.generated_loop_c_file_path}/{self.function_info.name}.c"
-        
-    #     # Extract function code
-    #     code = extract_function(input_path, self.function_info)[0][2]
-
-    #     # Create specification converter
-    #     convertor = SpecificationConvertor(self.function_info, self.llm_config)
-
-    #     # Handle test functions
-    #     if any(keyword in self.function_info.name for keyword in ['test','main','goo']):
-    #         content = (
-    #             f'{required_type}\n' + f'{definitions_str}\n' + annotated_callee_str +
-    #             f'{code}'
-    #         )
-    #     # Handle functions with no parameters and void return
-    #     elif self.function_info.parameter_list == [] and self.function_info.func_type == 'void':
-    #         content = (
-    #             f'{required_type}\n' + f'{definitions_str}\n' + annotated_callee_str +
-    #             f'\n{code}'
-    #         )
-    #     # Handle void return functions
-    #     elif self.function_info.func_type == 'void':
-    #         template = f'''/*@
-    # {require_str}
-    # ensures PLACE_HOLDER;
-    # */
-    # '''
-    #         content = (
-    #             f'{required_type}\n' + f'{definitions_str}\n' + annotated_callee_str +
-    #             f'{template}\n{code}'
-    #         )
-            
-    #         if self.debug:
-    #             print('content')
-    #             print(content)
-            
-    #         # Generate specification annotations
-    #         content = convertor.specgen_annotations(content)
-    #     # Handle functions with return values
-    #     else:
-    #         template = f'''/*@
-    # {require_str}
-    # ensures PLACE_HOLDER;
-    # ensures \\result == PLACE_HOLDER;
-    # */
-    # '''
-    #         content = (
-    #             f'{required_type}\n' + f'{definitions_str}\n' + annotated_callee_str +
-    #             f'{template}\n{code}'
-    #         )
-            
-    #         # Generate specification annotations
-    #         content = convertor.specgen_annotations(content)
-
-    #     # Create C file
-    #     self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
-
-
-    #     for _ in range(self.config.refine_count):
-
-    #             verifier = SpecVerifier(self.config,self.logger)
-    #             verifier.run(self.function_info.name) 
-                    
-    #             # Get verification results (assuming list is returned)
-    #             post_result = verifier.post_result
-    #             assert_result = verifier.assert_result
-    #             syntax_error = verifier.syntax_error
-
-    #                 # Determine verification results
-    #             valid = bool(post_result) and all(post_result)
-    #             syntax = syntax_error ==''
-    #             satisfy =  all(assert_result)
-
-    #             if not syntax:
-
-    #                 content = self.repair_spec(syntax_error, content)
-    #                 self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
-
-    #             elif not valid or not satisfy:
-    #                 error_list = verifier.post_error_list + verifier.assert_error_list
-    #                 print('error_list')
-    #                 print(error_list)
-    #                 content = self.refine_spec(error_list,content)
-    #                 self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
-                    
-    #             else:
-    #                 break
-
-       
-    #     # Debug output
-    #     if self.debug:
-            
-    #          self.logger.info(f'Model generated specification content for {self.function_info.name}.c: {content}')
-
     def mark_failed_postcondition(self, code, post_results):
         # Match all postcondition statements, including complete ensures statements
         postcondition_pattern = re.compile(r'ensures\s+(.*?);', re.DOTALL)
@@ -688,7 +657,6 @@ class SpecGenerator:
             return content
         seen = set()  # set of (kind, name)
         out = []
-        i = 0
         n = len(content)
         block_re = re.compile(r'/\*@.*?\*/', re.DOTALL)
         last_end = 0
@@ -909,6 +877,7 @@ class SpecGenerator:
         body = self.function_info.code or ''
         body = re.sub(r'/\*[\s\S]*?\*/', '', body)
         body = re.sub(r'//.*', '', body)
+        global_names = self._file_scope_variable_names()
 
         # Allow optional leading `*` or `(*` for explicit-deref l-values like
         # `*(pIp->ret) = ...` and `*p = ...`.
@@ -923,8 +892,10 @@ class SpecGenerator:
         def is_caller_visible(t):
             """Reject bare-identifier writes (locals/params-by-value).
             Accept anything that goes through `->`, `.`, `[`, `*` (i.e.
-            reaches caller-visible memory)."""
-            return bool(re.search(r'->|\.|\[|\*', t))
+            reaches caller-visible memory), plus writes to known file-scope
+            globals."""
+            bare = re.sub(r'\s+', '', t or '')
+            return bare in global_names or bool(re.search(r'->|\.|\[|\*', t))
 
         def add(t):
             t = (t or '').strip()
@@ -1136,9 +1107,8 @@ class SpecGenerator:
 
     def _is_side_effect_free(self) -> bool:
         """Detect whether the current function has observable side effects:
-        pointer-member writes (p->f = ...), index writes (p[i] = ...), or
-        explicit deref writes ((*p) = ...). Mirrors main._auto_set_only_loop
-        but operates on this generator's function rather than the entry func.
+        pointer-member writes (p->f = ...), index writes (p[i] = ...),
+        explicit deref writes ((*p) = ...), or file-scope global writes.
         """
         code = self.function_info.code or ""
         side_effect_patterns = [
@@ -1146,7 +1116,55 @@ class SpecGenerator:
             r'(?<![A-Za-z_\[])[A-Za-z_]\w*\s*\[[^\]]+\]\s*[+\-*/%&|^]?=(?!=)',
             r'\(\s*\*\s*[A-Za-z_]\w*\s*\)\s*[+\-*/%&|^]?=(?!=)',
         ]
-        return not any(re.search(p, code) for p in side_effect_patterns)
+        return (
+            not any(re.search(p, code) for p in side_effect_patterns)
+            and not self._global_writes_in_function()
+        )
+
+    def _file_scope_variable_names(self) -> set[str]:
+        context = self._source_top_level_context()
+        if not context:
+            return set()
+        # Preprocessor directives are context for C/Frama-C but not C
+        # declarations. Drop them before splitting top-level declarations.
+        context = '\n'.join(
+            line for line in context.splitlines()
+            if not line.lstrip().startswith('#')
+        )
+        names = set()
+        for declaration in context.split(';'):
+            declaration = declaration.strip()
+            if not declaration:
+                continue
+            if declaration.startswith('#') or '(' in declaration:
+                continue
+            if re.match(r'^\s*(typedef|struct|union|enum)\b', declaration):
+                continue
+            if re.search(r'\bextern\b', declaration):
+                continue
+            for part in declaration.split(','):
+                part = part.split('=', 1)[0]
+                part = re.sub(r'\[[^\]]*\]', '', part)
+                part = part.replace('*', ' ')
+                identifiers = re.findall(r'\b[A-Za-z_]\w*\b', part)
+                if identifiers:
+                    names.add(identifiers[-1])
+        return names
+
+    def _global_writes_in_function(self) -> set[str]:
+        global_names = self._file_scope_variable_names()
+        if not global_names:
+            return set()
+        code = self.function_info.code or ""
+        written = set()
+        for name in global_names:
+            escaped = re.escape(name)
+            assignment = rf"(?<![A-Za-z0-9_]){escaped}\s*(?:\[[^\]]*\]\s*)?[+\-*/%&|^]?=(?!=)"
+            postfix = rf"(?<![A-Za-z0-9_]){escaped}\s*(?:\+\+|--)"
+            prefix = rf"(?:\+\+|--)\s*{escaped}(?![A-Za-z0-9_])"
+            if re.search(assignment, code) or re.search(postfix, code) or re.search(prefix, code):
+                written.add(name)
+        return written
 
 
     def _ensure_acsl_requires(self, content: str) -> str:
@@ -1319,23 +1337,6 @@ class SpecGenerator:
         #   (3) iter_index t — newer wins on full tie
         best_content = content
         best_key = ((False, 0.0, 0.0), 0)
-        # Snapshot best's verifier output so a later iteration that scores
-        # lower can roll content back to best AND reuse best's error list
-        # for the next refine prompt — refine should always operate on the
-        # cleanest known state, not on the latest LLM-corrupted state.
-        best_state = {
-            'syntax_error': '',
-            'post_result': [],
-            'assert_result': [],
-            'loop_result': [],
-            'assigns_result': [],
-            'instance_result': [],
-            'post_error_list': [],
-            'assert_error_list': [],
-            'loop_error_list': [],
-            'assigns_error_list': [],
-            'instance_error_list': [],
-        }
         correct_flag = False
 
         def _grade(verifier):
@@ -1402,19 +1403,6 @@ class SpecGenerator:
                 best_key = cur_key
                 best_msg_count = self.llm.snapshot_history()
                 regression_count = 0
-                best_state = {
-                    'syntax_error': syntax_error,
-                    'post_result': list(post_result or []),
-                    'assert_result': list(assert_result or []),
-                    'loop_result': list(loop_result or []),
-                    'assigns_result': list(assigns_result),
-                    'instance_result': list(getattr(verifier, 'instance_result', None) or []),
-                    'post_error_list': list(verifier.post_error_list or []),
-                    'assert_error_list': list(verifier.assert_error_list or []),
-                    'loop_error_list': list(verifier.loop_error_list or []),
-                    'assigns_error_list': list(getattr(verifier, 'assigns_error_list', None) or []),
-                    'instance_error_list': list(getattr(verifier, 'instance_error_list', None) or []),
-                }
             else:
                 regression_count += 1
 
@@ -1514,122 +1502,6 @@ class SpecGenerator:
         if self.debug:
 
              self.logger.info(f'model generated specification of {self.function_info.name}.c is: \n{content}')
-
-    def modify_specification_by_llm(self) -> None:
-
-        self.logger.info(f'add assignments to specification')
-
-        required_type = self.create_required_type()
-
-        annotated_callee_str = self.create_callee_specifications(self.function_info.callee_set)
-
-        if required_type in annotated_callee_str:
-            required_type = ''
-    
-        function_header = self.function_info.code.split('{')[0]
-            
-        file_path = f"{self.generated_loop_c_file_path}/{self.function_info.name}.c"
-
-        convertor = SpecificationConvertor(self.function_info, self.llm_config)
-        
-        if self.function_info.require:
-            only_pre = f'''/*@
-            {self.function_info.require}
-            */'''
-        else:
-            only_pre = str()
-
-        self.function_info.specification = convertor.inconvert_annotations(self.function_info.annotation)
-
-        specification = self.function_info.specification.split('*/')[0] + '\n' + 'assigns PLACE_HOLDER;' + '\n' + '*/'
-
-        if self.debug:       
-            self.logger.info(f'ACSL specification: \n{specification}')
-
-        code = extract_function(file_path,self.function_info)[0][2]
-
-        groups = code.split('{')
-
-        jump_flag = False
-
-        if self.function_info.name in self.ignore_list:
-            jump_flag = True
-        elif self.function_info.func_type == 'void' and self._is_side_effect_free():
-            jump_flag = True
-
-        if jump_flag:
-            content = (
-                f'{required_type}\n'  + annotated_callee_str + only_pre +
-                f'\n{function_header}\n' + '{' + "{".join(groups[1:]))
-        else:
-            content = (
-                f'{required_type}\n' + annotated_callee_str +
-                f'\n{specification}\n{function_header}\n' + '{' + "{".join(groups[1:]))
-
-      
-        if not jump_flag:
-            content = convertor.assign_annotations(content)
-      
-
-        if self.debug:
-            self.logger.info(f'model generated specification of {self.function_info.name}.c is: \n{content}')
-        self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
-
-       
-
-        for _ in range(self.config.refine_count):
-
-                verifier = SpecVerifier(self.config,self.logger)
-                verifier.run(self.function_info.name) 
-                    
-                # Get verification results (assuming list is returned)
-                post_result = verifier.post_result
-                assert_result = verifier.assert_result
-                loop_result = verifier.loop_result
-                syntax_error = verifier.syntax_error
-
-                    # Determine verification results
-                valid = bool(post_result) and all(post_result) and all(loop_result)
-                syntax = syntax_error ==''
-                satisfy =  all(assert_result)
-
-                if not syntax:
-
-                    old_full = content
-                    llm_output = self.repair_spec(syntax_error, content)
-                    content = self._merge_target_only(old_full, llm_output)
-                    self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
-
-                elif not valid or not satisfy:
-
-                    error_list = (
-                        verifier.post_error_list
-                        + verifier.assert_error_list
-                        + verifier.loop_error_list
-                        + getattr(verifier, 'assigns_error_list', [])
-                    )
-
-                    content = self.mark_failed_postcondition(content, post_result)
-
-                    self.logger.info(f'postconditon before refine: \n{content}')
-
-                    old_full = content
-                    llm_output = self.refine_spec(error_list, content)
-                    content = self._merge_target_only(old_full, llm_output)
-
-                    self.logger.info(f'postconditon after refine: \n{content}')
-
-                    self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
-
-                else:
-                    break
-
-       
-        # Debug output
-        if self.debug:
-             self.logger.info(f'model modified specification of {self.function_info.name}.c is {content}')
-
-
 
     # Refine-time error categories. Each entry: (bucket key, error-section
     # heading, strategy file under prompt/func/refine_strategy/). Strategy
@@ -1811,9 +1683,10 @@ class SpecGenerator:
 
         groups = code.split('{')
 
-        content = (headers +
-                f'{required_type}\n'  + annotated_callee_str +
-                f'\n{function_header}\n{self.function_info.annotation}\n' + '{' + "{".join(groups[1:]))
+        prefix = self._qcp_prefix_with_source_context(headers, required_type, annotated_callee_str)
+        content = (
+                f'{prefix}\n\n'
+                f'{function_header}\n{self.function_info.annotation}\n' + '{' + "{".join(groups[1:]))
         
         if self.debug:
             self.logger.info(f'automated generated QCP specification of {self.function_info.name}.c : \n{content}')
@@ -1822,10 +1695,8 @@ class SpecGenerator:
     def create_specification(self):
         # SE-success path: SE produces ensures (via QCP→ACSL), `assigns` is
         # filled in by static analysis (compute_function_assigns). LLM is
-        # never invoked here. The legacy `if_assigns()` branch that used
-        # `modify_specification_by_llm` to ask the LLM to write `assigns`
-        # for ptr-struct parameters is removed — static analysis covers
-        # both ptr-struct and non-ptr-struct functions uniformly.
+        # never invoked here for `assigns` synthesis — static analysis
+        # covers both ptr-struct and non-ptr-struct functions uniformly.
         required_type = self.create_required_type()
 
         annotated_callee_str = self.create_callee_specifications(self.function_info.callee_set)
@@ -1878,14 +1749,12 @@ class SpecGenerator:
             self.function_info.name in self.ignore_list
             or (self.function_info.func_type == 'void' and self._is_side_effect_free())
         )
+        prefix = self._prefix_with_source_context(required_type, annotated_callee_str)
         if skip:
-            content = (
-                f'{required_type}\n'  + annotated_callee_str + only_pre +
-                f'\n{function_header}\n' + '{' + "{".join(groups[1:]))
+            body = only_pre + f'\n{function_header}\n' + '{' + "{".join(groups[1:])
         else:
-            content = (
-                f'{required_type}\n' + annotated_callee_str +
-                f'\n{self.function_info.specification}\n{function_header}\n' + '{' + "{".join(groups[1:]))
+            body = f'\n{self.function_info.specification}\n{function_header}\n' + '{' + "{".join(groups[1:])
+        content = f'{prefix}\n\n{body}' if prefix else body
 
 
         if self.debug:
