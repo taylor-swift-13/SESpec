@@ -154,6 +154,7 @@ class FunctionProcessor:
         self.llm_config = LLMConfig(api_model=model_name)
         self.pending_functions: List[str] = []
         self.first_pass = None
+        self._last_pass_result = None
         self.preconditions = preconditions
         self.precond_manager = None
         self.pass_count = self.config.pass_count
@@ -314,7 +315,7 @@ class FunctionProcessor:
             self.logger.info(f"\nGENERATE LOOP INVARIANT FOR {func.name}")
             self.logger.info('='* 50+'\n')
             inv_generator = InvGenerator(self.config,func,self.logger,self.llm_config,generator)
-            self.first_pass = inv_generator.run_pass()
+            self._last_pass_result = inv_generator.run_pass()
 
         generator.create_looped_c_file()
 
@@ -508,12 +509,37 @@ class FunctionProcessor:
                 written.add(name)
         return written
 
-    def run_analysis(self):
-        """Execute main generation workflow"""
-        # Start overall timing
-        self.start_time = time.time()
-        self.logger.info(f"\n🚀 Starting generation of function: {self.config.function_name}")
-        
+    def _clear_pass_outputs(self):
+        """Clear generated stage outputs before a new outer pass."""
+        for directory in (
+            self.config.annotated_c_file_path,
+            self.config.annotated_loop_c_file_path,
+            self.config.generated_loop_c_file_path,
+            self.config.output_path,
+        ):
+            os.makedirs(directory, exist_ok=True)
+            for name in os.listdir(directory):
+                path = os.path.join(directory, name)
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+
+    def _reset_pass_state(self):
+        self.global_type_info_dict = {}
+        self.tu_dict = {}
+        self.file_cache = {}
+        self.conds = []
+        self.function_info_list = []
+        self.pending_functions = []
+        self.precond_manager = None
+        self._last_pass_result = None
+        self._clear_pass_outputs()
+
+    def _run_analysis_once(self):
+        """Execute one complete generation workflow pass."""
+        self._reset_pass_state()
+
         # Initialize entry function
         self.logger.info("\nFUNCTION INITIALIZATION")
         self.logger.info('='* 50+'\n')
@@ -554,10 +580,58 @@ class FunctionProcessor:
         self._finalize()
 
         if not self.config.only_loop:
-            self._verify_pass()
+            pass_result = self._verify_once()
+        else:
+            pass_result = self._last_pass_result or {
+                "syntax": False,
+                "valid": False,
+                "satisfy": False,
+            }
 
         if not self.config.only_loop and self.config.generlization:
             self.__generalization()
+
+        return pass_result
+
+    def run_analysis(self):
+        """Execute main generation workflow."""
+        self.start_time = time.time()
+        self.logger.info(f"\n🚀 Starting generation of function: {self.config.function_name}")
+
+        first_syntax_round = None
+        first_valid_round = None
+        first_satisfy_round = None
+
+        for pass_idx in range(max(0, self.pass_count)):
+            round_no = pass_idx + 1
+            self.logger.info(f"\nOUTER PASS: {round_no}/{self.pass_count}")
+            self.logger.info(f"TRY TIME: {pass_idx}")
+
+            pass_result = self._run_analysis_once()
+            syntax = bool(pass_result.get("syntax"))
+            valid = bool(pass_result.get("valid"))
+            satisfy = bool(pass_result.get("satisfy"))
+
+            if syntax and first_syntax_round is None:
+                first_syntax_round = round_no
+            if syntax and valid and first_valid_round is None:
+                first_valid_round = round_no
+            if syntax and valid and satisfy and first_satisfy_round is None:
+                first_satisfy_round = round_no
+
+            if syntax and valid and satisfy:
+                break
+
+        self.logger.info("first_pass:")
+        self.logger.info(
+            f"syntax={first_syntax_round}, "
+            f"valid={first_valid_round},satisfy={first_satisfy_round}"
+        )
+        self.first_pass = {
+            "syntax": first_syntax_round,
+            "valid": first_valid_round,
+            "satisfy": first_satisfy_round,
+        }
             
         # End overall timing and output statistics
         self.end_time = time.time()
@@ -612,113 +686,76 @@ class FunctionProcessor:
         free_all_tu(self.tu_dict)
 
 
-    def _verify_pass(self):
+    def _verify_once(self):
 
         self.logger.info(f"\nVERIFICATION FOR {self.config.function_name}")
         self.logger.info('='* 50+'\n')
 
-        # Used to record results for each round
-        results = []
+        def _grade_with_spec_verifier():
+            verifier = SpecVerifier(self.config, self.logger)
+            verifier.run(self.config.function_name)
+            post_result = verifier.post_result
+            assert_result = verifier.assert_result
+            loop_result = verifier.loop_result
+            instance_result = verifier.instance_result
+            assigns_result = getattr(verifier, 'assigns_result', None) or []
+            syntax_error = verifier.syntax_error
+            # `assigns` was split off from `assert_result` so it joins
+            # the valid (contract-level) bucket here.
+            valid_ = (all(post_result) and all(loop_result)
+                      and all(instance_result) and all(assigns_result))
+            syntax_ = syntax_error == ''
+            satisfy_ = all(assert_result)
+            return syntax_, valid_, satisfy_
 
-        # Record the earliest round that satisfies (initialized to None)
-        first_valid_round = None
-        first_syntax_round = None
-        first_satisfy_round = None
+        syntax, valid, satisfy = _grade_with_spec_verifier()
 
-        for t in range(self.pass_count):
-            self.logger.info(f'TRY TIME: {t}')
-
-            def _grade_with_spec_verifier():
-                verifier = SpecVerifier(self.config, self.logger)
-                verifier.run(self.config.function_name)
-                post_result = verifier.post_result
-                assert_result = verifier.assert_result
-                loop_result = verifier.loop_result
-                instance_result = verifier.instance_result
-                assigns_result = getattr(verifier, 'assigns_result', None) or []
-                syntax_error = verifier.syntax_error
-                # `assigns` was split off from `assert_result` so it joins
-                # the valid (contract-level) bucket here.
-                valid_ = (all(post_result) and all(loop_result)
-                          and all(instance_result) and all(assigns_result))
-                syntax_ = syntax_error == ''
-                satisfy_ = all(assert_result)
-                return syntax_, valid_, satisfy_
-
+        if not (syntax and valid and satisfy):
+            # spec_gen 救火：内部已经会走 refine_count 轮自我修复，可能在
+            # 这一次调用里就把 output 修通过了。所以救火完必须再 verify
+            # 一次，让本轮结果反映最终输出，而不是这一轮入口的状态。
+            main_func = next(
+                f for f in self.function_info_list
+                if f.name == self.config.function_name
+            )
+            generator = SpecGenerator(
+                main_func,
+                self.function_info_list,
+                self.global_type_info_dict,
+                self.config,
+                self.logger,
+                self.llm_config,
+                self.precond_manager
+            )
+            generator.create_specification_by_llm()
             syntax, valid, satisfy = _grade_with_spec_verifier()
 
-            if not (syntax and valid and satisfy):
-                # spec_gen 救火：内部已经会走 refine_count 轮自我修复，可能在
-                # 这一次调用里就把 output 修通过了。所以救火完必须再 verify
-                # 一次，让 first_*_round 反映最终输出，而不是这一轮入口的状态。
-                main_func = next(
-                    f for f in self.function_info_list
-                    if f.name == self.config.function_name
-                )
-                generator = SpecGenerator(
-                    main_func,
-                    self.function_info_list,
-                    self.global_type_info_dict,
-                    self.config,
-                    self.logger,
-                    self.llm_config,
-                    self.precond_manager
-                )
-                generator.create_specification_by_llm()
-                syntax, valid, satisfy = _grade_with_spec_verifier()
+        if syntax and valid and satisfy:
+            self.logger.info(f"\n🎯 FINAL SPECIFICATION FOR {self.config.function_name}")
+            self.logger.info('='* 50)
 
-            results.append({
-                "round": t + 1,
-                "valid": valid,
-                "syntax": syntax,
-                "satisfy": satisfy,
-            })
+            output_file_path = os.path.join(
+                self.config.output_path,
+                self.config.function_name + '.c'
+            )
+            self.logger.info(f"Output path: {output_file_path}")
 
-            if syntax and first_syntax_round is None:
-                first_syntax_round = t + 1
-            if syntax and valid and first_valid_round is None:
-                first_valid_round = t + 1
-            if syntax and valid and satisfy and first_satisfy_round is None:
-                first_satisfy_round = t + 1
-
-            if not (syntax and valid and satisfy):
-                # 这一轮即使 spec_gen 救了一次还没全部通过，留到下一轮再试。
-                continue
+            if os.path.exists(output_file_path):
+                try:
+                    with open(output_file_path, 'r', encoding='utf-8') as f:
+                        file_content = f.read()
+                    self.logger.info(f"Output file content:\n{file_content}")
+                except Exception as e:
+                    self.logger.info(f"Error reading output file: {e}")
             else:
-                # Print final specification
-                main_func = next(
-                    f for f in self.function_info_list 
-                    if f.name == self.config.function_name
-                )
-                self.logger.info(f"\n🎯 FINAL SPECIFICATION FOR {self.config.function_name}")
-                self.logger.info('='* 50)
-                
-                # Print output path content
-                self.config.output_path = os.path.join(self.config.output_path, self.config.function_name + '.c')
-                self.logger.info(f"Output path: {self.config.output_path}")
-                
-                # Print the content of the output file
-                if os.path.exists(self.config.output_path):
-                    try:
-                        with open(self.config.output_path, 'r', encoding='utf-8') as f:
-                            file_content = f.read()
-                        self.logger.info(f"Output file content:\n{file_content}")
-                    except Exception as e:
-                        self.logger.info(f"Error reading output file: {e}")
-                else:
-                    self.logger.info(f"Output file does not exist: {self.config.output_path}")
-                
-                
-                self.logger.info('='* 50)
-                break
+                self.logger.info(f"Output file does not exist: {output_file_path}")
 
+            self.logger.info('='* 50)
 
-        self.logger.info("first_pass:")
-        self.logger.info(f"syntax={first_syntax_round}, valid={first_valid_round},satisfy={first_satisfy_round}")
-        self.first_pass ={
-            "syntax": first_syntax_round,
-            "valid": first_valid_round,
-            "satisfy": first_satisfy_round
+        return {
+            "syntax": syntax,
+            "valid": valid,
+            "satisfy": satisfy,
         }
 
         

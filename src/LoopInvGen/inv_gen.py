@@ -1606,65 +1606,26 @@ class InvGenerator:
     def run_pass(self):
         file_name = self.info.name
 
-
         self.logger.info(f'file_name: {file_name}')
 
-        
-        # Used to record results for each round
-        results = []
+        self.run()
 
-        # Record earliest satisfying round (initialized to None)
-        first_valid_round = None
-        first_syntax_round = None
-        first_satisfy_round = None
+        verifier = OutputVerifier(self.config, self.logger)
+        verifier.run(file_name)
 
+        validate_result = verifier.validate_result
+        verify_result = verifier.verify_result
+        syntax_error = verifier.syntax_error
 
-        for t in range(self.pass_count):
-            print(f'TRY TIME: {t}')
+        valid = bool(validate_result) and all(validate_result)
+        syntax = syntax_error == ''
+        satisfy = all(verify_result)
 
-            self.run()
-
-            verifier = OutputVerifier(self.config, self.logger)
-            verifier.run(file_name)
-
-            validate_result = verifier.validate_result
-            verify_result = verifier.verify_result
-            syntax_error = verifier.syntax_error
-
-            valid = bool(validate_result) and all(validate_result)
-            syntax = syntax_error == ''
-            satisfy =  all(verify_result)
-
-            # Save this round's result
-            results.append({
-                    "round": t + 1,   # Count from 1
-                    "valid": valid,
-                    "syntax": syntax,
-                    "satisfy": satisfy
-                })
-
-            # If it's the first time satisfying, record it
-            
-            if syntax and first_syntax_round is None:
-                first_syntax_round = t + 1
-            if syntax and valid and first_valid_round is None:
-                first_valid_round = t + 1
-            if syntax and valid and satisfy and first_satisfy_round is None:
-                first_satisfy_round = t + 1
-            
-            if syntax and valid and satisfy:
-                break
-
-        # Output earliest satisfying round
-        self.logger.info("="*50)
-        self.logger.info("first_pass:")
-        self.logger.info(f"syntax={first_syntax_round}, valid={first_valid_round},satisfy={first_satisfy_round}")
-        self.first_pass ={
-            "syntax": first_syntax_round,
-            "valid": first_valid_round,
-            "satisfy": first_satisfy_round
+        self.first_pass = {
+            "syntax": syntax,
+            "valid": valid,
+            "satisfy": satisfy
         }
-        self.logger.info("="*50)
 
         return self.first_pass
 
@@ -1676,8 +1637,6 @@ class InvGenerator:
 # if __name__ == "__main__":
 #     generator = InvGenerator()
 #     generator.run()
-
-
 
 
 
