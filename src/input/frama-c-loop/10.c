@@ -9,7 +9,7 @@ int mul10(int a, int b) {
     return prod;
 }
 
-int goo10() {
+void goo10() {
     int pdt = mul10(2, 5);
     //@ assert pdt == 10;
 }

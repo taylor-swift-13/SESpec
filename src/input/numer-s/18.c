@@ -3,7 +3,7 @@ int unknown();
 /*@
   requires xa + ya > 0;
 */
-int hoo18(int xa,int ya){
+void hoo18(int xa,int ya){
 
     //pre-condition
    

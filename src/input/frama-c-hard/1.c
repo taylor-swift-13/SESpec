@@ -9,7 +9,7 @@ int pdt(int n) {
   return prod;
 }
 
-int main1() {
+void main1() {
     int p = pdt(10);
     //@ assert p == 1;
     printf("%d\n", p);

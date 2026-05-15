@@ -1,4 +1,4 @@
-int foo389(int z,int k,int a){
+void foo389(int z,int k,int a){
 
     int x=a;
     int y=1;

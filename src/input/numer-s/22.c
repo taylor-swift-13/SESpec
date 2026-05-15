@@ -1,5 +1,5 @@
 int unknown();
-int hoo22(int a) { 
+void hoo22(int a) { 
     
     //pre-condition
     int sn = 0;

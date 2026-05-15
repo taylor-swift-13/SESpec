@@ -2,7 +2,7 @@
 /*@
 requires A >= 0 && B >= 1;
 */
-int main12(int A,int B){
+void main12(int A,int B){
     
    
     int q = 0;

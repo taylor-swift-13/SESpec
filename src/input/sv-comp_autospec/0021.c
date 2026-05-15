@@ -7,7 +7,7 @@ int unknown1();
 requires n < INT_MAX;
 requires k == n;
 */
-int foo0021(int k, int n) {
+void foo0021(int k, int n) {
     int i,j;
 
     i = 0;

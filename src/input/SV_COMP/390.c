@@ -1,4 +1,4 @@
-int foo390(int A,int B){
+void foo390(int A,int B){
 
     int q = 0;
     int r = 0;

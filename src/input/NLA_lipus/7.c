@@ -2,7 +2,7 @@
 /*@ requires x >= 1;
     requires y >= 1;
 */
-int main7(int x,int y){
+void main7(int x,int y){
   
   int a,b,p,q,r,s;
  

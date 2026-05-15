@@ -1,5 +1,5 @@
 
-int main30(int x,int y,int n) {
+void main30(int x,int y,int n) {
     // variable declarations
 	int z=0;
 	int w=0;

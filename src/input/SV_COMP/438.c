@@ -1,4 +1,4 @@
-int foo438(int n) {
+void foo438(int n) {
 
     int guess;
     int prev_guess;

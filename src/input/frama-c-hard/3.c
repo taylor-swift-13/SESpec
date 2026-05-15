@@ -12,7 +12,7 @@ int fun(int n) {
     return y;
 }
 
-int main3() {
+void main3() {
     int res = fun(4);
     //@assert res == 7;
 }

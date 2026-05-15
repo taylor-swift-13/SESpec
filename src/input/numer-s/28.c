@@ -2,7 +2,7 @@
   requires a >= 1;
   requires b >= 1;
 */
-int hoo28(int a,int b) { 
+void hoo28(int a,int b) { 
     int x,y,u,v;
   
     //pre-condition

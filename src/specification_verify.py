@@ -182,7 +182,15 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
         return results
 
     def filter_goal_assertion(self, contents):
-        return [line for line in contents if line.strip().startswith("Goal Assertion ")]
+        # `Goal Assertion 'missing_return'` is synthesized by Frama-C for
+        # non-void functions that fall through without a return statement.
+        # It carries no semantic information about the user's spec and is
+        # unprovable by design — exclude it from the assertion bucket.
+        return [
+            line for line in contents
+            if line.strip().startswith("Goal Assertion ")
+            and "'missing_return'" not in line
+        ]
 
     def filter_goal_assigns(self, contents):
         return [line for line in contents if line.strip().startswith("Goal Assigns ")]

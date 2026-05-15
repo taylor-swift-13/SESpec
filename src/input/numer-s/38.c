@@ -1,7 +1,7 @@
 /*@
   requires a > 2;
 */
-int hoo38(int a) {
+void hoo38(int a) {
     //algorithm searching for a divisor for factorization, by Knuth
     int r, k, q, d, n, t, s;
     

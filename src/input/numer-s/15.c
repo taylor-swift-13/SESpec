@@ -1,7 +1,7 @@
 //svcomp_benchmark38_conjunctive
 int unknown();
 
-int hoo15(){
+void hoo15(){
     int x = 0;
     int y = 0;
 

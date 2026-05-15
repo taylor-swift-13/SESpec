@@ -1,4 +1,4 @@
-int foo410(int x,int y,int n) {
+void foo410(int x,int y,int n) {
 
 	int z=0;
 	int w=0;

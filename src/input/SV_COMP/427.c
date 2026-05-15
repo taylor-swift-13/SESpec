@@ -1,6 +1,6 @@
 int unknown();
 
-int foo427(){
+void foo427(){
     int x = 0;
     int y = 500000;
 

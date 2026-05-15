@@ -1,7 +1,7 @@
 /*@
   requires n > 0;
 */
-int hoo24(int n,int guess,int prev_guess) {
+void hoo24(int n,int guess,int prev_guess) {
 
 
     guess = n / 2;  

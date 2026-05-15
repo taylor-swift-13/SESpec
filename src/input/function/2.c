@@ -10,7 +10,7 @@ int fun2(int n) {
     return x;
 }
 
-int goo2() {
+void goo2() {
     int a = fun2(10);
     //@ assert a == 3;
 }

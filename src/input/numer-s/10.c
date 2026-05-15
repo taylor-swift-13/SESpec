@@ -1,5 +1,5 @@
 //svcomp_const_1-1
-int hoo10(){
+void hoo10(){
 
     //pre-condition
     int x = 1;

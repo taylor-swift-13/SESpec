@@ -1,6 +1,6 @@
 int unknown();
 
-int foo373(int y) {
+void foo373(int y) {
 
     int lock = 1;
     int x = y;

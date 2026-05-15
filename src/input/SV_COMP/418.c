@@ -1,4 +1,4 @@
-int foo418(){
+void foo418(){
 
     int x = 1;
     int y = 0;

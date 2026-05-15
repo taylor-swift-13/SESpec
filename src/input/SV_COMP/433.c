@@ -1,4 +1,4 @@
-int foo433(int n,int guess,int prev_guess) {
+void foo433(int n,int guess,int prev_guess) {
 
     guess = n / 2;
     prev_guess = 0;

@@ -1,7 +1,7 @@
 /*@
 requires k>=0 && k<=30;
 */
-int main19(int k){
+void main19(int k){
    
     int y=0;
     int x=0;

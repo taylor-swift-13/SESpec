@@ -1,5 +1,5 @@
 //svcomp_odd
-int hoo9(){
+void hoo9(){
 
     //pre-condition
     int x = 1;

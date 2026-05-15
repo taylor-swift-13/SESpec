@@ -1,4 +1,4 @@
-int foo447(int a, int b) {
+void foo447(int a, int b) {
 
     int product = 0;
     int i = 0;

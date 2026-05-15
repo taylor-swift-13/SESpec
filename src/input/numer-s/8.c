@@ -1,6 +1,6 @@
 //svcomp_mod4
 int unknown();
-int hoo8(){
+void hoo8(){
     
 
     //pre-condition

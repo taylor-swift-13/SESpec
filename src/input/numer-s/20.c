@@ -4,7 +4,7 @@
   requires idBitLength >= 0;
   requires material_length >= 0;
 */
-int hoo20(int idBitLength,int material_length,int nlen){
+void hoo20(int idBitLength,int material_length,int nlen){
     int j = 0;
 
     //pre-condition

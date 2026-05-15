@@ -1,6 +1,6 @@
 int unknown();
 
-int foo375(int y,int v1,int v2,int v3) {
+void foo375(int y,int v1,int v2,int v3) {
 
     int lock = 1;
     int x = y;

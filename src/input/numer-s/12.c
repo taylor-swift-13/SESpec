@@ -1,5 +1,5 @@
 //svcomp_diamond_1-1
-int hoo12(int y){
+void hoo12(int y){
 
     //pre-condition
     int x = 0;

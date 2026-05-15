@@ -1,4 +1,4 @@
-int foo443(int a, int b) {
+void foo443(int a, int b) {
     int x,y,u,v;
 
     x=a;

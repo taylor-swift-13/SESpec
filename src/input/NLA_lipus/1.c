@@ -1,5 +1,5 @@
 /*@ requires a>=n && n==0;*/
-int main1(int a,int n){
+void main1(int a,int n){
  
   int x,y,z;
   

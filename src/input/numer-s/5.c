@@ -5,7 +5,7 @@
   requires z > 0;
   requires w > 0;
 */
-int hoo5(int a,int w,int x,int y,int z) {
+void hoo5(int a,int w,int x,int y,int z) {
     //pre-condition
     x = w;
     z = y;

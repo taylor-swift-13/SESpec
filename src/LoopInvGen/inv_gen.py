@@ -604,20 +604,60 @@ class InvGenerator:
         return annotations
 
 
-    def strength(self,error_list,annotations,output_c_file_path):
+    def append_assert_goal_placeholder(self, annotations, assert_errors):
+        """Inject one `loop invariant PLACE_HOLDER_ASSERT_GOAL_<i>;` line per
+        failing user assert. The strength prompt instructs the model to
+        replace each placeholder with a concrete predicate that, combined
+        with the negation of the loop condition, implies the cited assert.
+
+        Skips injection if the annotations already contain
+        `PLACE_HOLDER_ASSERT_GOAL_` (avoids stacking placeholders across
+        repeated strength() calls within the same refine loop).
+        """
+        if not assert_errors or 'PLACE_HOLDER_ASSERT_GOAL_' in annotations:
+            return annotations
+
+        injected = []
+        for i, item in enumerate(assert_errors):
+            content = item[2] if len(item) > 2 else ''
+            hint = (content or '').strip().rstrip(';')
+            injected.append(
+                f"loop invariant PLACE_HOLDER_ASSERT_GOAL_{i};"
+                f"   /* must imply at loop exit: {hint} */"
+            )
+
+        out = []
+        inserted = False
+        for line in annotations.splitlines():
+            out.append(line)
+            if not inserted and '/*@' in line:
+                for inj in injected:
+                    out.append(f"          {inj}")
+                inserted = True
+        return "\n".join(out)
+
+    def strength(self,error_list,annotations,output_c_file_path,assert_errors=None):
+
+        if assert_errors:
+            annotations = self.append_assert_goal_placeholder(annotations, assert_errors)
+            with open(output_c_file_path, 'w', encoding='utf-8') as file:
+                file.write(annotations)
+            if self.config.debug:
+                self.logger.info("after assert-goal placeholder injection")
+                self.logger.info(annotations)
 
         annotations = self.strength_annotations(error_list,annotations)
-        
+
 
         if self.config.debug:
             self.logger.info("after strength")
             self.logger.info(annotations)
-        
+
 
         # Write ACSL annotations to output file
         with open(output_c_file_path, 'w', encoding='utf-8') as file:
             file.write(annotations)
-        
+
         return annotations
 
     def adjust(self,validate_result,error_list,annotations,output_c_file_path,pre_cond):
@@ -1257,12 +1297,19 @@ class InvGenerator:
                                     self.logger.info(annotations)
                                 
                                 annotations_list.append(annotations)
-                                # NOTE: previously a second slot was appended
-                                # here with `append_verification_goal_annotations`,
-                                # producing a SE+verification_goal candidate.
-                                # That slot is no longer constructed — the
-                                # single-slot selection below always picks
-                                # slot 0 or slot 1, never slot 2.
+                                # Slot 2: SE + verification_goal placeholder.
+                                # Adds a `loop invariant (loop_cond) ==> PLACE_HOLDER_VERFICATION_GOAL;`
+                                # template that the LLM is instructed to fill
+                                # with the assert target — covers cases like
+                                # syGus 86/88 that need a disjunctive
+                                # invariant linking loop-exit to the assert.
+                                annotations_with_goal = self.append_verification_goal_annotations(
+                                    annotations, path_cond, updated_loop_condition
+                                )
+                                if self.config.debug:
+                                    self.logger.info("after verification goal")
+                                    self.logger.info(annotations_with_goal)
+                                annotations_list.append(annotations_with_goal)
 
                                 
             else:
@@ -1271,31 +1318,35 @@ class InvGenerator:
             if self.config.recursive_loop:
                 annotations_list = [annotations_list[0]]
 
-            # Single-slot selection: keep exactly one candidate template.
-            # Layout (after the verification_goal slot was retired):
+            # Triple-slot selection: SE+goal first (has `==> PLACE_HOLDER`
+            # template anchoring the assert), SE only, then simple as final
+            # fallback. Sequential with early-break on full success.
+            # Layout after construction:
             #   [0] simple placeholder (no SE info, no PLACE_HOLDER_*)
             #   [1] SE template WITHOUT verification_goal placeholder
-            #   [2+] cumulative variants from extra var_maps (discarded)
+            #   [2] SE template WITH PLACE_HOLDER_VERFICATION_GOAL
             #
             # Rule:
-            #   use_se=False (or inner_flags[idx]) → slot 0 (simple)
-            #   use_se=True                        → slot 1 (SE only)
-            #
-            # baseline data showed slot 1 was the de-facto winner whenever
-            # SE built it; slot 0 stays the fallback for the
-            # use_se=False / inner-loop path.
+            #   use_se=False (or inner_flags[idx])   → [simple]
+            #   use_se=True                          → [SE+goal, SE, simple]
             if simple or len(annotations_list) <= 1:
-                selected_idx = 0
-                slot_kind = 'simple placeholder'
+                annotations_list = [annotations_list[0]]
+                slot_kinds = ['simple placeholder']
+            elif len(annotations_list) >= 3:
+                annotations_list = [
+                    annotations_list[2],  # SE + verification_goal
+                    annotations_list[1],  # SE only
+                    annotations_list[0],  # simple
+                ]
+                slot_kinds = ['SE+goal', 'SE only', 'simple placeholder']
             else:
-                selected_idx = 1
-                slot_kind = 'SE only'
+                # No SE+goal built (var_maps empty); fall back to dual-slot
+                annotations_list = [annotations_list[1], annotations_list[0]]
+                slot_kinds = ['SE only', 'simple placeholder']
             self.logger.info(
-                f'[inv-gen] single-slot mode: selected slot {selected_idx + 1}/'
-                f'{len(annotations_list)} ({slot_kind}); discarded '
-                f'{len(annotations_list) - 1} alternative slots'
+                f'[inv-gen] multi-slot mode: {len(annotations_list)} '
+                f'candidate(s) ({", ".join(slot_kinds)})'
             )
-            annotations_list = [annotations_list[selected_idx]]
 
             for i,annotations in enumerate(annotations_list):
 
@@ -1303,36 +1354,27 @@ class InvGenerator:
                 with open(output_c_file_path, 'w', encoding='utf-8') as file:
                     file.write(annotations)
                 annotations_list[i] = self.spec_gen.create_general_template_file()
-     
-            
 
 
-            if simple:
 
-                self.logger.debug("handle simple loop")
-                user_prompt = self.get_simgen_prompt(annotations_list[0])
-                annotations_list[0] = self.get_annotations(user_prompt)
-
-            else:
-                # Examples are category-specific reference invariants
-                # (parity, decrement-chain, listrep, …) loaded by
-                # `get_examples`. Skipping the load (use_examples=False) is
-                # available for ablation; the prompt template tolerates an
-                # empty `{examples}` substitution.
-                examples = (
-                    self.get_examples(loop_content)
-                    if getattr(self.config, 'use_examples', True)
-                    else ''
-                )
-
-                # Single-slot mode: annotations_list was already sliced to
-                # length 1 above. Use the enriched template; its
-                # verification_guide is auto-injected when loop_content has
-                # an inline /*@ assert */, matching the slot we picked.
-                user_prompt = self.get_user_prompt_template(
-                    annotations_list[0], pre_condition, examples
-                )
-                annotations_list[0] = self.get_annotations(user_prompt)
+            # Per-slot LLM fill: simple slot uses sim-gen prompt (free-form);
+            # SE slot uses the templated prompt with category examples.
+            examples = None
+            for i, slot_kind in enumerate(slot_kinds):
+                if 'simple' in slot_kind:
+                    self.logger.debug(f"handle simple loop (slot {i+1})")
+                    user_prompt = self.get_simgen_prompt(annotations_list[i])
+                else:
+                    if examples is None:
+                        examples = (
+                            self.get_examples(loop_content)
+                            if getattr(self.config, 'use_examples', True)
+                            else ''
+                        )
+                    user_prompt = self.get_user_prompt_template(
+                        annotations_list[i], pre_condition, examples
+                    )
+                annotations_list[i] = self.get_annotations(user_prompt)
 
 
 
@@ -1370,12 +1412,14 @@ class InvGenerator:
 
 
 
-            first_element = annotations_list.pop(0)
-            annotations_list.append(first_element)
+            # Skip the legacy rotation/trim in multi-slot mode — we want
+            # `annotations_list` in the desired sequence [SE+goal, SE, simple]
+            # already, so the highest-priority candidate runs first and
+            # simple is the final fallback.
+            if len(annotations_list) == 1:
+                first_element = annotations_list.pop(0)
+                annotations_list.append(first_element)
 
-            if len(annotations_list) == 3:
-                annotations_list = annotations_list[:-1]
-            
 
             correct_flag = False
             loop_invariant = ''
@@ -1506,7 +1550,13 @@ class InvGenerator:
                             annotations = self.repair(syntax_error, annotations, output_c_file_path)
                         elif not valid or (not satisfy and idx == sorted_indices[-1] and self.config.only_loop):
                             if valid:
-                                annotations = self.strength(refine_error_list, annotations, output_c_file_path)
+                                # When strength is triggered with failing user
+                                # asserts (satisfy<1), inject one
+                                # PLACE_HOLDER_ASSERT_GOAL_<i> slot per assert
+                                # so the model is forced to write a predicate
+                                # tied to the assert at loop exit.
+                                assert_errors = list(verifier.verify_error_list or []) if not satisfy else None
+                                annotations = self.strength(refine_error_list, annotations, output_c_file_path, assert_errors=assert_errors)
                             elif (satisfy and idx == sorted_indices[-1] and self.config.only_loop):
                                 annotations = self.adjust(validate_result, refine_error_list, annotations, output_c_file_path, pre_condition)
                             else:
@@ -1525,7 +1575,30 @@ class InvGenerator:
                         )
                         annotations = self.hudini(False, file_name, annotations, output_c_file_path)
                         best_annotations = annotations
-            
+
+                # End-of-candidate gate (multi-slot mode): re-verify the
+                # candidate that just finished refine+Houdini. If it fully
+                # proves the contract (syntax+valid+satisfy), stop here and
+                # skip the next fallback slot. Otherwise let the loop
+                # continue and try the next slot.
+                if len(annotations_list) > 1:
+                    _v = OutputVerifier(self.config, self.logger)
+                    _v.run(file_name)
+                    _valid = bool(_v.validate_result) and all(_v.validate_result)
+                    _syntax = _v.syntax_error == ''
+                    _satisfy = all(_v.verify_result)
+                    if _syntax and _valid and _satisfy:
+                        self.logger.info(
+                            '[inv-gen] multi-slot: candidate succeeded; '
+                            'skipping fallback slot(s)'
+                        )
+                        break
+                    else:
+                        self.logger.info(
+                            f'[inv-gen] multi-slot: candidate failed '
+                            f'(syntax_ok:{_syntax} | valid_ok:{_valid} | satisfy_ok:{_satisfy}); '
+                            f'trying next slot'
+                        )
 
             loop_invariant = annotations
             if self.config.debug:

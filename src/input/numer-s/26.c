@@ -2,7 +2,7 @@
   requires a % 2 == 0;
   requires a > 0;
 */
-int hoo26(int a) {
+void hoo26(int a) {
     // variable declarations
     int x = a / 2;
     int r = 0;

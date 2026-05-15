@@ -1,7 +1,7 @@
 /*@ requires x >= 1;
     requires y >= 1;
 */
-int main8(int x,int y){
+void main8(int x,int y){
   
   int a,b,p,q,r,s;
  

@@ -3,7 +3,7 @@
   requires Y > 0;
   requires X >= Y;
 */
-int hoo21(int X,int Y) {
+void hoo21(int X,int Y) {
     
     int v, x, y;
 

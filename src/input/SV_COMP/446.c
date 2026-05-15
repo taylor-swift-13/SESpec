@@ -1,4 +1,4 @@
-int foo446(int n) {
+void foo446(int n) {
 
     int sum = 0;
     int i = 1;

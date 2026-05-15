@@ -1,6 +1,6 @@
 int unknown();
 
-int foo450(int a,int w,int x,int y,int z) {
+void foo450(int a,int w,int x,int y,int z) {
 
     x = w;
     z = y;

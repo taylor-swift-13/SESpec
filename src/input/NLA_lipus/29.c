@@ -3,7 +3,7 @@ requires x >= 0;
 requires y >= 0;
 requires n >= 0;
 */
-int main29(int x,int y,int n) {
+void main29(int x,int y,int n) {
     // variable declarations
 	int z=0;
 	int w=0;

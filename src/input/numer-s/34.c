@@ -3,7 +3,7 @@
   requires a % 2 == 0;
   requires a > 0;
 */
-int hoo34(int a){
+void hoo34(int a){
   // variable declarations
  int x, r;
   //precondition

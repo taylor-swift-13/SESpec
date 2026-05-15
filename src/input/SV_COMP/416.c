@@ -1,4 +1,4 @@
-int foo416(int z,int k){
+void foo416(int z,int k){
 
   int x=1;
   int y=z;

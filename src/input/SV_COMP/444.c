@@ -1,4 +1,4 @@
-int foo444(int a){
+void foo444(int a){
 
  int x, r;
 

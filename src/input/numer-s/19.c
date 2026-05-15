@@ -1,7 +1,7 @@
 //svcomp_Mono4_1
 int unknown();
 
-int hoo19(){
+void hoo19(){
     int x = 0;
     int y = 500000;
 

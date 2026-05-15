@@ -80,6 +80,56 @@ def UNKNOWN_FUNCTION(func_name):
 )
 
 
+# Standard-library / well-known external function names. When the callee
+# extractor encounters one of these, we treat it as an opaque external --
+# its body lives in <stdlib.h>/<string.h>/<assert.h>/etc. and Frama-C will
+# pull its built-in libc contract during verification (cf. -wp-no-callee-precond
+# behaviour in AutoSpec). We skip body extraction to avoid the
+# `Can not Found Function` crash and let the verification pass proceed.
+STDLIB_FUNCTIONS = frozenset({
+    # stdlib.h
+    "malloc", "free", "calloc", "realloc", "abort", "exit", "atexit",
+    "abs", "labs", "atoi", "atol", "atoll", "atof",
+    "rand", "srand", "getenv", "putenv", "qsort", "bsearch",
+    # string.h
+    "memcpy", "memmove", "memset", "memcmp", "memchr",
+    "strcpy", "strncpy", "strcat", "strncat",
+    "strcmp", "strncmp", "strchr", "strrchr", "strstr",
+    "strlen", "strdup", "strndup",
+    # stdio.h (rarely useful but commonly referenced)
+    "printf", "fprintf", "sprintf", "snprintf",
+    "scanf", "fscanf", "sscanf",
+    "fputs", "puts", "fgets", "gets",
+    "fopen", "fclose", "fread", "fwrite",
+    # assert.h
+    "__assert_fail", "__assert", "__assert_perror_fail",
+    # ctype.h
+    "isdigit", "isalpha", "isalnum", "isspace", "isupper", "islower",
+    "toupper", "tolower",
+    # math.h
+    "fabs", "sqrt", "pow", "log", "log2", "log10", "exp", "sin", "cos", "tan",
+    "ceil", "floor", "round",
+    # GCC / clang builtins
+    "__builtin_unreachable", "__builtin_expect", "__builtin_trap",
+    "__builtin_object_size",
+    # SV-COMP nondeterminism (some benchmarks)
+    "__VERIFIER_nondet_int", "__VERIFIER_nondet_uint", "__VERIFIER_nondet_long",
+    "__VERIFIER_nondet_bool", "__VERIFIER_nondet_char", "__VERIFIER_nondet_short",
+    "__VERIFIER_assume", "__VERIFIER_assert", "__VERIFIER_error",
+})
+
+
+def STDLIB_STUB(func_name):
+    """Stub FunctionInfo for a known external/stdlib function (no body, no callees)."""
+    return FunctionInfo(
+        file_path="stdlib",
+        name=func_name,
+        code="",
+        callee_set=set(),
+        func_type="external",
+    )
+
+
 @dataclass
 class DefInfo:
     typedef_list: List[str]

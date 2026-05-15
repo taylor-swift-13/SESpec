@@ -27,12 +27,14 @@ fi
 
 # (label, bench, case, se_flag)
 JOBS=(
-    "motivation0_seon  motivation_example  0  --use-se"
-    "motivation2_seon  motivation_example  2  --use-se"
-    "ligmm1_seon       LIG-MM              1  --use-se"
-    "linear1_seon      linear              1  --use-se"
-    "linear3_seon      linear              3  --use-se"
-    "sespec4_seon      sespec              4  --use-se"
+    "motivation0_seon  motivation_example  0   --use-se"
+    "motivation2_seon  motivation_example  2   --use-se"
+    "ligmm1_seon       LIG-MM              1   --use-se"
+    "linear1_seon      linear              1   --use-se"
+    "linear3_seon      linear              3   --use-se"
+    "sespec4_seon      sespec              4   --use-se"
+    "sygus86_seon      syGus_code2inv      86  --use-se"
+    "sygus88_seon      syGus_code2inv      88  --use-se"
 )
 
 declare -A PIDS=()

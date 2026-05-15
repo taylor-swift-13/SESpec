@@ -1,4 +1,4 @@
-int foo449(int a) {
+void foo449(int a) {
 
     int r, k, q, d, n, t, s;
 

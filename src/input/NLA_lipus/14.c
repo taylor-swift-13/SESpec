@@ -1,7 +1,7 @@
 /*@
 requires a >= 0 && b >= 0;
 */
-int main14(int a,int b){
+void main14(int a,int b){
    
     int x=a;
     int y=b;

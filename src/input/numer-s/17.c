@@ -4,7 +4,7 @@ int unknown();
   requires x < y;
   requires y <= 20000001;
 */
-int hoo17(int x,int y){
+void hoo17(int x,int y){
     
 
     //pre-condition

@@ -1,5 +1,5 @@
 int unknown();
-int foo428(){
+void foo428(){
 
     int x =5;
 

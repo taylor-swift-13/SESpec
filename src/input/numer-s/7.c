@@ -1,5 +1,5 @@
 //svcomp_even
-int hoo7(int a){
+void hoo7(int a){
     
     //pre-condition
     int x = 0;

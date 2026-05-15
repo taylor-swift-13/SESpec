@@ -7,7 +7,7 @@ void arrayDouble(int *a, unsigned int n) {
     } 
 }
 
-int goo19() {
+void goo19() {
     int arr[] = {0,1,2,3,4,5};
     arrayDouble(arr, 6);
     //@ assert arr[0] == 0;

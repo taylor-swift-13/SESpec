@@ -1,6 +1,6 @@
 int unknown();
 
-int foo425(int x,int y){
+void foo425(int x,int y){
 
     while (x < y) {
         if (x < 0){

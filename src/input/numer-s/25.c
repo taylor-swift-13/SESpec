@@ -1,7 +1,7 @@
 /*@
   requires n > 0;
 */
-int hoo25(int n,int a) { 
+void hoo25(int n,int a) { 
     
     int i = 0;
     int sn = 0;

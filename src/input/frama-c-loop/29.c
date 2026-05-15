@@ -9,7 +9,7 @@ int sum(char n) {
     return (int)s;
 }
 
-int goo29() {
+void goo29() {
     int s = sum(5);
     //@ assert s == 15;
 }

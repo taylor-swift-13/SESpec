@@ -1,6 +1,6 @@
 int unknown();
 
-int foo424(){
+void foo424(){
     int x = 0;
     int y = 0;
     int z = 0;

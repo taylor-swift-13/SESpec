@@ -1,4 +1,4 @@
-int foo397(int k){
+void foo397(int k){
 
     int y=0;
     int x=0;

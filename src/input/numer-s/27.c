@@ -2,7 +2,7 @@
   requires x >= 0;
   requires y >= 1;
 */
-int hoo27(int x,int y) {
+void hoo27(int x,int y) {
     int q = 0;
     int a = 0;
     int b = x;

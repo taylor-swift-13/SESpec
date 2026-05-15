@@ -1,6 +1,6 @@
 int unknown();
 
-int foo417(int k){
+void foo417(int k){
     int i = 1;
     int j = 1;
 

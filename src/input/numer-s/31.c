@@ -4,7 +4,7 @@
   requires A <= R*R;
   requires A%2 ==1;
 */
-int hoo31(int A, int R) { 
+void hoo31(int A, int R) { 
     int u,v,r;
   
     //pre-condition

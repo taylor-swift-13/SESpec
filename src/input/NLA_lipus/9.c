@@ -2,7 +2,7 @@
 requires z>=0 && z<=10 && k>0 && k<=10;
 */
 
-int main9(int z,int k){
+void main9(int z,int k){
   
 
   int x=1;

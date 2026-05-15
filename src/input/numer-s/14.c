@@ -4,7 +4,7 @@ int unknown();
   requires k >= 0;
   requires k <= 1;
 */
-int hoo14(int k){
+void hoo14(int k){
     int i = 1;
     int j = 1;
 

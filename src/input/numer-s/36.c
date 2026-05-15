@@ -1,7 +1,7 @@
 /*@
   requires n > 0;
 */
-int hoo36(int n) {
+void hoo36(int n) {
     
     int sum = 0;   
     int i = 1;     

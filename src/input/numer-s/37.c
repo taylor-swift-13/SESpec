@@ -2,7 +2,7 @@
   requires a >= 0;
   requires b >= 0;
 */
-int hoo37(int a, int b) {
+void hoo37(int a, int b) {
     
     int product = 0;  
     int i = 0;        

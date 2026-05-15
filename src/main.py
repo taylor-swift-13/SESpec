@@ -269,8 +269,13 @@ class FunctionProcessor:
         self.logger.info(f'Now processing function {func_name}\n')
         if 'unknown' in func_name:
             return UNKNOWN_FUNCTION(func_name)
-        else:
-            new_func = self._initialize_function(func_name)
+        if func_name in STDLIB_FUNCTIONS:
+            self.logger.info(f"[stdlib stub] Skipping body extraction for '{func_name}' (treated as external; Frama-C uses its built-in libc contract)")
+            return STDLIB_STUB(func_name)
+        new_func = self._initialize_function(func_name)
+        if new_func is None:
+            self.logger.warning(f"[unresolved callee] No body found for '{func_name}' under input root; treating as external opaque function and continuing")
+            return STDLIB_STUB(func_name)
 
         if func_name in self.precond_manager.requires:
             new_func.require = self.precond_manager.requires[func_name]

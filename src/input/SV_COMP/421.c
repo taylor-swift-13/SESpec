@@ -1,6 +1,6 @@
 int unknown();
 
-int foo421(int x){
+void foo421(int x){
 
     while (unknown()) {
         if(x == 1)

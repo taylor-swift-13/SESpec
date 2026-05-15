@@ -1,4 +1,4 @@
-int foo419(int y){
+void foo419(int y){
     int x = 0;
 
     while (x < 99) {

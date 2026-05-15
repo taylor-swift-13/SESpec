@@ -1,6 +1,6 @@
 //svcomp_const
 int unknown();
-int hoo3() {
+void hoo3() {
     //pre-condition
     int s = 0;
 

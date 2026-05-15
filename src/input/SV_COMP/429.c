@@ -1,4 +1,4 @@
-int foo429(int idBitLength,int material_length,int nlen){
+void foo429(int idBitLength,int material_length,int nlen){
     int j = 0;
 
     while((j < idBitLength / 8) && (j < material_length)){

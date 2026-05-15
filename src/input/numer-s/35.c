@@ -1,7 +1,7 @@
 /*@
   requires n > 0;
 */
-int hoo35(int n) {
+void hoo35(int n) {
        
     int guess;      
     int prev_guess; 

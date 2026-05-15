@@ -1,7 +1,7 @@
 /*@
 requires k >= 0 && k <= 30;
 */
-int main16(int k){
+void main16(int k){
    
     int y=0;
     int x=0;

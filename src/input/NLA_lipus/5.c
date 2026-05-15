@@ -1,7 +1,7 @@
 /*@ requires x >= 1;
     requires y >= 1;
 */
-int main5(int x,int y){
+void main5(int x,int y){
   
   int a,b,p,q,r,s;
   int x, y;

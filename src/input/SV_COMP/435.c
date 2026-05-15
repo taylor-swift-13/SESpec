@@ -1,4 +1,4 @@
-int foo435(int a) {
+void foo435(int a) {
 
     int x = a / 2;
     int r = 0;

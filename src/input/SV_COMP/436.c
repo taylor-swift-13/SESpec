@@ -1,4 +1,4 @@
-int foo436(int x,int y) {
+void foo436(int x,int y) {
     int q = 0;
     int a = 0;
     int b = x;

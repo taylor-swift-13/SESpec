@@ -3,7 +3,7 @@ int unknown();
 /*@
   requires x == 1 || x == 2;
 */
-int hoo13(int x){
+void hoo13(int x){
 
     //loop-body
     while (unknown()) {
