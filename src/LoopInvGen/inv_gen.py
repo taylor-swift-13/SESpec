@@ -10,7 +10,7 @@ from config import MainConfig,LLMConfig
 from llm import *
 from convertor import SpecificationConvertor
 from Utils.main_class import FunctionInfo
-from example_retriever import get_examples_for
+from example_retriever import get_examples_for, classify
 from spec_gen import SpecGenerator
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -43,6 +43,21 @@ _VERIFICATION_GUIDE = (
 
 _STRENGTH_GUIDE = '- Generate loop invariants with equality constraints as comprehensively as possible.'
 
+# Trivial-category override. Replaces _PREDICATE_GUIDE for scalar-only
+# programs (no `*` / `/` / `%`), where closed-form invariants are always
+# expressible in plain integer arithmetic on existing variables. Phrased
+# positively — as a *form* constraint — so the prompt carries no
+# `logic` / `predicate` vocabulary at all, instead of telling the LLM
+# "don't use X" (which still names X). Combined with the line-18 scrub
+# below, this leaves the trivial prompt free of any predicate-logic
+# knowledge injection.
+_TRIVIAL_FORM_GUIDE = (
+    '- Express every `loop invariant` clause using ONLY the C variables '
+    'already in scope and integer arithmetic (`+`, `-`, `*`, comparisons, '
+    '`&&`, `||`). The closed-form for this program needs no helper '
+    'definitions of any kind.'
+)
+
 
 class InvGenerator:
     def __init__(self,config:MainConfig,info:FunctionInfo,logger:logging.Logger,llm_config:LLMConfig,spec_gen:SpecGenerator = None):
@@ -59,6 +74,57 @@ class InvGenerator:
 
         self.pass_count = self.config.pass_count
         self.first_pass = None
+
+        # Cache classification once — the source file does not change
+        # during a run, and every prompt builder consults this flag.
+        self._is_trivial = self._classify_source() == 'trivial'
+
+    def _classify_source(self) -> str:
+        try:
+            file_path = getattr(self.info, 'file_path', None)
+            if file_path and os.path.isfile(file_path):
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    return classify(f.read())
+        except OSError:
+            pass
+        return classify(self.info.code or '')
+
+    def _scrub_predicate_logic(self, prompt: str) -> str:
+        """Strip every fragment that teaches or permits introducing top-level
+        `/*@ logic ... */` / `/*@ predicate ... */` blocks from a rendered
+        prompt. Called only when `self._is_trivial`. Targets the loop-gen
+        templates (inv_gen / regen / strength / adjust) — repair templates
+        (error.txt) are left untouched because their cleanup guidance is
+        still correct if a rogue earlier round slipped a helper in.
+        """
+        # inv_gen.txt rule 18: drop the "(b) add new top-level ..." sub-clause
+        # and the back-reference parenthetical pointing at the (now-empty)
+        # predicate_guide section.
+        prompt = re.sub(
+            r', and \(b\) add new top-level `/\*@ predicate [^`]+` or '
+            r'`/\*@ logic [^`]+` blocks BEFORE the function whenever your '
+            r'invariants reference a name not already defined in the file '
+            r'\(see the predicate rule below\)\.',
+            '.',
+            prompt,
+        )
+        prompt = prompt.replace(
+            'You are only allowed to (a) replace the placeholders',
+            'You are only allowed to replace the placeholders',
+        )
+        # regen.txt / strength.txt / adjust.txt rule 4: drop the entire
+        # "Predicate / logic-function definitions: ..." item.
+        prompt = re.sub(
+            r'\n\s*\d+\.\s+Predicate / logic-function definitions:[^\n]*\n?',
+            '\n',
+            prompt,
+        )
+        # Cross-reference "— see rule 4." in those same files' rule 2.
+        prompt = prompt.replace(
+            ' You MAY add new top-level `/*@ ... */` blocks before the function — see rule 4.',
+            '',
+        )
+        return prompt
 
 
     
@@ -722,14 +788,17 @@ class InvGenerator:
         guide (so the LLM still knows to declare any helper it references)."""
         with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
+        predicate_guide = _TRIVIAL_FORM_GUIDE if self._is_trivial else _PREDICATE_GUIDE
         user_prompt = prompt_template.format(
             content=loop_content,
             pre_cond=pre_condition,
             examples=examples,
             strength_guide='',
-            predicate_guide=_PREDICATE_GUIDE,
+            predicate_guide=predicate_guide,
             verification_guide='',
         )
+        if self._is_trivial:
+            user_prompt = self._scrub_predicate_logic(user_prompt)
         self.logger.debug("user_prompt")
         self.logger.debug(user_prompt)
         return user_prompt
@@ -742,14 +811,17 @@ class InvGenerator:
         with open("prompt/loop/inv_gen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
         has_assert = bool(re.search(r'/\*@\s*assert\b', loop_content or ''))
+        predicate_guide = _TRIVIAL_FORM_GUIDE if self._is_trivial else _PREDICATE_GUIDE
         user_prompt = prompt_template.format(
             content=loop_content,
             pre_cond=pre_condition,
             examples=examples,
             strength_guide=_STRENGTH_GUIDE,
-            predicate_guide=_PREDICATE_GUIDE,
+            predicate_guide=predicate_guide,
             verification_guide=(_VERIFICATION_GUIDE if has_assert else ''),
         )
+        if self._is_trivial:
+            user_prompt = self._scrub_predicate_logic(user_prompt)
         self.logger.debug("user_prompt_template")
         self.logger.debug(user_prompt)
         return user_prompt
@@ -817,8 +889,10 @@ class InvGenerator:
 
         # Replace {code} placeholder in template
         adjust_prompt = prompt_template.format(error_str = error_message , c_code= c_code)
+        if self._is_trivial:
+            adjust_prompt = self._scrub_predicate_logic(adjust_prompt)
         return adjust_prompt
-    
+
     def get_regen_prompt(self,error_message, c_code):
          # Read prompt template from file
         with open("prompt/loop/regen.txt", "r", encoding="utf-8") as file:
@@ -826,8 +900,10 @@ class InvGenerator:
 
         # Replace {code} placeholder in template
         regen_prompt = prompt_template.format(error_str = error_message , c_code= c_code)
+        if self._is_trivial:
+            regen_prompt = self._scrub_predicate_logic(regen_prompt)
         return regen_prompt
-    
+
     def get_strength_prompt(self,error_message, c_code):
          # Read prompt template from file
         with open("prompt/loop/strength.txt", "r", encoding="utf-8") as file:
@@ -835,6 +911,8 @@ class InvGenerator:
 
         # Replace {code} placeholder in template
         strength_prompt = prompt_template.format(error_str = error_message , c_code= c_code)
+        if self._is_trivial:
+            strength_prompt = self._scrub_predicate_logic(strength_prompt)
         return strength_prompt
     
     def repair_annotations(self, error_message, c_code):
