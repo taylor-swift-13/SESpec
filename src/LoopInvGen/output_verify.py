@@ -22,6 +22,22 @@ class OutputVerifier:
             print(error[1])  # Print error file location
             print(error[2])  # Print error line content
             print()
+
+    def _log_result_with_failures(self, title, results, error_list):
+        if not (self.config.debug and self.output):
+            return
+        self.logger.info(title)
+        self.logger.info(results)
+        if error_list:
+            self.logger.info(f'{title} failures:')
+            for error in error_list:
+                self.logger.info(error[0].splitlines()[0])
+                if error[1]:
+                    self.logger.info(error[1])
+                if error[2]:
+                    self.logger.info(error[2])
+                self.logger.info('')
+        self.logger.info('')
     
 
     def extract_semantic_error(self,error_message):
@@ -126,10 +142,7 @@ class OutputVerifier:
                     self.valid_error_list.append((valid_error_msg.strip(), error_location_msg, error_content_msg))
 
             if self.config.debug and self.output:
-                self.logger.info('Validate:')
-                self.logger.info(self.validate_result)
-                self.logger.info('')
-                self.print_errors(self.valid_error_list)
+                self._log_result_with_failures('Validate:', self.validate_result, self.valid_error_list)
 
             filter_contents = self.filter_goal_assertion(contents)
             self.verify_result = self.check_verify_target(filter_contents)
@@ -140,10 +153,7 @@ class OutputVerifier:
                     error_location_msg, error_content_msg = self.extract_semantic_error(verify_error_msg)
                     self.verify_error_list.append((verify_error_msg.strip(), error_location_msg, error_content_msg))
             if self.config.debug and self.output:
-                self.logger.info('Verify:')
-                self.logger.info(self.verify_result)
-                self.logger.info('')
-                self.print_errors(self.verify_error_list)
+                self._log_result_with_failures('Verify:', self.verify_result, self.verify_error_list)
 
     
 

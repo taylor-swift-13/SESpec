@@ -30,6 +30,22 @@ class SpecVerifier:
             print(error[1])  # 打印Error文件位置
             print(error[2])  # 打印Error行内容
             print()
+
+    def _log_result_with_failures(self, title, results, error_list):
+        if not self.logger:
+            return
+        self.logger.info(title)
+        self.logger.info(results)
+        if error_list:
+            self.logger.info(f'{title} failures:')
+            for error in error_list:
+                self.logger.info(error[0].splitlines()[0])
+                if error[1]:
+                    self.logger.info(error[1])
+                if error[2]:
+                    self.logger.info(error[2])
+                self.logger.info('')
+        self.logger.info('')
     
     def log_errors(self):
         # 创建一个字符串来存储日志内容
@@ -256,9 +272,7 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                     self.loop_error_list.append((loop_error_msg.strip(), error_location_msg, error_content_msg))
             
             if self.logger:
-                self.logger.info('Loop Invariant:')
-                self.logger.info(self.loop_result)
-                self.logger.info('')
+                self._log_result_with_failures('Loop Invariant:', self.loop_result, self.loop_error_list)
             else:
                 print('Loop Invariant:')
                 print(self.loop_result)
@@ -275,9 +289,7 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                     self.assert_error_list.append((assert_error_msg.strip(),error_location_msg, error_content_msg))
 
             if self.logger:
-                self.logger.info('Assertion:')
-                self.logger.info(self.assert_result)
-                self.logger.info('')
+                self._log_result_with_failures('Assertion:', self.assert_result, self.assert_error_list)
             else:
                 print('Assertion:')
                 print(self.assert_result)
@@ -299,9 +311,7 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                     self.assigns_error_list.append((assigns_error_msg.strip(), error_location_msg, error_content_msg))
 
             if self.logger:
-                self.logger.info('Assigns:')
-                self.logger.info(self.assigns_result)
-                self.logger.info('')
+                self._log_result_with_failures('Assigns:', self.assigns_result, self.assigns_error_list)
             else:
                 print('Assigns:')
                 print(self.assigns_result)
@@ -317,9 +327,7 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                     self.post_error_list.append((post_error_msg.strip(),error_location_msg, error_content_msg))
             
             if self.logger:
-                self.logger.info('Post Condition:')
-                self.logger.info(self.post_result)
-                self.logger.info('')
+                self._log_result_with_failures('Post Condition:', self.post_result, self.post_error_list)
             else:
                 print('Post Condition:')
                 print(self.post_result)
@@ -335,19 +343,15 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                     error_location_msg, error_content_msg = self.extract_semantic_error(instance_error_msg)
                     self.instance_error_list.append((instance_error_msg.strip(),error_location_msg, error_content_msg))
             
-            if self.instance_result:
-                if self.logger:
-                    self.logger.info('Instance:')
-                    self.logger.info(self.instance_result)
-                    self.logger.info('')
-                else:
-                    print('Instance:')
-                    print(self.instance_result)
-                    print('')
+            if self.logger:
+                self._log_result_with_failures('Instance:', self.instance_result, self.instance_error_list)
+            elif self.instance_result:
+                print('Instance:')
+                print(self.instance_result)
+                print('')
 
 
 
 
 
     
-
