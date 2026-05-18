@@ -35,6 +35,8 @@ JOBS=(
     "sespec4_seon      sespec              4   --use-se"
     "sygus86_seon      syGus_code2inv      86  --use-se"
     "sygus88_seon      syGus_code2inv      88  --use-se"
+    "svcomp119_seon    SV_COMP             119 --use-se"
+    "svcomp358_seon    SV_COMP             358 --use-se"
 )
 
 declare -A PIDS=()

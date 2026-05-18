@@ -5,6 +5,7 @@ from Utils.main_class import *
 from Utils.utils import extract_function
 from convertor import SpecificationConvertor
 from specification_verify import SpecVerifier
+from LoopInvGen.acsl_fixer import ACSLFixer
 from config import *
 from llm import *
 from pre_cond_manager import PreconditionsManager
@@ -1375,8 +1376,8 @@ class SpecGenerator:
         # rounds, we rollback file to best + truncate chat history to the
         # snapshot at best time, then continue. The loop ends with one Houdini
         # call to drop any still-failing clauses (gated on `not jump_flag`).
-        refine_count = max(0, getattr(self.config, 'refine_count', 9))
-        rollback_patience = max(1, getattr(self.config, 'rollback_patience', 1))
+        refine_count = max(0, getattr(self.config, 'refine_count', 10))
+        rollback_patience = max(1, getattr(self.config, 'rollback_patience', 2))
         best_msg_count = self.llm.snapshot_history()
         no_improve_rounds = 0
 
@@ -1802,6 +1803,37 @@ class SpecGenerator:
         will use the LLM output verbatim if the target signature is found
         in it; otherwise it falls back to ``_merge_target_only``.
         """
+        # Deterministic pre-pass mirroring inv_gen.repair(): handle the
+        # recurring patterns the LLM is bad at (PLACE_HOLDER leaks, empty
+        # `/*@ */` blocks, duplicate top-level defs, `\result` in a
+        # predicate body, `\nothing` mixed with real locations, status
+        # brackets, const/rparen drops, unbound names) without paying for
+        # an LLM round-trip. Falls through to the LLM if any residual
+        # syntax error remains after re-verification.
+        fixer = ACSLFixer(logger=self.logger)
+        report = fixer.fix(c_code, error_message)
+        if report.fixes_applied:
+            for msg in report.fixes_applied:
+                self.logger.info(f'[acsl-fixer] {msg}')
+            c_code = report.annotations
+            self.create_c_file(self.output_path, f'{self.function_info.name}.c', c_code)
+
+            verifier = SpecVerifier(self.config, self.logger)
+            verifier.run(self.function_info.name)
+            if verifier.syntax_error == '':
+                self.logger.info(
+                    '[acsl-fixer] deterministic pass cleared syntax; '
+                    'skipping LLM repair'
+                )
+                return c_code
+            error_message = verifier.syntax_error
+            self.logger.info(
+                '[acsl-fixer] residual syntax error remains; '
+                'falling through to LLM repair'
+            )
+        else:
+            self.logger.info('[acsl-fixer] no deterministic fix applicable')
+
         with open("prompt/error.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
 

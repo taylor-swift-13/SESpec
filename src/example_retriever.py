@@ -156,7 +156,13 @@ def get_examples_for(source: str) -> Tuple[str, str]:
     slot substitutes to nothing.
     """
     category = classify(source)
-    if category == "trivial":
+    # trivial = scalar-only, no `*`/`/`/`%`. Straight-line trivial code has
+    # nothing to gain from numeric examples and we want the prompt clean.
+    # BUT trivial programs that contain a loop (e.g. `x = x + y; y = y + 1;`)
+    # do benefit from the polynomial-invariant patterns in examples/trivial/
+    # (countdown_sum.c, triangle_sum.c) — without them the LLM has zero
+    # guidance for the post-loop assert.
+    if category == "trivial" and not re.search(r"\b(while|for|do)\b", source or ""):
         return category, ""
     files = load_category(category)
     contents = "\n\n".join(files) if files else "(no examples available)"

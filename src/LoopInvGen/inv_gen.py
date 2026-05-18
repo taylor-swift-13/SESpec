@@ -1551,7 +1551,7 @@ class InvGenerator:
                     # chat history to the snapshot at best time, then
                     # continue. The loop ends with one Houdini call to drop
                     # any still-failing invariants.
-                    refine_count = max(0, getattr(self.config, 'refine_count', 9))
+                    refine_count = max(0, getattr(self.config, 'refine_count', 10))
                     best_msg_count = self.llm.snapshot_history()
                     regression_count = 0
 
@@ -1787,7 +1787,6 @@ class InvGenerator:
 # if __name__ == "__main__":
 #     generator = InvGenerator()
 #     generator.run()
-
 
 
 
