@@ -45,6 +45,7 @@ class ConfigLoader:
         config.recursive_loop = main_config.get('recursive_loop', config.recursive_loop)
         config.auto_annotation = main_config.get('auto_annotation', config.auto_annotation)
         config.refine_count = main_config.get('refine_count', config.refine_count)
+        config.rollback_patience = main_config.get('rollback_patience', config.rollback_patience)
         config.pass_count = main_config.get('pass_count', config.pass_count)
         config.think = main_config.get('think', config.think)
         config.use_se = main_config.get('use_se', config.use_se)

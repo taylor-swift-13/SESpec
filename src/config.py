@@ -32,11 +32,13 @@ class MainConfig:
     auto_annotation:bool = True
 
     # Ablation study parameters
-    # Single flat refine loop with regression rollback. On 2 consecutive
-    # iters where cur_key < best_key, rollback file to best + truncate chat
+    # Single flat refine loop with rollback patience. If the current
+    # candidate fails to improve the best snapshot for rollback_patience
+    # consecutive refine rounds, rollback file to best + truncate chat
     # history to the snapshot at the time best was set, then continue. The
     # phase ends with one Houdini call to drop any still-failing clauses.
     refine_count:int = 9        # max LLM refine iters per phase
+    rollback_patience:int = 1   # consecutive non-improving rounds before rollback
     pass_count:int = 5
     think:bool = True
     use_se:bool = True  # False forces LLM for all postcondition generation; also disables structural loop-invariant template

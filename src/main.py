@@ -79,7 +79,9 @@ def run_from_config(config_path: str, function_name: str = None, root_dir: str =
         print("✅ Generation completed!")
         
     except Exception as e:
+        import traceback
         print(f"❌ Run failed: {e}")
+        traceback.print_exc()
         sys.exit(1)
 
 

@@ -456,14 +456,16 @@ class SpecificationConvertor:
                 # 是一个指针,非结构体,数组参数
                 if parameter.is_ptr and not parameter.is_struct and parameter.array_length != -1:
                     #分别添加数组的数组符号,地址,长度
-                    next_parameter = parameter_list[parameter_list.index(parameter) + 1]
-
-                    require_list.append(rf'\valid({syntax_str}{parameter.name}+(0..{next_parameter}))')
-                    ptr_list.append(f'{syntax_str}{parameter.name}+(0..{next_parameter})')
-                    
-                    if parameter.array_length == 'INT_MAX':
-                        
-                        require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
+                    idx = parameter_list.index(parameter)
+                    if idx + 1 < len(parameter_list):
+                        next_parameter = parameter_list[idx + 1]
+                        require_list.append(rf'\valid({syntax_str}{parameter.name}+(0..{next_parameter}))')
+                        ptr_list.append(f'{syntax_str}{parameter.name}+(0..{next_parameter})')
+                        if parameter.array_length == 'INT_MAX':
+                            require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
+                    else:
+                        require_list.append(rf'\valid({syntax_str}{parameter.name}+(0..100))')
+                        ptr_list.append(f'{syntax_str}{parameter.name}+(0..100)')
 
                     continue
 
@@ -559,11 +561,14 @@ class SpecificationConvertor:
                 if parameter.is_ptr and not parameter.is_struct and parameter.array_length != -1:
                     #分别添加数组的数组符号,地址,长度
                     if parameter.array_length == 'INT_MAX':
-                        next_parameter = parameter_list[parameter_list.index(parameter) + 1]
-                        require_list.extend([f'store_int_array({syntax_str}{parameter.name}, {next_parameter.name}, {value_str}{parameter.name}_l)',
-                                            ])
+                        idx = parameter_list.index(parameter)
                         exists_list.append(f'{value_str}{parameter.name}_l')
-                        require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
+                        if idx + 1 < len(parameter_list):
+                            next_parameter = parameter_list[idx + 1]
+                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, {next_parameter.name}, {value_str}{parameter.name}_l)')
+                            require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
+                        else:
+                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, 100, {value_str}{parameter.name}_l)')
                     else:
                         require_list.extend([f'store_int_array({syntax_str}{parameter.name},{value_str}{parameter.array_length}, {value_str}{parameter.name}_l)',
                                             ])
@@ -675,7 +680,7 @@ class SpecificationConvertor:
                     vars_map.append((rf'\old({syntax_str}{parameter.name})',f'old_{value_str}{parameter.name}'))
                    
                     if parameter.array_length != 'INT_MAX':
-                        for i in range(parameter.array_length):
+                        for i in range(parameter.array_length if isinstance(parameter.array_length, int) else 100):
                             vars_map.append((rf'\old({syntax_str}{parameter.name}[{i}])',f'old_{value_str}{parameter.name}_{i}'))
                             vars_map.append((rf'{syntax_str}{parameter.name}[{i}]',f'{value_str}{parameter.name}_{i}'))
                     else:
@@ -714,7 +719,7 @@ class SpecificationConvertor:
                     vars_map.append((rf'\old({syntax_str}{parameter.name})',f'old_{value_str}{parameter.name}'))
                   
                     
-                    for i in range(parameter.array_length):
+                    for i in range(parameter.array_length if isinstance(parameter.array_length, int) else 100):
                         vars_map.append((rf'\old({syntax_str}{parameter.name}[{i}])',f'old_{value_str}{parameter.name}_{i}'))
                         vars_map.append((f'{syntax_str}{parameter.name}[{i}]',f'{value_str}{parameter.name}_{i}'))
                     
@@ -803,7 +808,7 @@ class SpecificationConvertor:
 
                    
                     if parameter.array_length != 'INT_MAX':
-                        for i in range(parameter.array_length):
+                        for i in range(parameter.array_length if isinstance(parameter.array_length, int) else 100):
                             vars_list.append((f'{value_str}{parameter.name}_{i}','100',rf'\\old({syntax_str}{parameter.name}[{i}])'))
 
                           
@@ -833,7 +838,8 @@ class SpecificationConvertor:
                 if not parameter.is_ptr and not parameter.is_struct and parameter.array_length != -1:
                     vars_list.append((f'{value_str}{parameter.name}','001',f'{syntax_str}{parameter.name}'))
 
-                    for i in range(parameter.array_length):
+                    length = parameter.array_length if isinstance(parameter.array_length, int) else 100
+                    for i in range(length):
                         vars_list.append((f'{value_str}{parameter.name}_{i}','100',rf'\\old({syntax_str}{parameter.name}[{i}])'))
 
                     continue
@@ -917,7 +923,7 @@ class SpecificationConvertor:
 
                    
                     if parameter.array_length != 'INT_MAX':
-                        for i in range(parameter.array_length):
+                        for i in range(parameter.array_length if isinstance(parameter.array_length, int) else 100):
                             vars_list.append((f'{value_str}{parameter.name}_{i}','100',rf'\\at({syntax_str}{parameter.name}[{i}],Pre)'))
 
                           
@@ -947,7 +953,7 @@ class SpecificationConvertor:
                 if not parameter.is_ptr and not parameter.is_struct and parameter.array_length != -1:
                     vars_list.append((f'{value_str}{parameter.name}','001',f'{syntax_str}{parameter.name}'))
 
-                    for i in range(parameter.array_length):
+                    for i in range(parameter.array_length if isinstance(parameter.array_length, int) else 100):
                         vars_list.append((f'{value_str}{parameter.name}_{i}','100',rf'\\at({syntax_str}{parameter.name}[{i}],Pre)'))
 
                     continue
@@ -1000,10 +1006,13 @@ class SpecificationConvertor:
 
 
         index = annotations.find("*/")
-        if index != -1:
-            before = annotations[:index + 2] 
-            after = annotations[index + 2:]
-        
+        if index == -1:
+            # Malformed / empty annotations (e.g. LLM returned nothing
+            # after an API connection error). Nothing to convert.
+            return annotations
+        before = annotations[:index + 2]
+        after = annotations[index + 2:]
+
         def replace_at(match):
             variable = match.group(1).strip()
             return f"{variable}@pre"

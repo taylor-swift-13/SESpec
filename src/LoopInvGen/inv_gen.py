@@ -637,7 +637,41 @@ class InvGenerator:
         return parser.parse_args()
     
     def repair(self,syntax_error,annotations,output_c_file_path):
-        annotations = self.repair_annotations(syntax_error,annotations)  
+        # Deterministic pre-pass: handle the recurring patterns the LLM
+        # repair loop is bad at (PLACE_HOLDER leaks, empty `/*@ */`
+        # blocks, duplicate top-level defs, \result in a predicate body,
+        # `\nothing` mixed with real locations, ...) without paying for
+        # an LLM round-trip. Falls through to the LLM if any residual
+        # error remains after re-verification.
+        from .acsl_fixer import ACSLFixer
+        fixer = ACSLFixer(logger=self.logger)
+        report = fixer.fix(annotations, syntax_error)
+
+        if report.fixes_applied:
+            for msg in report.fixes_applied:
+                self.logger.info(f'[acsl-fixer] {msg}')
+            annotations = report.annotations
+            with open(output_c_file_path, 'w', encoding='utf-8') as f:
+                f.write(annotations)
+
+            verifier = OutputVerifier(self.config, self.logger)
+            file_name = os.path.splitext(os.path.basename(output_c_file_path))[0]
+            verifier.run(file_name)
+            if verifier.syntax_error == '':
+                self.logger.info(
+                    '[acsl-fixer] deterministic pass cleared syntax; '
+                    'skipping LLM repair'
+                )
+                return annotations
+            syntax_error = verifier.syntax_error
+            self.logger.info(
+                '[acsl-fixer] residual syntax error remains; '
+                'falling through to LLM repair'
+            )
+        else:
+            self.logger.info('[acsl-fixer] no deterministic fix applicable')
+
+        annotations = self.repair_annotations(syntax_error,annotations)
 
         if self.config.debug:
             self.logger.info("after repair")
@@ -1435,61 +1469,6 @@ class InvGenerator:
 
 
 
-            # Per-slot LLM fill: simple slot uses sim-gen prompt (free-form);
-            # SE slot uses the templated prompt with category examples.
-            examples = None
-            for i, slot_kind in enumerate(slot_kinds):
-                if 'simple' in slot_kind:
-                    self.logger.debug(f"handle simple loop (slot {i+1})")
-                    user_prompt = self.get_simgen_prompt(annotations_list[i])
-                else:
-                    if examples is None:
-                        examples = (
-                            self.get_examples(loop_content)
-                            if getattr(self.config, 'use_examples', True)
-                            else ''
-                        )
-                    user_prompt = self.get_user_prompt_template(
-                        annotations_list[i], pre_condition, examples
-                    )
-                annotations_list[i] = self.get_annotations(user_prompt)
-
-
-
-
-            for annotations in annotations_list:
-            
-                annotations = annotations.replace(tag,'')
-
-                for var_map, path_cond in zip(var_maps, path_conds):  
-                    
-                    if path_cond != None:
-                        path_cond =self.convertor.filter_condition(path_cond)
-                    
-
-                
-                    for var in var_map.keys():
-                        replacement = self.convertor.filter_condition(var_map[var])
-
-                        if path_cond == None:
-                            annotations = annotations.replace(f'\\at({var},Pre)',replacement)
-
-                        else:
-                            annos = annotations.split(';')
-                            nannos = []
-
-                            for anno in annos:
-                                if path_cond in anno:
-                                    anno = anno.replace(f'\\at({var},Pre)',replacement)
-                                    nannos.append(anno)
-                                else:
-                                    nannos.append(anno)
-
-
-                            annotations = ';'.join(nannos)
-
-
-
             # Skip the legacy rotation/trim in multi-slot mode — we want
             # `annotations_list` in the desired sequence [SE+goal, SE, simple]
             # already, so the highest-priority candidate runs first and
@@ -1501,8 +1480,28 @@ class InvGenerator:
 
             correct_flag = False
             loop_invariant = ''
+            # Lazy per-slot LLM fill: only call the LLM for slot N when the
+            # main loop actually reaches it. Earlier slots may have
+            # succeeded and broken out, so we avoid burning tokens on
+            # fallback slots that never run.
+            examples = None
 
-            for annotations in annotations_list:
+            for i, (annotations, slot_kind) in enumerate(zip(annotations_list, slot_kinds)):
+
+                if 'simple' in slot_kind:
+                    self.logger.debug(f"handle simple loop (slot {i+1})")
+                    user_prompt = self.get_simgen_prompt(annotations)
+                else:
+                    if examples is None:
+                        examples = (
+                            self.get_examples(loop_content)
+                            if getattr(self.config, 'use_examples', True)
+                            else ''
+                        )
+                    user_prompt = self.get_user_prompt_template(
+                        annotations, pre_condition, examples
+                    )
+                annotations = self.get_annotations(user_prompt)
 
                 if self.config.debug:
                     self.logger.info("candidated loop invariant")

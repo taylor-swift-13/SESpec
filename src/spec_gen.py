@@ -130,14 +130,16 @@ class SpecGenerator:
                     # Add array symbol, address, and length separately
                     if parameter.array_length == 'INT_MAX':
 
-                        next_parameter = parameter_list[parameter_list.index(parameter) + 1]
-
+                        idx = parameter_list.index(parameter)
                         with_list.append(f'{value_str}{parameter.name}_l')
-                        require_list.append (f'store_int_array({syntax_str}{parameter.name}, {next_parameter.name}, {value_str}{parameter.name}_l)'
-                                            )
-                    
-                        require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
-                        
+                        if idx + 1 < len(parameter_list):
+                            next_parameter = parameter_list[idx + 1]
+                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, {next_parameter.name}, {value_str}{parameter.name}_l)')
+                            require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
+                        else:
+                            # No following length parameter (e.g. nul-terminated string); fall back to a fixed length cap of 100.
+                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, 100, {value_str}{parameter.name}_l)')
+
                     else:
                         with_list.append(f'{value_str}{parameter.name}_l')
                         require_list.append(f'store_int_array({syntax_str}{parameter.name},{value_str}{parameter.array_length}, {value_str}{parameter.name}_l)')
@@ -178,13 +180,15 @@ class SpecGenerator:
                     
                     if parameter.array_length == 'INT_MAX':
 
-                        next_parameter = parameter_list[parameter_list.index(parameter) + 1]
-
+                        idx = parameter_list.index(parameter)
                         with_list.append(f'{value_str}{parameter.name}_l')
-                        require_list.append (f'store_int_array({syntax_str}{parameter.name}, {next_parameter.name}, {value_str}{parameter.name}_l)'
-                                            )
-                        require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
-                        
+                        if idx + 1 < len(parameter_list):
+                            next_parameter = parameter_list[idx + 1]
+                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, {next_parameter.name}, {value_str}{parameter.name}_l)')
+                            require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
+                        else:
+                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, 100, {value_str}{parameter.name}_l)')
+
                     else:
                         with_list.append(f'{value_str}{parameter.name}_l')
                         require_list.append(f'store_int_array({syntax_str}{parameter.name},{parameter.array_length}, {value_str}{parameter.name}_l)')
@@ -357,7 +361,8 @@ class SpecGenerator:
         input_path = f"{self.function_info.file_path}"
         
         # Extract function code
-        code = extract_function(input_path, self.function_info)[0][2]
+        _extracted = extract_function(input_path, self.function_info)
+        code = _extracted[0][2] if _extracted else self.function_info.code
 
         if require_str:
             template = f'''/*@
@@ -402,11 +407,8 @@ class SpecGenerator:
                     # Extract new function
             
                     file_path = f"{self.annotated_loop_c_file_path}/{callee_name}.c"
-                    #function_info.code = extract_function(file_path,callee_name)[0][2]
-                    #code = function_info.code 
-                    # print(function_info)
-                    # print(extract_function(file_path,function_info))
-                    code = extract_function(file_path,function_info)[0][2]
+                    _extracted = extract_function(file_path,function_info)
+                    code = _extracted[0][2] if _extracted else function_info.code
 
                 
 
@@ -602,7 +604,8 @@ class SpecGenerator:
             
                     file_path = f"{self.generated_loop_c_file_path}/{callee_name}.c"
 
-                    code = extract_function(file_path,function_info)[0][2]
+                    _extracted = extract_function(file_path,function_info)
+                    code = _extracted[0][2] if _extracted else function_info.code
 
                 
 
@@ -1334,7 +1337,7 @@ class SpecGenerator:
         # Track the best candidate seen across refine iterations so a later
         # LLM call that makes things worse cannot overwrite the best output.
         # Sort key:
-        #   (1) score = (syntax_ok, valid_ratio, satisfy_ratio)
+        #   (1) score = (syntax_ok, satisfy_ratio, valid_ratio)
         #   (2) clause_count of the target function's contract — same-score
         #       candidates with more ensures/requires/assigns/loop invariant
         #       lines win, so we don't drop a richer spec for a poorer one
@@ -1359,7 +1362,7 @@ class SpecGenerator:
             valid_ratio = (sum(1 for x in total_v if x) / len(total_v)) if total_v else 0.0
             # satisfy bucket = real `assert` proof obligations only.
             satisfy_ratio = (sum(1 for x in asrt if x) / len(asrt)) if asrt else 0.0
-            return syntax_ok, valid_ratio, satisfy_ratio
+            return syntax_ok, satisfy_ratio, valid_ratio
 
         def _count_target_clauses(text):
             # Only count clauses inside the TARGET function's own contract;
@@ -1367,14 +1370,15 @@ class SpecGenerator:
             _, contract, _, _ = self._find_function_block(text or '', self.function_info.name)
             return len(re.findall(r'\b(ensures|requires|assigns|loop\s+invariant)\b', contract))
 
-        # Single flat refine loop with regression rollback. On 2 consecutive
-        # iters where cur_key < best_key, rollback file to best + truncate
-        # chat history to the snapshot at best time, then continue. The
-        # loop ends with one Houdini call to drop any still-failing clauses
-        # (gated on `not jump_flag`).
+        # Single flat refine loop with rollback patience. Once the current
+        # candidate fails to improve the best snapshot for enough consecutive
+        # rounds, we rollback file to best + truncate chat history to the
+        # snapshot at best time, then continue. The loop ends with one Houdini
+        # call to drop any still-failing clauses (gated on `not jump_flag`).
         refine_count = max(0, getattr(self.config, 'refine_count', 9))
+        rollback_patience = max(1, getattr(self.config, 'rollback_patience', 1))
         best_msg_count = self.llm.snapshot_history()
-        regression_count = 0
+        no_improve_rounds = 0
 
         for t in range(refine_count):
             verifier = SpecVerifier(self.config, self.logger)
@@ -1397,40 +1401,36 @@ class SpecGenerator:
             cur_key = (score, clause_count)
             self.logger.info(
                 f'[spec-gen] refine {t+1}/{refine_count} '
-                f'score=(syntax={score[0]}, valid={score[1]:.2f}, '
-                f'satisfy={score[2]:.2f}) clauses={clause_count}'
+                f'score=(syntax={score[0]}, satisfy={score[1]:.2f}, '
+                f'valid={score[2]:.2f}) clauses={clause_count}'
             )
-            # Strict > = real progress; tie or worse counts as regression
-            # (in-place stalling burns budget too).
             if cur_key > best_key:
                 best_content = content
                 best_key = cur_key
                 best_msg_count = self.llm.snapshot_history()
-                regression_count = 0
+                no_improve_rounds = 0
             else:
-                regression_count += 1
+                no_improve_rounds += 1
 
             if syntax and valid and satisfy:
                 self.logger.info(f'[spec-gen] converged at refine {t+1}')
                 correct_flag = True
                 break
 
-            # Regression rollback+prune: 2 consecutive iters without
-            # strict improvement (same or lower than best) → restore file
-            # to best AND truncate chat history to the snapshot at best
-            # time. Pruning the bad / stalled refine exchanges lets the
-            # next call explore differently from the same clean slate.
-            if regression_count >= 2:
+            # Rollback after rollback_patience consecutive non-improving
+            # rounds. This covers strict regressions and ties alike.
+            if no_improve_rounds >= rollback_patience:
                 self.logger.info(
-                    f'[spec-gen] regression '
-                    f'(2 consecutive iters cur_key<=best_key); '
+                    f'[spec-gen] rollback '
+                    f'(no_improve_rounds={no_improve_rounds}, '
+                    f'patience={rollback_patience}); '
                     f'rollback file + prune messages to best snapshot '
                     f'(msgs={best_msg_count})'
                 )
                 content = best_content
                 self.create_c_file(self.output_path, f'{self.function_info.name}.c', content)
                 self.llm.truncate_history(best_msg_count)
-                regression_count = 0
+                no_improve_rounds = 0
                 continue
 
             # Use CURRENT verifier state for refine feedback so the model's
@@ -1682,8 +1682,9 @@ class SpecGenerator:
         function_header = self.function_info.code.split('{')[0]
             
         file_path = f"{self.annotated_loop_c_file_path}/{self.function_info.name}.c"
-                    
-        code = extract_function(file_path,self.function_info)[0][2]
+
+        _extracted = extract_function(file_path,self.function_info)
+        code = _extracted[0][2] if _extracted else self.function_info.code
 
         groups = code.split('{')
 
@@ -1745,7 +1746,8 @@ class SpecGenerator:
                     + self.function_info.specification[idx:]
                 )
 
-        code = extract_function(file_path,self.function_info)[0][2]
+        _extracted = extract_function(file_path,self.function_info)
+        code = _extracted[0][2] if _extracted else self.function_info.code
 
         groups = code.split('{')
 
