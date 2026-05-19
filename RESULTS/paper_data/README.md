@@ -65,7 +65,7 @@ The main aggregate script also writes only the first table block of `large_exper
 | Strength table per-model verdicts vs SpecGen | `judge/vs_specgen/<model>.csv` |
 | Strength table aggregate rows | `judge/vs_<baseline>/summary.csv` |
 | Case 7 listings (Fig 12–14) | `case_studies/case7_search/{search_source.c, search_sespec_output.c}` |
-| Case 7 run log (10 API calls, 76k tokens, 417s) | `case_studies/case7_search/run.log` |
+| Case 7 run log (8 API calls, 39k tokens, 294s) | `case_studies/case7_search/run.log` |
 | Sec V RQ1–RQ4 tables (SyGuS, OOPSLA, NLA, numer-S, Frama-C, pIp, list-S) | sibling `RESULTS/SESpec/`, `RESULTS/AutoSpec/` |
 | Sec V-D masking experiment (mask plot) | sibling `RESULTS/mask/` |
 | Ablation runs | sibling `RESULTS/ablation/` |
