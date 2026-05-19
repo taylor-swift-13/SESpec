@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import openai
 import re
 from Utils.main_class import *
@@ -459,8 +461,8 @@ class SpecificationConvertor:
                     idx = parameter_list.index(parameter)
                     if idx + 1 < len(parameter_list):
                         next_parameter = parameter_list[idx + 1]
-                        require_list.append(rf'\valid({syntax_str}{parameter.name}+(0..{next_parameter}))')
-                        ptr_list.append(f'{syntax_str}{parameter.name}+(0..{next_parameter})')
+                        require_list.append(rf'\valid({syntax_str}{parameter.name}+(0..{next_parameter.name} - 1))')
+                        ptr_list.append(f'{syntax_str}{parameter.name}+(0..{next_parameter.name} - 1)')
                         if parameter.array_length == 'INT_MAX':
                             require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
                     else:
@@ -977,7 +979,104 @@ class SpecificationConvertor:
         
         return parse_parameters_assertion(self.function_info.parameter_list,vars_list, syntax_str ,value_str) 
 
+    @staticmethod
+    def _split_acsl_params(params: str) -> list[str]:
+        params = params.strip()
+        if not params or params == "void":
+            return []
 
+        out = []
+        depth = 0
+        start = 0
+        for i, ch in enumerate(params):
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth = max(0, depth - 1)
+            elif ch == "," and depth == 0:
+                part = params[start:i].strip()
+                if part:
+                    out.append(part)
+                start = i + 1
+        tail = params[start:].strip()
+        if tail:
+            out.append(tail)
+        return out
+
+    @staticmethod
+    def _qcp_return_type(kind: str, return_type: str | None) -> str:
+        if kind == "predicate":
+            return "Prop"
+        ret = (return_type or "").strip().lower()
+        if ret == "boolean":
+            return "Prop"
+        return "Z"
+
+    @classmethod
+    def _qcp_extern_from_acsl_signature(
+        cls,
+        kind: str,
+        return_type: str | None,
+        name: str,
+        params: str,
+    ) -> str:
+        arg_count = len(cls._split_acsl_params(params))
+        ret_type = cls._qcp_return_type(kind, return_type)
+        type_expr = " -> ".join(["Z"] * arg_count + [ret_type]) if arg_count else ret_type
+        return f"/*@ Extern Coq ({name} : {type_expr}) */"
+
+    @classmethod
+    def acsl_helpers_to_qcp_externs(cls, acsl_code: str) -> list[str]:
+        """Infer QCP extern declarations for ACSL predicate/logic helpers."""
+        decls = []
+        seen = set()
+
+        def add(decl: str) -> None:
+            decl = re.sub(r"\s+", " ", decl.strip())
+            if decl and decl not in seen:
+                seen.add(decl)
+                decls.append(decl)
+
+        annotation_text = "\n".join(
+            block.group(1)
+            for block in re.finditer(r"/\*@([\s\S]*?)\*/", acsl_code or "")
+        )
+        signature_re = re.compile(
+            r"\b(?:(predicate)|logic\s+(integer|int|boolean))\s+"
+            r"([A-Za-z_][A-Za-z0-9_]*)"
+            r"(?:\s*\{[^}]*\})?\s*"
+            r"\(([^)]*)\)\s*=",
+            re.MULTILINE,
+        )
+        for match in signature_re.finditer(annotation_text):
+            if match.group(1):
+                kind = "predicate"
+                return_type = None
+            else:
+                kind = "logic"
+                return_type = match.group(2)
+            add(cls._qcp_extern_from_acsl_signature(kind, return_type, match.group(3), match.group(4)))
+
+        return decls
+
+    @staticmethod
+    def insert_qcp_externs(qcp_code: str, decls: list[str]) -> str:
+        missing = [decl for decl in decls if decl and decl not in qcp_code]
+        if not missing:
+            return qcp_code
+
+        insert_text = "\n".join(missing) + "\n\n"
+        matches = list(re.finditer(r"/\*@\s*(?:Extern|Import)\s+Coq[\s\S]*?\*/\s*", qcp_code))
+        if matches:
+            pos = matches[-1].end()
+            return qcp_code[:pos] + insert_text + qcp_code[pos:]
+
+        include_matches = list(re.finditer(r"^\s*#\s*include\s+\"[^\"]+\"\s*$", qcp_code, flags=re.MULTILINE))
+        if include_matches:
+            pos = include_matches[-1].end()
+            return qcp_code[:pos] + "\n\n" + insert_text + qcp_code[pos:]
+
+        return insert_text + qcp_code
 
 
     def convert_annotations(self, annotations):
@@ -1013,39 +1112,147 @@ class SpecificationConvertor:
         before = annotations[:index + 2]
         after = annotations[index + 2:]
 
-        def replace_at(match):
-            variable = match.group(1).strip()
-            return f"{variable}@pre"
-        
-        def replace_forall(match):
-            variable = match.group(1).strip()
-            return f"forall ({variable}:Z),"
-    
-        def replace_exists(match):
-            variable = match.group(1).strip()
-            return f"exists ({variable}:Z),"
+        def strip_comments(text: str) -> str:
+            text = re.sub(r"/\*[^@][\s\S]*?\*/", "", text)
+            text = re.sub(r"//.*", "", text)
+            return text
 
+        def clause_is_complete(text: str) -> bool:
+            stripped = text.strip()
+            if not stripped.endswith(";"):
+                return False
+            body = stripped[:-1].strip()
+            quantifier_only = re.fullmatch(
+                r"\\(?:forall|exists)\s+(?:int|integer)\s+[^;]+",
+                body,
+            )
+            return quantifier_only is None
 
-        parts = before.strip()[3:-2].split('loop invariant')
+        def extract_loop_invariants(block: str) -> list[str]:
+            content = block.strip()
+            if content.startswith("/*@"):
+                content = content[3:]
+            if content.endswith("*/"):
+                content = content[:-2]
+            content = strip_comments(content)
 
-        invariants = [f'({part.strip()})' for part in parts if part.strip()]
-        invariant = ' &&\n'.join(invariants)
-        invariant = re.sub(r'\\forall\s+(?:int|integer)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;' , replace_forall, invariant)
-        invariant = re.sub(r'\\exists\s+(?:int|integer)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;' , replace_exists, invariant)
-        invariant = re.sub(r'\\at\(\s*([a-zA-Z0-9_\[\]\->\.\*]+)\s*,\s*Pre\s*\)', replace_at, invariant)
-        invariant = re.sub(r'([a-zA-Z_][a-zA-Z0-9_]*)\[', r'\1_l[', invariant)
-        invariant = re.sub(r'(<|<=)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(<|<=)', r'\1 \2 && \2 \3', invariant)
-        invariant = invariant.replace("==>", "=>")
-        invariant = invariant.replace(';','')
+            invariants = []
+            current = []
+            collecting = False
+            for raw_line in content.splitlines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+                if line.startswith("*"):
+                    line = line[1:].strip()
+                if re.match(r"^loop\s+invariant\b", line):
+                    if current:
+                        invariants.append(" ".join(current).strip().rstrip(";"))
+                    current = [re.sub(r"^loop\s+invariant\b", "", line, count=1).strip()]
+                    collecting = True
+                    if clause_is_complete(current[0]):
+                        invariants.append(current[0].strip().rstrip(";"))
+                        current = []
+                        collecting = False
+                    continue
+                if re.match(r"^loop\s+(assigns|variant)\b", line):
+                    if current:
+                        invariants.append(" ".join(current).strip().rstrip(";"))
+                    current = []
+                    collecting = False
+                    continue
+                if collecting:
+                    current.append(line)
+                    if clause_is_complete(" ".join(current)):
+                        invariants.append(" ".join(current).strip().rstrip(";"))
+                        current = []
+                        collecting = False
+            if current:
+                invariants.append(" ".join(current).strip().rstrip(";"))
+            return [inv for inv in invariants if inv]
 
+        def array_param_map() -> dict[str, str]:
+            mapping = {}
+            if not self.function_info:
+                return mapping
+
+            def visit(parameters, syntax_prefix="", value_prefix=""):
+                if not parameters:
+                    return
+                for parameter in parameters:
+                    if parameter.is_ptr and parameter.is_struct and parameter.array_length == -1:
+                        access_name = parameter.name if parameter.ptr_depth == 1 else f"({'*' * (parameter.ptr_depth - 1)}{parameter.name})"
+                        visit(parameter.type.parameter_list, syntax_prefix + access_name + "->", value_prefix + access_name + "_")
+                    elif not parameter.is_ptr and parameter.is_struct and parameter.array_length == -1:
+                        visit(parameter.type.parameter_list, syntax_prefix + parameter.name + ".", value_prefix + parameter.name + "_")
+                    elif not parameter.is_struct and parameter.array_length != -1:
+                        mapping[f"{syntax_prefix}{parameter.name}"] = f"{value_prefix}{parameter.name}_l"
+
+            visit(self.function_info.parameter_list)
+            return mapping
+
+        def convert_quantifier(match):
+            kind = match.group(1)
+            variables = [
+                var.strip()
+                for var in match.group(2).split(",")
+                if var.strip()
+            ]
+            prefix = "forall" if kind == "forall" else "exists"
+            return " ".join(f"{prefix} ({var}:Z)," for var in variables)
+
+        def expand_chained_relations(expr: str) -> str:
+            atom = r"(?:[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]+\])?|[0-9]+)"
+            pattern = re.compile(rf"\b({atom})\s*(<=|<)\s*({atom})\s*(<=|<)\s*({atom})\b")
+            previous = None
+            while previous != expr:
+                previous = expr
+                expr = pattern.sub(lambda m: f"{m.group(1)} {m.group(2)} {m.group(3)} && {m.group(3)} {m.group(4)} {m.group(5)}", expr)
+            return expr
+
+        def simplify_trivial_true(expr: str) -> str:
+            expr = re.sub(r"\btrue\s*&&\s*", "", expr)
+            expr = re.sub(r"\s*&&\s*\btrue\b", "", expr)
+            expr = re.sub(r"\(\s*true\s*\)", "true", expr)
+            return expr.strip()
+
+        array_mapping = array_param_map()
+
+        def convert_expr(expr: str) -> str:
+            expr = expr.strip()
+            expr = re.sub(r"^[A-Za-z_][A-Za-z0-9_]*\s*:\s*", "", expr)
+            expr = re.sub(r"\\valid(?:_read)?\s*\([^)]*\)", "true", expr)
+            expr = re.sub(r"\\separated\s*\([^)]*\)", "true", expr)
+            expr = re.sub(r"\\at\(\s*([^,]+?)\s*,\s*Pre\s*\)", lambda m: f"{m.group(1).strip()}@pre", expr)
+            expr = re.sub(r"\\(forall|exists)\s+(?:int|integer)\s+([^;]+);", convert_quantifier, expr)
+            expr = expr.replace("==>", "=>")
+            expr = expr.replace("\\true", "true").replace("\\false", "false")
+            expr = expr.replace("\\null", "0").replace("NULL", "0")
+            expr = expr.replace("(integer)", "").replace("(int)", "")
+            for source, target in sorted(array_mapping.items(), key=lambda item: len(item[0]), reverse=True):
+                expr = re.sub(rf"(?<![A-Za-z0-9_]){re.escape(source)}\s*\[", f"{target}[", expr)
+            expr = expand_chained_relations(expr)
+            expr = expr.replace(";", "")
+            expr = re.sub(r"\s+", " ", expr)
+            return simplify_trivial_true(expr)
+
+        invariants = []
+        for invariant in extract_loop_invariants(before):
+            converted = convert_expr(invariant)
+            if converted and converted != "true":
+                invariants.append(f"({converted})")
+
+        body_parts = []
         if exists_str:
-            before = f'''/*@ Inv
-    {exists_str.strip()}
-    {invariant}
-    */
-    ''' 
-        else:
-            before = f'''/*@ Inv
+            exists_part = exists_str.strip()
+            if exists_part.endswith("&&"):
+                exists_part = exists_part[:-2].rstrip()
+            if exists_part:
+                body_parts.append(exists_part)
+        body_parts.extend(invariants if invariants else ["emp"])
+        invariant = " &&\n    ".join(body_parts)
+
+        before = f'''/*@ Inv
     {invariant}
     */
     ''' 
@@ -1228,21 +1435,33 @@ class SpecificationConvertor:
 
         def updated_condition_str(condition_str, predefined_vars):
             # 定义需要排除的关键字和量词
-            EXCLUDED_KEYWORDS = {'exists', 'forall','__return','store_int_array'}
+            EXCLUDED_KEYWORDS = {
+                'exists', 'forall', '__return', 'store_int_array',
+                'Size_of', 'signed', 'unsigned', 'int', 'Ez_val',
+            }
             
             # 严格变量正则（匹配标准变量名）
             variable_pattern = r'(?<!\w)([a-zA-Z_]\w*)(?!\w)'
             
             # 提取所有候选变量
             candidates = set(re.findall(variable_pattern, condition_str))
+            bound_vars = set()
+            for m in re.finditer(r'\b(?:exists|forall)\s+([^,]+),', condition_str):
+                bound_vars.update(
+                    var.strip()
+                    for var in m.group(1).split()
+                    if var.strip()
+                )
             
             # 多级过滤
             new_vars = []
             for var in candidates:
                 if (var not in predefined_vars and               # 不在预定义集合中
                     var.lower() not in EXCLUDED_KEYWORDS and     # 不是关键字
+                    var not in bound_vars and
+                    not any(var.startswith(array_name) for array_name in array_names) and
                     not var.lstrip('-').isdigit() and            # 不是数字
-                    'retval_' in var and       
+                    (re.search(r'_\d+$', var) or 'retval_' in var) and
                     not any(op in var for op in {'+', '-', '*', '/', '%'})  # 不含操作符
                 ):
                     new_vars.append(var)
@@ -1266,7 +1485,7 @@ class SpecificationConvertor:
                         # 在第一个exists后插入新变量
                         parts = condition_str.split('exists', 1)
                         
-                        updated_str = f"{parts[0]}exists {' '.join(vars_to_add)}{parts[1]}"
+                        updated_str = f"{parts[0]}exists {' '.join(vars_to_add)} {parts[1]}"
                     else:
                         updated_str = condition_str
             else:
@@ -1279,6 +1498,225 @@ class SpecificationConvertor:
         post_map = self.post_map
 
         ensure = annotations.split('Ensure') [-1][:-2].strip()
+
+        def split_top_level(expr: str, sep: str) -> list[str]:
+            parts = []
+            depth = 0
+            start = 0
+            i = 0
+            while i < len(expr):
+                ch = expr[i]
+                if ch in "([":
+                    depth += 1
+                elif ch in ")]":
+                    depth = max(0, depth - 1)
+                elif depth == 0 and expr.startswith(sep, i):
+                    part = expr[start:i].strip()
+                    if part:
+                        parts.append(part)
+                    i += len(sep)
+                    start = i
+                    continue
+                i += 1
+            tail = expr[start:].strip()
+            if tail:
+                parts.append(tail)
+            return parts
+
+        def strip_outer_parens(expr: str) -> str:
+            expr = expr.strip()
+            while len(expr) >= 2 and expr[0] == "(" and expr[-1] == ")":
+                depth = 0
+                balanced = True
+                for idx, ch in enumerate(expr):
+                    if ch == "(":
+                        depth += 1
+                    elif ch == ")":
+                        depth -= 1
+                        if depth == 0 and idx != len(expr) - 1:
+                            balanced = False
+                            break
+                        if depth < 0:
+                            balanced = False
+                            break
+                if not balanced or depth != 0:
+                    break
+                expr = expr[1:-1].strip()
+            return expr
+
+        def normalize_pointer_offsets(text):
+            if not text:
+                return text
+            size = r'(?:4|\(?\s*Size_of\s+signed\s+int\s*\)?)'
+            text = re.sub(
+                rf'(\b[A-Za-z_]\w*(?:\s*(?:->|\.)\s*[A-Za-z_]\w*)*)\s*\+\s*([A-Za-z_]\w*)\s*\*\s*{size}',
+                r'\1 + \2',
+                text,
+            )
+            text = re.sub(
+                rf'(\b[A-Za-z_]\w*)\s*\+\s*\(\s*([A-Za-z_]\w*)\s*\*\s*{size}\s*\)',
+                r'\1 + \2',
+                text,
+            )
+            return text
+
+        def direct_qcp_post_to_acsl(qcp_ensure: str) -> str | None:
+            if "__return" not in qcp_ensure:
+                return None
+
+            array_prefixes = []
+            predefined_vars = set()
+            for item in post_map or []:
+                predefined_vars.add(item[0])
+                if item[1] in ('101', '001'):
+                    array_prefixes.append((f'{item[0]}_l', item[2]))
+
+            def drop_array_logic_vars(vars_text: str) -> list[str]:
+                result = []
+                for var in vars_text.split():
+                    var = var.strip()
+                    if not var:
+                        continue
+                    if any(var.startswith(prefix) for prefix, _ in array_prefixes):
+                        continue
+                    result.append(var)
+                return result
+
+            def replace_arrays(text: str) -> str:
+                for prefix, acsl_name in sorted(array_prefixes, key=lambda item: len(item[0]), reverse=True):
+                    pattern = re.compile(rf'\b{re.escape(prefix)}(?:_\d+)?\b')
+                    text = pattern.sub(acsl_name, text)
+                return text
+
+            def replace_scalar_names(text: str) -> str:
+                for name, kind, acsl_name in sorted(post_map or [], key=lambda item: len(item[0]), reverse=True):
+                    if kind in ('101', '001'):
+                        continue
+                    text = re.sub(r'\b' + re.escape(name) + r'\b', acsl_name, text)
+                return text
+
+            def extract_leading_exists(expr: str) -> tuple[list[str], str]:
+                exists_vars = []
+                expr = expr.strip()
+                while True:
+                    match = re.match(r'^exists\s+([^,]+),\s*(.*)$', expr, flags=re.DOTALL)
+                    if not match:
+                        break
+                    exists_vars.extend(drop_array_logic_vars(match.group(1)))
+                    expr = match.group(2).strip()
+                return exists_vars, expr
+
+            def replace_inner_quantifiers(text: str) -> str:
+                def repl(match):
+                    vars_list = drop_array_logic_vars(match.group(2))
+                    if not vars_list:
+                        return ''
+                    quant = "\\forall" if match.group(1) == "forall" else "\\exists"
+                    return f"{quant} integer {', '.join(vars_list)}; "
+                return re.sub(r'\b(forall|exists)\s+([^,()]+),', repl, text)
+
+            def free_ghost_vars(text: str, bound_vars: set[str]) -> list[str]:
+                excluded = {
+                    'exists', 'forall', 'integer', 'int', 'signed', 'unsigned',
+                    'Size_of', 'store_int_array', 'Ez_val', 'result',
+                    'old', 'null',
+                }
+                variables = []
+                for var in re.findall(r'\b[A-Za-z_]\w*_\d+\b', text):
+                    if var in bound_vars or var in excluded or var in predefined_vars:
+                        continue
+                    if any(var.startswith(prefix) for prefix, _ in array_prefixes):
+                        continue
+                    if var not in variables:
+                        variables.append(var)
+                return variables
+
+            def to_acsl_expr(text: str) -> str:
+                text = strip_outer_parens(text)
+                text = replace_arrays(text)
+                text = replace_scalar_names(text)
+                text = re.sub(r'\b([A-Za-z_]\w*)@pre\b', r'\\old(\1)', text)
+                text = text.replace('__return', '\\result')
+                text = text.replace('=>', '==>')
+                text = text.replace('NULL', '\\null')
+                text = normalize_pointer_offsets(text)
+                text = replace_inner_quantifiers(text)
+                if self.function_info and self.function_info.func_type and '*' in self.function_info.func_type:
+                    text = re.sub(r'\\result\s*==\s*0\b', r'\\result == \\null', text)
+                    text = re.sub(r'0\s*==\s*\\result\b', r'\\result == \\null', text)
+                text = re.sub(r'\s+', ' ', text)
+                return text.strip()
+
+            ensures = []
+            for raw_case in split_top_level(qcp_ensure, '||'):
+                case = strip_outer_parens(raw_case)
+                exists_vars, body = extract_leading_exists(case)
+                conjuncts = split_top_level(body, '&&')
+                result_parts = []
+                path_parts = []
+                for conj in conjuncts:
+                    conj = strip_outer_parens(conj)
+                    if not conj or conj.startswith('store_int_array'):
+                        continue
+                    if '__return' in conj:
+                        result_parts.append(conj)
+                    else:
+                        path_parts.append(conj)
+
+                if not result_parts:
+                    continue
+
+                raw_for_quant = ' && '.join(path_parts + result_parts)
+                bound = set(exists_vars)
+                for match in re.finditer(r'\b(?:forall|exists)\s+([^,()]+),', raw_for_quant):
+                    bound.update(match.group(1).split())
+                for var in free_ghost_vars(raw_for_quant, bound):
+                    if var not in exists_vars:
+                        exists_vars.append(var)
+
+                path_conjuncts = [to_acsl_expr(part) for part in path_parts]
+                result_conjuncts = [to_acsl_expr(part) for part in result_parts]
+                path = ' && '.join(f"({part})" for part in path_conjuncts if part)
+                result = ' && '.join(f"({part})" for part in result_conjuncts if part)
+                if not result:
+                    continue
+
+                if path:
+                    body = f"{path} ==> {result}"
+                else:
+                    body = result
+                if exists_vars:
+                    body = f"\\exists integer {', '.join(exists_vars)}; {body}"
+                ensures.append(f"ensures {body};")
+
+            if not ensures:
+                return None
+
+            if self.function_info.require:
+                generated_str = self.create_require_str()
+                if generated_str and generated_str not in self.function_info.require and self.function_info.require not in generated_str:
+                    require_str = f'''{generated_str}
+{self.function_info.require}
+'''
+                else:
+                    require_str = self.function_info.require
+            else:
+                require_str = self.create_require_str()
+
+            if require_str:
+                return f'''/*@
+{require_str}
+{chr(10).join(ensures)}
+*/
+'''
+            return f'''/*@
+{chr(10).join(ensures)}
+*/
+'''
+
+        direct_acsl = direct_qcp_post_to_acsl(ensure)
+        if direct_acsl:
+            return direct_acsl
 
        
 
@@ -1410,7 +1848,7 @@ class SpecificationConvertor:
                     # 指针 p_v <- *(\old(p)) 
                     # 嵌套指针 p_x_v <- *(\old(p->x))
                     # 多层指针 p_v <- **(\old(p)) 
-                    if vars[1]== '100' or '000' : 
+                    if vars[1] in ('100', '000'):
 
                         replacement = vars[2]
                         
@@ -1429,7 +1867,7 @@ class SpecificationConvertor:
                             path_cond = replace_var(path_cond, vars[0], replacement)
 
 
-                    if vars[1] == '101' or '001':
+                    if vars[1] in ('101', '001'):
 
                         logic_var = f'{vars[0]}_l'
                         logic_var_pattern = re.compile(rf'\b{re.escape(logic_var)}(?:_\d+)?\b')  
@@ -1464,6 +1902,10 @@ class SpecificationConvertor:
             if path_cond :
                 path_cond = path_cond.replace('__return','\\result')
                 path_cond = path_cond.replace('=>','==>')
+
+            state = normalize_pointer_offsets(state)
+            result = normalize_pointer_offsets(result)
+            path_cond = normalize_pointer_offsets(path_cond)
             
 
             if path_cond != None and result !=None and state!=None:
@@ -1578,7 +2020,7 @@ ensures {result};
                 condition = condition.replace(f'{vars[0]}@pre',rf'\at({vars[0]},Pre)')
 
                     
-                if vars[1]== '100' or '000' : 
+                if vars[1] in ('100', '000'):
 
                     replacement = vars[2]
                         
@@ -1591,7 +2033,7 @@ ensures {result};
                     condition = replace_var(condition, vars[0], replacement)
 
 
-                if vars[1] == '101' or '001':
+                if vars[1] in ('101', '001'):
 
                     logic_var = f'{vars[0]}_l'
                     logic_var_pattern = re.compile(rf'\b{re.escape(logic_var)}(?:_\d+)?\b')  

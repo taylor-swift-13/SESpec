@@ -9,6 +9,7 @@ from datetime import datetime
 
 from typing import List,Dict, Tuple, Optional, Union
 from LoopInvGen.inv_gen import InvGenerator
+from LoopInvGen.syntax_checker import SyntaxChecker
 from Utils.create_post_condition import create_post, update_annotation
 from Utils.extract_all import function_info_init,free_all_tu
 from Utils.main_class import *
@@ -386,7 +387,13 @@ class FunctionProcessor:
             generator.create_specification_by_llm()
             return
 
-        post_cond = create_post(func.name,self.config.annotated_loop_c_file_path,self.conds)
+        post_cond = create_post(
+            func.name,
+            self.config.annotated_loop_c_file_path,
+            self.conds,
+            function_info=func,
+            acsl_loop_file_path=self.config.generated_loop_c_file_path,
+        )
 
 
         if post_cond != 'SymExec Failed':
@@ -399,13 +406,46 @@ class FunctionProcessor:
             self.logger.info(f'Starting to generate ACSL specification for {func.name}')
             # generator.create_specification()
 
-            # use_se=False forces LLM globally; otherwise SE only for
-            # loop-free functions (loops are unsound for SE).
-            has_loop = bool(re.search(r'\b(for|while)\b', func.code or ""))
-            if not self.config.use_se or has_loop:
+            if not self.config.use_se:
                 generator.create_specification_by_llm()
             else:
-                generator.create_specification()
+                try:
+                    generator.create_specification()
+                    translated = func.specification or ""
+                    obvious_failure = (
+                        not translated.strip()
+                        or "ensures" not in translated
+                        or "PLACE_HOLDER" in translated
+                        or "Parameter(" in translated
+                        or "Size_of" in translated
+                        or "store_int_array" in translated
+                    )
+                    syntax_ok = False
+                    if not obvious_failure:
+                        output_file = os.path.join(self.config.output_path, f"{func.name}.c")
+                        checker = SyntaxChecker()
+                        checker.run(output_file)
+                        syntax_ok = checker.syntax_msg == "syntax Correct"
+                        if not syntax_ok:
+                            self.logger.info(
+                                "[se-post] QCP-to-ACSL translation failed syntax; "
+                                "fallback to LLM specgen"
+                            )
+                            self.logger.info(checker.syntax_msg)
+                    else:
+                        self.logger.info(
+                            "[se-post] QCP-to-ACSL translation incomplete; "
+                            "fallback to LLM specgen"
+                        )
+
+                    if not syntax_ok:
+                        generator.create_specification_by_llm()
+                except Exception as exc:
+                    self.logger.info(
+                        f"[se-post] QCP-to-ACSL translation raised {exc}; "
+                        "fallback to LLM specgen"
+                    )
+                    generator.create_specification_by_llm()
 
         else:
             self.logger.info(f'Starting to generate ACSL specification for {func.name}')

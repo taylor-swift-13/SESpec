@@ -105,7 +105,10 @@ class OpenAILLM(BaseChatModel):
             # 在本流水线（7-17 次顺序调用）里实用。默认 `medium` 太慢。
             if str(self.model_name).startswith("gpt-5"):
                 kwargs["max_completion_tokens"] = 8000
-                kwargs["reasoning_effort"] = "minimal"
+                if str(self.model_name).startswith("gpt-5.4"):
+                    kwargs["reasoning_effort"] = "low"
+                else:
+                    kwargs["reasoning_effort"] = "minimal"
             else:
                 kwargs["temperature"] = self.temperature
                 kwargs["top_p"] = self.top_p

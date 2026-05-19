@@ -39,7 +39,7 @@ class SpecVerifier:
         if error_list:
             self.logger.info(f'{title} failures:')
             for error in error_list:
-                self.logger.info(error[0].splitlines()[0])
+                self.logger.info(error[0])
                 if error[1]:
                     self.logger.info(error[1])
                 if error[2]:
@@ -242,14 +242,15 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
         checker = SyntaxChecker()
         checker.run(file_path)
         syntax_msg = checker.syntax_msg
-        if self.logger:
-            self.logger.info(syntax_msg)
-        else:
-            print(syntax_msg)
 
         if syntax_msg !='syntax Correct':
             self.syntax_error = syntax_msg
             self.syntax_bool = False
+            if self.logger:
+                self.logger.info('Syntax:')
+                self.logger.info(self.syntax_error)
+            else:
+                print(syntax_msg)
         else:
             self.syntax_bool = True
             frama_c_command = "frama-c"

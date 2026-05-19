@@ -833,8 +833,6 @@ class InvGenerator:
         )
         if self._is_trivial:
             user_prompt = self._scrub_predicate_logic(user_prompt)
-        self.logger.debug("user_prompt")
-        self.logger.debug(user_prompt)
         return user_prompt
 
     def get_user_prompt_template(self, loop_content, pre_condition, examples):
@@ -856,8 +854,6 @@ class InvGenerator:
         )
         if self._is_trivial:
             user_prompt = self._scrub_predicate_logic(user_prompt)
-        self.logger.debug("user_prompt_template")
-        self.logger.debug(user_prompt)
         return user_prompt
 
 
@@ -1122,9 +1118,6 @@ class InvGenerator:
                 # Process response
                 assistant_response = self.llm.chat(prompt)
 
-                if self.config.debug:
-                    self.logger.debug("regen reasoning")
-                    self.logger.debug(assistant_response)
                 assistant_response = re.sub(r'>\s*Reasoning\s*[\s\S]*?(?=\n\n|$)', '', assistant_response, flags=re.IGNORECASE)
                 assistant_response = re.sub(r'<think>.*?</think>', '', assistant_response, flags=re.DOTALL)
                 assistant_response = extract_last_c_code(assistant_response)
@@ -1175,9 +1168,6 @@ class InvGenerator:
 
             # Process response
         assistant_response = self.llm.chat(prompt)
-        if self.config.debug:
-                    self.logger.debug("invgen reasoning")
-                    self.logger.debug(assistant_response)
         assistant_response = re.sub(r'>\s*Reasoning\s*[\s\S]*?(?=\n\n|$)', '', assistant_response, flags=re.IGNORECASE)
         assistant_response = re.sub(r'<think>.*?</think>', '', assistant_response, flags=re.DOTALL)
         assistant_response = extract_last_c_code(assistant_response)
@@ -1243,9 +1233,6 @@ class InvGenerator:
             source = loop_code or ""
 
         category, examples = get_examples_for(source)
-        self.logger.info(f"examples category: {category}")
-        self.logger.info("examples:")
-        self.logger.info(examples)
         return examples
 
 
@@ -1363,8 +1350,6 @@ class InvGenerator:
 
                 if self.config.think:
                     cot = self.get_cot(_code)
-                    if self.config.debug:
-                        self.logger.info(f'think in natural language: {cot}')
 
                 simple = True
 
@@ -1372,8 +1357,6 @@ class InvGenerator:
                 
                 if self.config.think:
                     cot = self.get_cot(_code)
-                    if self.config.debug:
-                        self.logger.info(f'think in natural language: {cot}')
                     
                     # if self.error_history:
                     #     error_examples = '\n\n'.join(self.error_history)
@@ -1694,6 +1677,7 @@ class InvGenerator:
             syntax = syntax_error ==''
             satisfy = all(verify_result)  
 
+            full_acsl_annotation = loop_invariant
             loop_invariant = self.get_annotated_loop_content(loop_invariant,idx)
 
 
@@ -1707,6 +1691,10 @@ class InvGenerator:
               
 
             symexe_updated_code  =processor.update_loop_content(self.get_c_code(processor.output_file),loop_invariant,idx)
+            symexe_updated_code = self.convertor.insert_qcp_externs(
+                symexe_updated_code,
+                self.convertor.acsl_helpers_to_qcp_externs(full_acsl_annotation),
+            )
                     
             if syntax and valid:
                 if self.config.debug:
@@ -1787,7 +1775,4 @@ class InvGenerator:
 # if __name__ == "__main__":
 #     generator = InvGenerator()
 #     generator.run()
-
-
-
 

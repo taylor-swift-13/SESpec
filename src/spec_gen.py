@@ -1125,6 +1125,95 @@ class SpecGenerator:
             and not self._global_writes_in_function()
         )
 
+    def _is_pointer_return(self) -> bool:
+        return '*' in (self.function_info.func_type or '')
+
+    @staticmethod
+    def _strip_c_comments(code: str) -> str:
+        code = re.sub(r'/\*[\s\S]*?\*/', '', code or '')
+        return re.sub(r'//.*', '', code)
+
+    @staticmethod
+    def _skip_ws(code: str, pos: int) -> int:
+        while pos < len(code) and code[pos].isspace():
+            pos += 1
+        return pos
+
+    @staticmethod
+    def _find_matching(code: str, start: int, open_ch: str, close_ch: str) -> int:
+        if start < 0 or start >= len(code) or code[start] != open_ch:
+            return -1
+        depth = 0
+        for i in range(start, len(code)):
+            if code[i] == open_ch:
+                depth += 1
+            elif code[i] == close_ch:
+                depth -= 1
+                if depth == 0:
+                    return i
+        return -1
+
+    def _loop_end_positions(self, code: str) -> list[int]:
+        ends: list[int] = []
+        for m in re.finditer(r'\b(?:while|for)\b', code):
+            pos = self._skip_ws(code, m.end())
+            if pos >= len(code) or code[pos] != '(':
+                continue
+            cond_end = self._find_matching(code, pos, '(', ')')
+            if cond_end == -1:
+                continue
+            body_start = self._skip_ws(code, cond_end + 1)
+            if body_start < len(code) and code[body_start] == '{':
+                body_end = self._find_matching(code, body_start, '{', '}')
+                if body_end != -1:
+                    ends.append(body_end + 1)
+            else:
+                stmt_end = code.find(';', body_start)
+                if stmt_end != -1:
+                    ends.append(stmt_end + 1)
+
+        for m in re.finditer(r'\bdo\b', code):
+            body_start = self._skip_ws(code, m.end())
+            if body_start < len(code) and code[body_start] == '{':
+                body_end = self._find_matching(code, body_start, '{', '}')
+                if body_end == -1:
+                    continue
+            else:
+                body_end = code.find(';', body_start)
+                if body_end == -1:
+                    continue
+            while_m = re.match(r'\s*while\s*\(', code[body_end + 1:])
+            if not while_m:
+                ends.append(body_end + 1)
+                continue
+            cond_start = body_end + 1 + while_m.end() - 1
+            cond_end = self._find_matching(code, cond_start, '(', ')')
+            if cond_end == -1:
+                ends.append(body_end + 1)
+                continue
+            semi = code.find(';', cond_end + 1)
+            ends.append((semi + 1) if semi != -1 else (cond_end + 1))
+        return ends
+
+    def _has_loop_exit_null_return(self, content: str) -> bool:
+        if not self._is_pointer_return():
+            return False
+        _, _, func_def, _ = self._find_function_block(
+            content or '', self.function_info.name
+        )
+        code = self._strip_c_comments(func_def or self.function_info.code or '')
+        loop_ends = self._loop_end_positions(code)
+        if not loop_ends:
+            return False
+        null_return_re = re.compile(
+            r'\breturn\s+(?:\(\s*[^;]*?\*\s*\)\s*)?(?:0|NULL)\s*;'
+        )
+        return any(
+            ret.start() >= loop_end
+            for loop_end in loop_ends
+            for ret in null_return_re.finditer(code)
+        )
+
     def _file_scope_variable_names(self) -> set[str]:
         context = self._source_top_level_context()
         if not context:
@@ -1300,6 +1389,8 @@ class SpecGenerator:
             ensure_statement = '  assigns PLACE_HOLDER; \n  ensures PLACE_HOLDER;   '
         else:
             ensure_statement = '  assigns PLACE_HOLDER;   \n  ensures PLACE_HOLDER; \n    ensures \\result == PLACE_HOLDER_RESULT;  '
+            if self._has_loop_exit_null_return(content):
+                ensure_statement += '\n    ensures \\result == \\null ==> PLACE_HOLDER;'
 
 
         if not jump_flag:

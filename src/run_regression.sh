@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run regression matrix invocations in parallel (use_se=on only):
 #   motivation_example/0, motivation_example/2, LIG-MM/1, linear/1, linear/3,
-#   sespec/4 (global-state smoke test)
+#   sespec/4 (global-state smoke test), preguss_demo/search
 #
 # Usage:  OPENAI_API_KEY=... ./run_regression.sh
 #         (PATH must include frama-c — script prepends opam default bin)
@@ -37,6 +37,7 @@ JOBS=(
     "sygus88_seon      syGus_code2inv      88  --use-se"
     "svcomp119_seon    SV_COMP             119 --use-se"
     "svcomp358_seon    SV_COMP             358 --use-se"
+    "preguss_search_seon  preguss_demo      search --use-se"
 )
 
 declare -A PIDS=()

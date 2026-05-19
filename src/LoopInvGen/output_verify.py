@@ -24,14 +24,14 @@ class OutputVerifier:
             print()
 
     def _log_result_with_failures(self, title, results, error_list):
-        if not (self.config.debug and self.output):
+        if not self.logger:
             return
         self.logger.info(title)
         self.logger.info(results)
         if error_list:
             self.logger.info(f'{title} failures:')
             for error in error_list:
-                self.logger.info(error[0].splitlines()[0])
+                self.logger.info(error[0])
                 if error[1]:
                     self.logger.info(error[1])
                 if error[2]:
@@ -118,11 +118,11 @@ class OutputVerifier:
         checker.run(file_path)
         syntax_msg = checker.syntax_msg
 
-        if self.config.debug and self.output:
-                self.logger.info(syntax_msg)
-
         if syntax_msg !='syntax Correct':
             self.syntax_error = syntax_msg
+            if self.logger:
+                self.logger.info('Syntax:')
+                self.logger.info(self.syntax_error)
         else:
             frama_c_command = "frama-c"
             wp_command = [frama_c_command, "-wp", "-wp-print", "-wp-timeout", "10", "-wp-prover", "z3", "-wp-model", "Typed", file_path]
@@ -141,8 +141,7 @@ class OutputVerifier:
                     error_location_msg, error_content_msg = self.extract_semantic_error(valid_error_msg)
                     self.valid_error_list.append((valid_error_msg.strip(), error_location_msg, error_content_msg))
 
-            if self.config.debug and self.output:
-                self._log_result_with_failures('Validate:', self.validate_result, self.valid_error_list)
+            self._log_result_with_failures('Validate:', self.validate_result, self.valid_error_list)
 
             filter_contents = self.filter_goal_assertion(contents)
             self.verify_result = self.check_verify_target(filter_contents)
@@ -152,8 +151,7 @@ class OutputVerifier:
                     verify_error_msg = item
                     error_location_msg, error_content_msg = self.extract_semantic_error(verify_error_msg)
                     self.verify_error_list.append((verify_error_msg.strip(), error_location_msg, error_content_msg))
-            if self.config.debug and self.output:
-                self._log_result_with_failures('Verify:', self.verify_result, self.verify_error_list)
+            self._log_result_with_failures('Verify:', self.verify_result, self.verify_error_list)
 
     
 
