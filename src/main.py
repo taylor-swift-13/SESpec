@@ -462,6 +462,13 @@ class FunctionProcessor:
         global variables declared at file scope, with compound assignment
         variants. Local array index writes can register as false positives; on
         uncertainty we keep only_loop=False (full pipeline).
+
+        Additionally: even when the side-effect heuristic says only_loop=True,
+        if the function body contains no loop construct at all (for/while/do)
+        we demote to only_loop=False. Otherwise __generate_loop_invariant
+        skips InvGenerator silently, no annotation is produced, and the run
+        is reported as syntax_fail with zero LLM calls (the void+no-loop
+        +assert(...) family — cases 24-28 in the sespec-400 bench).
         """
         func_type = (func.func_type or "").strip()
         is_void = func_type == "void"
@@ -481,13 +488,22 @@ class FunctionProcessor:
         has_pointer_or_index_writes = any(re.search(p, code) for p in side_effect_patterns)
         global_writes = self._global_writes_in_function(func)
         has_side_effects = has_pointer_or_index_writes or bool(global_writes)
-        self.config.only_loop = not has_side_effects
+        only_loop = not has_side_effects
+
+        has_loop = bool(re.search(r'\b(?:for|while|do)\b', code))
+        loop_demoted = only_loop and not has_loop
+        if loop_demoted:
+            only_loop = False
+
+        self.config.only_loop = only_loop
         verdict = "True" if self.config.only_loop else "False"
         kind = "void" if is_void else "int main"
         if global_writes:
             reason = "writes global variable(s): " + ", ".join(sorted(global_writes))
         elif has_pointer_or_index_writes:
             reason = "writes via pointer/array"
+        elif loop_demoted:
+            reason = "no side effects, but no loop in body — use full specgen"
         else:
             reason = "no side effects"
         self.logger.info(f"[auto only_loop] {verdict} — {kind} {func.name}: {reason}")
