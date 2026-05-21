@@ -10,6 +10,23 @@ from config import *
 from llm import *
 from pre_cond_manager import PreconditionsManager
 
+SUPPLEMENTARY_ENSURES_PLACEHOLDER = "PLACE_HOLDER_SUPPLEMENTARY_ENSURES"
+
+
+def _strip_unfilled_supplementary_ensures(text):
+    """Remove any line containing the verbatim
+    `PLACE_HOLDER_SUPPLEMENTARY_ENSURES` identifier (LLM left the slot in
+    place). Frama-C would otherwise error on the unknown name."""
+    if not text or SUPPLEMENTARY_ENSURES_PLACEHOLDER not in text:
+        return text
+    out = []
+    for line in text.splitlines():
+        if SUPPLEMENTARY_ENSURES_PLACEHOLDER in line:
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 class SpecGenerator:
 
     config: MainConfig
@@ -127,19 +144,33 @@ class SpecGenerator:
                 # Pointer, non-struct, array parameter
 
                 if parameter.is_ptr and not parameter.is_struct and parameter.array_length != -1:
-                    
+
                     # Add array symbol, address, and length separately
                     if parameter.array_length == 'INT_MAX':
-
-                        idx = parameter_list.index(parameter)
+                        # `INT_MAX` is now just a sentinel meaning "this pointer
+                        # is indexed in the body". The actual length expression
+                        # is resolved by Utils.utils.resolve_array_lengths into
+                        # `parameter.length_expr` (name convention → body scan →
+                        # LLM fallback). Falls back to a plain \valid(p) when
+                        # no length can be resolved.
                         with_list.append(f'{value_str}{parameter.name}_l')
-                        if idx + 1 < len(parameter_list):
-                            next_parameter = parameter_list[idx + 1]
-                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, {next_parameter.name}, {value_str}{parameter.name}_l)')
-                            require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
+                        if parameter.length_expr:
+                            require_list.append(
+                                f'store_int_array({syntax_str}{parameter.name}, '
+                                f'{parameter.length_expr}, '
+                                f'{value_str}{parameter.name}_l)'
+                            )
+                            if parameter.length_source != 'name':
+                                # Named lengths already get `n > 0 && n < 100`
+                                # via the scalar param's own QCP slot below.
+                                require_list.append(
+                                    f'{parameter.length_expr} > 0 && '
+                                    f'{parameter.length_expr} < 100'
+                                )
                         else:
-                            # No following length parameter (e.g. nul-terminated string); fall back to a fixed length cap of 100.
-                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, 100, {value_str}{parameter.name}_l)')
+                            require_list.append(
+                                f'store_int_ptr({syntax_str}{parameter.name})'
+                            )
 
                     else:
                         with_list.append(f'{value_str}{parameter.name}_l')
@@ -178,17 +209,24 @@ class SpecGenerator:
                 # Currently only supports intType arrays by default
                 # Non-pointer, non-struct, array parameter
                 if not parameter.is_ptr and not parameter.is_struct and parameter.array_length != -1:
-                    
-                    if parameter.array_length == 'INT_MAX':
 
-                        idx = parameter_list.index(parameter)
+                    if parameter.array_length == 'INT_MAX':
                         with_list.append(f'{value_str}{parameter.name}_l')
-                        if idx + 1 < len(parameter_list):
-                            next_parameter = parameter_list[idx + 1]
-                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, {next_parameter.name}, {value_str}{parameter.name}_l)')
-                            require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
+                        if parameter.length_expr:
+                            require_list.append(
+                                f'store_int_array({syntax_str}{parameter.name}, '
+                                f'{parameter.length_expr}, '
+                                f'{value_str}{parameter.name}_l)'
+                            )
+                            if parameter.length_source != 'name':
+                                require_list.append(
+                                    f'{parameter.length_expr} > 0 && '
+                                    f'{parameter.length_expr} < 100'
+                                )
                         else:
-                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, 100, {value_str}{parameter.name}_l)')
+                            require_list.append(
+                                f'store_int_ptr({syntax_str}{parameter.name})'
+                            )
 
                     else:
                         with_list.append(f'{value_str}{parameter.name}_l')
@@ -772,7 +810,85 @@ class SpecGenerator:
             filtered.append(line)
 
         deduped = '\n'.join(filtered)
-        return self._dedup_acsl_global_decls(deduped)
+        deduped = self._dedup_acsl_global_decls(deduped)
+        deduped = self._dedup_function_defs(deduped)
+        return deduped
+
+    def _dedup_function_defs(self, content: str) -> str:
+        """Dedupe C function definitions by name.
+
+        Bottom-up callee inlining (``create_callee_specifications``) plants
+        the same callee body+contract into every caller's spec file. When
+        those spec files later get concatenated into ``3_output/<entry>.c``
+        each callee shows up N times (N = number of callers). Frama-C
+        rejects with ``There is a definition already for <name>``. This
+        pass keeps the FIRST definition encountered for each function and
+        drops every subsequent one (together with its immediately-
+        preceding ``/*@ ... */`` contract, so we don't leave an orphan
+        contract attached to nothing).
+        """
+        # Match function signatures: `<ret_type> <name>(<params>) {`.
+        # Same return-type rule as `_find_function_block`: one or more
+        # identifier-like tokens with optional `*` / `[N]`, terminated by
+        # an identifier (the name), a parameter list, and an opening `{`.
+        sig_re = re.compile(
+            r'(?:^|[\s;}])((?:[A-Za-z_]\w*[\s\*\[\]]+)+)'
+            r'([A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{'
+        )
+
+        seen: set = set()
+        drops: list = []  # (start, end) byte spans to remove
+
+        for m in sig_re.finditer(content):
+            sig_start = m.start(1)
+            sig_end = m.end()
+            name = m.group(2)
+            # Find matching closing brace from `sig_end - 1` (which is `{`).
+            body_open = sig_end - 1
+            depth = 1
+            i = body_open + 1
+            body_end = -1
+            while i < len(content):
+                c = content[i]
+                if c == '{':
+                    depth += 1
+                elif c == '}':
+                    depth -= 1
+                    if depth == 0:
+                        body_end = i + 1
+                        break
+                i += 1
+            if body_end == -1:
+                continue
+
+            # Walk back to attach a preceding `/*@ ... */` or `/* ... */`
+            # contract if there's nothing but whitespace between it and
+            # the signature. Mirrors `_find_function_block`.
+            upstream = content[:sig_start]
+            upstream_stripped = upstream.rstrip()
+            block_start = sig_start
+            if upstream_stripped.endswith('*/'):
+                opener = upstream_stripped.rfind('/*', 0, len(upstream_stripped) - 2)
+                if opener != -1:
+                    block_start = opener
+
+            if name in seen:
+                drops.append((block_start, body_end))
+            else:
+                seen.add(name)
+
+        if not drops:
+            return content
+        # Apply right-to-left so earlier offsets stay valid.
+        drops.sort(key=lambda r: r[0], reverse=True)
+        out = content
+        for start, end in drops:
+            # Also gobble a trailing newline so we don't leave a blank gap.
+            after = end
+            if after < len(out) and out[after] == '\n':
+                after += 1
+            out = out[:start] + out[after:]
+        return out
 
     def _find_function_block(self, content: str, name: str):
         """Locate ``name``'s span and return four pieces:
@@ -1112,18 +1228,59 @@ class SpecGenerator:
     def _is_side_effect_free(self) -> bool:
         """Detect whether the current function has observable side effects:
         pointer-member writes (p->f = ...), index writes (p[i] = ...),
-        explicit deref writes ((*p) = ...), or file-scope global writes.
+        explicit deref writes ((*p) = ...), file-scope global writes, OR
+        delegation through callees that receive pointer arguments (a
+        function whose body is just `child(&out, ...)` is effectful via
+        the child even though its own body has no direct writes — this
+        is the IP_framac pipeline-entry pattern that previously hit
+        jump_flag=True and got no contract).
         """
-        code = self.function_info.code or ""
+        code = self._strip_c_comments(self.function_info.code or "")
         side_effect_patterns = [
             r'[A-Za-z_]\w*\s*->\s*[A-Za-z_]\w*\s*(?:\[[^\]]*\])?\s*[+\-*/%&|^]?=(?!=)',
             r'(?<![A-Za-z_\[])[A-Za-z_]\w*\s*\[[^\]]+\]\s*[+\-*/%&|^]?=(?!=)',
             r'\(\s*\*\s*[A-Za-z_]\w*\s*\)\s*[+\-*/%&|^]?=(?!=)',
         ]
-        return (
-            not any(re.search(p, code) for p in side_effect_patterns)
-            and not self._global_writes_in_function()
-        )
+        if any(re.search(p, code) for p in side_effect_patterns):
+            return False
+        if self._global_writes_in_function():
+            return False
+        if self._has_effectful_callee_invocation(code):
+            return False
+        return True
+
+    def _has_effectful_callee_invocation(self, code: str) -> bool:
+        """Conservative call-site scan: returns True when the function body
+        invokes a callee with arguments that look like out-pointers (a
+        pointer parameter, an `&...` address-of, or an `arr[..]` lvalue).
+        Excludes C/ACSL control-flow / sizeof keywords from the call set.
+        """
+        params = getattr(self.function_info, 'parameter_list', None) or []
+        ptr_params = {p.name for p in params if getattr(p, 'is_ptr', False)}
+        if not ptr_params:
+            return False
+        excluded = {
+            'if', 'while', 'for', 'switch', 'return', 'sizeof', 'typeof',
+            'do', 'else', 'break', 'continue', 'case', 'default', '_Generic',
+            'assert',
+        }
+        call_pat = re.compile(r'\b([A-Za-z_]\w*)\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)')
+        for m in call_pat.finditer(code):
+            name = m.group(1)
+            if name in excluded:
+                continue
+            # Skip our own self-call (handled by the recursive-function path
+            # elsewhere; not relevant to the side-effect-free heuristic).
+            if name == self.function_info.name:
+                continue
+            args = m.group(2)
+            if any(re.search(rf'\b{re.escape(p)}\b', args) for p in ptr_params):
+                return True
+            if '&' in args:
+                return True
+            if re.search(r'\b[A-Za-z_]\w*\s*\[', args):
+                return True
+        return False
 
     def _is_pointer_return(self) -> bool:
         return '*' in (self.function_info.func_type or '')
@@ -1722,6 +1879,9 @@ class SpecGenerator:
                 assistant_response = re.sub(r'>\s*Reasoning\s*[\s\S]*?(?=\n\n|$)', '', assistant_response, flags=re.IGNORECASE)
                 assistant_response = re.sub(r'<think>.*?</think>', '', assistant_response, flags=re.DOTALL)
                 assistant_response = extract_last_c_code(assistant_response)
+                assistant_response = _strip_unfilled_supplementary_ensures(assistant_response)
+                from LoopInvGen.inv_gen import strip_unused_predicates
+                assistant_response = strip_unused_predicates(assistant_response)
 
                 return assistant_response
 

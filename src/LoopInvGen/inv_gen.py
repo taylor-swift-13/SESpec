@@ -21,17 +21,24 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # carrying a ~12-line literal copy (previously duplicated 3 times in the
 # `_db*` methods).
 _PREDICATE_GUIDE = (
-    '- If your invariant references a logic function or predicate not already '
-    'defined in the file (e.g. `list_length(p)`, `sum(a, n)`, `sorted(a)`), '
-    'you MUST add its complete definition as its own top-level '
-    '`/*@ logic <type> <name>(...) = ...; */` or '
-    '`/*@ predicate <name>(...) = ...; */` block, placed BEFORE the function. '
-    'Referencing an undefined name fails with `unbound logic function <name>. '
-    'Ignoring ... annotation` and Frama-C silently drops the entire annotation. '
-    'If the file already has a placeholder `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`, '
-    'fill it with the definition; otherwise emit a new `/*@ ... */` block before '
-    'the function. Prefer reusing predicates already in the file (e.g. `listrep`, '
-    '`lseg`) over inventing a new helper.'
+    '- Inline first, predicate only when essential. If the relation can be '
+    'expressed as plain arithmetic / boolean conjunction over the existing '
+    'variables (e.g. `x == 100 + t * v`, `0 <= i <= n`, `a && b ==> c`), '
+    'write it directly in a `loop invariant` clause — do NOT wrap it in a '
+    'fresh `/*@ logic ... */` or `/*@ predicate ... */`. Only introduce a '
+    'helper when the relation is recursive (over a list/tree shape) or '
+    'higher-order (`\\forall` / accumulating recursion) and cannot be unfolded '
+    'inline; in that single situation, emit the full definition as its own '
+    'top-level `/*@ logic <type> <name>(...) = ...; */` or '
+    '`/*@ predicate <name>(...) = ...; */` block BEFORE the function. '
+    'Referencing an undefined name fails with `unbound logic function <name>` '
+    'and Frama-C silently drops the entire annotation, so DEFINE WHAT YOU '
+    'CALL — but only call what you actually need. Do NOT speculatively emit '
+    'predicates you do not reference in any `loop invariant` / `ensures` '
+    'clause; orphan definitions are noise. If the file already has a '
+    'placeholder `PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION`, fill it with the '
+    'definition. Prefer reusing predicates already in the file (e.g. '
+    '`listrep`, `lseg`) over inventing a new helper.'
 )
 
 _VERIFICATION_GUIDE = (
@@ -41,7 +48,74 @@ _VERIFICATION_GUIDE = (
     'directly as the invariant.'
 )
 
-_STRENGTH_GUIDE = '- Generate loop invariants with equality constraints as comprehensively as possible.'
+_STRENGTH_GUIDE = (
+    '- Generate as many DISTINCT, NON-REDUNDANT loop invariants as possible. '
+    'Aim for completeness, not minimalism. Beyond variable-preservation and '
+    'counter-bound facts (often already provided as template lines), every '
+    'invariant block MUST also capture: (a) the functional progression the '
+    'loop is computing (sum, count, min/max, product, running boolean state, '
+    'recursive-call equivalence, ...); '
+    '(b) any monotonicity or ordering established up to the current iteration '
+    '(e.g., `\\forall integer k; 0 <= k < i ==> arr[k] >= arr[k+1]`); '
+    '(c) the relation between the accumulator and the input prefix processed '
+    'so far (e.g., `\\exists integer k; 0 <= k < i && arr[k] == best`); '
+    '(d) the exit-implication, i.e., facts that hold the moment the loop '
+    'condition becomes false and that downstream code/ensures depends on. '
+    'Each invariant must be NON-TRIVIAL (not implied by the others and not '
+    'merely a tautology under the precondition). Do NOT settle for a small '
+    'set of equality-only invariants. Lines that already carry SE-derived '
+    'facts are NOT enough on their own — you must add the semantic facts '
+    'above as additional invariants.'
+)
+
+# Single supplementary slot. The LLM is required to replace this ONE line
+# with **as many `loop invariant ...;` lines as the loop needs** to fully
+# characterise the behaviour — not a fixed count. The prompt tells it to
+# emit between 3 and 10 distinct, non-redundant clauses, but any number ≥ 1
+# is accepted as long as the slot is replaced. If the slot is left verbatim
+# in the LLM output, `strip_unfilled_supplementary` removes the line so
+# Frama-C never sees the placeholder identifier.
+SUPPLEMENTARY_PLACEHOLDER = "PLACE_HOLDER_SUPPLEMENTARY_INVARIANTS"
+
+_SUPPLEMENTARY_GUIDE = (
+    '- The annotation block contains two kinds of placeholders, and they '
+    'must be filled DIFFERENTLY:\n'
+    '  * **Named-variable placeholders** of the form `PLACE_HOLDER_<VAR>` '
+    '(e.g. `PLACE_HOLDER_x`, `PLACE_HOLDER_UNCHANGED_ARRAY_arr`, '
+    '`PLACE_HOLDER_VERFICATION_GOAL`) — these are RESERVED for the named '
+    'variable. Prefer writing BOTH an equality constraint AND a bound '
+    'constraint for that variable whenever both apply: an EQUALITY linking '
+    'it to the pre-state or to other tracked variables '
+    '(e.g. `x == \\at(x, Pre) + i`, `arr[k] == \\at(arr[k], Pre)`), AND a '
+    'BOUND restricting its range (e.g. `0 <= x <= n`, `0 <= i <= n`). '
+    'Emit each as its own `loop invariant ...;` line within the slot — do '
+    'not skip the bound just because you wrote the equality, and do not '
+    'skip the equality just because you wrote the bound; both are cheap to '
+    'verify and the bound is often what downstream `assert` clauses need. '
+    'DO NOT put unrelated semantic facts (monotonicity, sum, existence, '
+    'closed-form polynomial relations) into these named slots — those go '
+    'into the supplementary slot below.\n'
+    f'  * **The free-form supplementary slot** `loop invariant '
+    f'{SUPPLEMENTARY_PLACEHOLDER};` — this single line is MANDATORY and is '
+    'where you add the RICHER semantic facts that the named slots cannot '
+    'carry. Replace this one line with as many `loop invariant ...;` clauses '
+    'as the loop needs (typically 3-10, minimum 3), each capturing a fact '
+    'NOT already expressed by the named-variable slots. Cover, in distinct '
+    'supplementary clauses:\n'
+    '    (a) the functional progress of the loop — what the accumulator(s) '
+    'compute over the processed prefix (sum, count, min/max, running '
+    'boolean state, recursive-call equivalence, ...);\n'
+    '    (b) monotonicity / ordering established up to the current iteration '
+    '(e.g. `\\forall integer k; 0 <= k < i ==> arr[k] >= arr[k+1]`);\n'
+    '    (c) existence / membership facts linking the accumulator to the '
+    'prefix (e.g. `\\exists integer k; 0 <= k < i && arr[k] == best`);\n'
+    '    (d) the exit-implication needed downstream (what holds when the '
+    'loop condition becomes false).\n'
+    f'  Leaving `loop invariant {SUPPLEMENTARY_PLACEHOLDER};` in the output '
+    'is a failure mode — replace it with multiple concrete clauses. Conversely, '
+    'do NOT cram supplementary semantic facts into the named-variable slots; '
+    'keep each kind of placeholder true to its purpose.'
+)
 
 # Trivial-category override. Replaces _PREDICATE_GUIDE for scalar-only
 # programs (no `*` / `/` / `%`), where closed-form invariants are always
@@ -51,6 +125,72 @@ _STRENGTH_GUIDE = '- Generate loop invariants with equality constraints as compr
 # "don't use X" (which still names X). Combined with the line-18 scrub
 # below, this leaves the trivial prompt free of any predicate-logic
 # knowledge injection.
+def strip_unfilled_supplementary(text: str) -> str:
+    """Remove any line that still contains the verbatim
+    `PLACE_HOLDER_SUPPLEMENTARY_INVARIANTS` identifier (i.e. the LLM left
+    the slot in place). Frama-C would otherwise error on the unknown name."""
+    if not text or SUPPLEMENTARY_PLACEHOLDER not in text:
+        return text
+    out = []
+    for line in text.splitlines():
+        if SUPPLEMENTARY_PLACEHOLDER in line:
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+# Regex used by `strip_unused_predicates` to find /*@ ... */ blocks that
+# DEFINE a `logic` or `predicate` symbol, and to extract the name.
+_LOGIC_BLOCK_RE = re.compile(r"/\*@[\s\S]*?\*/")
+_LOGIC_DEF_NAME_RE = re.compile(
+    r"\b(?:logic\s+(?:integer|boolean|real|[A-Za-z_][\w\s\*]*?)\s+|predicate\s+)"
+    r"([A-Za-z_][A-Za-z_0-9]*)\s*\("
+)
+
+
+def strip_unused_predicates(text: str) -> str:
+    """Drop `/*@ logic ... */` / `/*@ predicate ... */` blocks whose defined
+    name is not referenced anywhere else in the file (`{...} foo(...)` body
+    or other contract clauses). LLM sometimes speculatively emits a helper
+    predicate but then inlines the relation in the invariant; the orphan
+    definition adds noise without affecting verification."""
+    if not text:
+        return text
+    blocks: list[tuple[int, int, str | None]] = []  # (start, end, defined_name)
+    for m in _LOGIC_BLOCK_RE.finditer(text):
+        body = m.group(0)
+        nm = _LOGIC_DEF_NAME_RE.search(body)
+        if not nm:
+            blocks.append((m.start(), m.end(), None))
+            continue
+        blocks.append((m.start(), m.end(), nm.group(1)))
+
+    if not any(b[2] for b in blocks):
+        return text
+
+    # Build the "rest-of-file" text per definition block to count refs.
+    out_parts: list[str] = []
+    cursor = 0
+    dropped_any = False
+    for start, end, name in blocks:
+        # everything before this block goes through unchanged
+        out_parts.append(text[cursor:start])
+        keep_block = True
+        if name:
+            # count occurrences of `name` in text MINUS the block itself
+            text_without_block = text[:start] + text[end:]
+            ref_count = len(re.findall(rf"\b{re.escape(name)}\b", text_without_block))
+            if ref_count == 0:
+                keep_block = False
+                dropped_any = True
+        if keep_block:
+            out_parts.append(text[start:end])
+        # else: skip the block — drop it entirely
+        cursor = end
+    out_parts.append(text[cursor:])
+    return "".join(out_parts) if dropped_any else text
+
+
 _TRIVIAL_FORM_GUIDE = (
     '- Express every `loop invariant` clause using ONLY the C variables '
     'already in scope and integer arithmetic (`+`, `-`, `*`, comparisons, '
@@ -330,6 +470,24 @@ class InvGenerator:
                 updated_code.append(line)
 
        # Join the list back into a single string and return
+        return "\n".join(updated_code)
+
+
+    def append_supplementary_annotations(self, annotations):
+        """Inject the supplementary loop-invariant slot. A single line that
+        the LLM must replace with as many `loop invariant ...;` clauses as
+        the loop needs (no fixed count). Unfilled slot is stripped by
+        `strip_unfilled_supplementary` after the LLM call."""
+        updated_code = []
+        found_first_annotation = False
+        slot_line = f"loop invariant {SUPPLEMENTARY_PLACEHOLDER};"
+        for line in annotations.splitlines():
+            if not found_first_annotation and '/*@' in line:
+                updated_code.append(line)
+                updated_code.append(f"          {slot_line}")
+                found_first_annotation = True
+            else:
+                updated_code.append(line)
         return "\n".join(updated_code)
 
 
@@ -828,6 +986,7 @@ class InvGenerator:
             pre_cond=pre_condition,
             examples=examples,
             strength_guide='',
+            supplementary_guide=_SUPPLEMENTARY_GUIDE,
             predicate_guide=predicate_guide,
             verification_guide='',
         )
@@ -849,6 +1008,7 @@ class InvGenerator:
             pre_cond=pre_condition,
             examples=examples,
             strength_guide=_STRENGTH_GUIDE,
+            supplementary_guide=_SUPPLEMENTARY_GUIDE,
             predicate_guide=predicate_guide,
             verification_guide=(_VERIFICATION_GUIDE if has_assert else ''),
         )
@@ -965,6 +1125,8 @@ class InvGenerator:
             assistant_response = re.sub(r'>\s*Reasoning\s*[\s\S]*?(?=\n\n|$)', '', assistant_response, flags=re.IGNORECASE)
             assistant_response = re.sub(r'<think>.*?</think>', '', assistant_response, flags=re.DOTALL)
             assistant_response = extract_last_c_code(assistant_response)
+            assistant_response = strip_unfilled_supplementary(assistant_response)
+            assistant_response = strip_unused_predicates(assistant_response)
 
             return assistant_response
 
@@ -1306,6 +1468,7 @@ class InvGenerator:
 
 
             simple_annotations  = self.append_inner_annotations(annotations)
+            simple_annotations  = self.append_supplementary_annotations(simple_annotations)
             annotations_list.append(simple_annotations)
             
 
@@ -1391,7 +1554,8 @@ class InvGenerator:
                                     self.logger.info("after vars")
                                     self.logger.info(annotations)
                                 
-                                annotations_list.append(annotations)
+                                annotations_with_supp = self.append_supplementary_annotations(annotations)
+                                annotations_list.append(annotations_with_supp)
                                 # Slot 2: SE + verification_goal placeholder.
                                 # Adds a `loop invariant (loop_cond) ==> PLACE_HOLDER_VERFICATION_GOAL;`
                                 # template that the LLM is instructed to fill
@@ -1401,6 +1565,7 @@ class InvGenerator:
                                 annotations_with_goal = self.append_verification_goal_annotations(
                                     annotations, path_cond, updated_loop_condition
                                 )
+                                annotations_with_goal = self.append_supplementary_annotations(annotations_with_goal)
                                 if self.config.debug:
                                     self.logger.info("after verification goal")
                                     self.logger.info(annotations_with_goal)
@@ -1622,9 +1787,12 @@ class InvGenerator:
                             else:
                                 annotations = self.regen(validate_result, refine_error_list, annotations, output_c_file_path, pre_condition)
 
-                    # Final Houdini: rollback to best and drop any still-
-                    # failing invariants. Runs once after the refine budget
-                    # is exhausted (no-op if already converged).
+                    # Final Houdini: ONLY when the slot didn't fully converge.
+                    # When any refine round passed (syntax+valid+satisfy),
+                    # `correct_flag` is True and we've already `break`ed the
+                    # refine loop with a valid spec — skip Houdini entirely.
+                    # Otherwise rollback to best_annotations and Houdini-prune
+                    # the remaining failing clauses.
                     if not correct_flag:
                         annotations = best_annotations
                         with open(output_c_file_path, 'w', encoding='utf-8') as file:

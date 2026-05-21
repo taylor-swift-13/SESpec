@@ -14,7 +14,9 @@ Transform the following C code into ACSL-annotated version following these rules
 
 1a. The input is a complete C file. It may contain other (callee) functions that already carry a verified ACSL contract; treat those callee contracts as read-only context — do not reproduce them. Your output MUST contain the modified target function block: its `/*@ ... */` contract (with all `PLACE_HOLDER`s filled in) immediately followed by the function signature and body. Do NOT emit typedefs, callee function definitions, `#include`/headers, or `int main` in the output. The harness splices the function block back into the original file, so any C/typedef text outside the target function will be discarded.
 
-1b. **Helper `/*@ predicate ... = ...; */` and `/*@ logic <type> ... = ...; */` definitions are allowed AND REQUIRED whenever the target contract references a name not already defined in the input file (or in any callee's contract).** Emit each new definition as its own `/*@ ... */` block placed BEFORE the target function block. The harness hoists them into the file preamble automatically, so they survive into the final spliced file and are visible to the contract.
+1b. **Inline first, predicate only when essential.** If the postcondition relation can be expressed as plain arithmetic / boolean conjunction over the existing variables and `\result` (e.g. `\result == x + 1`, `\result <==> (a && b)`, `n > 0 ==> \result >= 0`), write it directly in an `ensures` clause — do NOT wrap it in a fresh `/*@ logic ... */` or `/*@ predicate ... */`. Only introduce a helper when the relation is recursive over a list / tree / array structure, or higher-order (`\forall` over an unbounded prefix), or accumulating, and cannot be unfolded inline. Do NOT speculatively emit predicates you never reference in any `ensures` clause — orphan definitions add noise without strengthening the contract.
+
+   **Helper `/*@ predicate ... = ...; */` and `/*@ logic <type> ... = ...; */` definitions are allowed AND REQUIRED whenever the target contract references a name not already defined in the input file (or in any callee's contract).** Emit each new definition as its own `/*@ ... */` block placed BEFORE the target function block. The harness hoists them into the file preamble automatically, so they survive into the final spliced file and are visible to the contract.
 
    - If your contract references a logic function such as `list_length(p)`, `sum(a, n)`, or a custom predicate such as `sorted(a)`, you MUST emit its full recursive definition before the function. The reference WITHOUT the definition fails verification with `unbound logic function <name>. Ignoring ... annotation`.
    - One definition per `/*@ ... */` block — never merge multiple `predicate`/`logic` declarations into one comment (universal A2).
@@ -39,6 +41,8 @@ Transform the following C code into ACSL-annotated version following these rules
 3. Do not allowed any form of comments using // or /* are allowed inside /*@ ... */.
 
 4. The postcondition should cover all relevant variables and must be strong enough to entail the verification goals.
+
+4a. **The `ensures PLACE_HOLDER` slot must be replaced with as many strong, non-redundant `ensures ...;` clauses as the function's behaviour admits — never just one.** Aim for 3-8 distinct clauses (minimum 2), each capturing a fact the others do not imply. Specifically cover, where applicable: (a) the precise functional output as a closed-form expression of the inputs (the strongest characterization of `\result` the contract can sustain); (b) per-branch / per-input-class case analysis (guarded `<cond> ==> <fact>` clauses over every reachable branch); (c) any non-trivial input-output invariant beyond the type bounds (e.g. `\result >= 0`, `\result == \old(x) + 1`, bidirectional equivalences such as `\result == 1 <==> P(args)`); (d) frame-condition consequences (what stays unchanged after the call, beyond `assigns \nothing`). Replacing the single `ensures PLACE_HOLDER;` line with one trivial clause is a failure mode; if the existing other ensures lines (e.g. `ensures \result == PLACE_HOLDER_RESULT;`) already cover one of the points above, expand `PLACE_HOLDER` with the remaining points as separate clauses.
 
 5. The postcondition must cover every execution path, consider all possible branches and conditions in the function.
 
@@ -71,6 +75,7 @@ programs, the category block carries the `decreases` / ghost-logic rules.
 {category_hints}
 
 
+{array_length_facts}
 ### Inputs: ###
 
 1. A C program with no ACSL postcondition annotations.
