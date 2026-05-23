@@ -1,0 +1,49 @@
+#include "../verification_stdlib.h"
+    #include "../verification_list.h"
+    #include "../int_array_def.h"
+
+    /*@ Extern Coq (Result: Assertion) */
+    /*@ Extern Coq (Results: Z -> Assertion) */
+int foo217(int * args, int args_len, int x, int y) 
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l)
+Ensure Results(__return)
+*/{
+
+		int i = 0;
+		int r = y - 1;
+		int k = -1;
+
+	
+ 	/*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) &&
+    (y == y@pre) &&
+    (x == x@pre) &&
+    (args_len == args_len@pre) &&
+    (args == args@pre) &&
+    (forall (t:Z), 0 <= t && t < y => args_l[t] == args_l[t]@pre) &&
+    (0 <= i) &&
+    (i <= y) &&
+    (-1 <= r) &&
+    (r <= y - 1) &&
+    (i <= r + 1) &&
+    ((i <= r) => (0 <= (i + r) / 2 && ((i + r) / 2) < y)) &&
+    ((k == -1) || (0 <= k && k < i)) &&
+    ((k == -1) || (args_l[k] == x))
+    */
+while (i <= r) {
+			int tmp = (i + r) / 2;
+			if (args[tmp] == x) {
+				k = tmp;
+				i = tmp + 1;
+			} else if (args[tmp] < x) {
+				i = tmp + 1;
+			} else {
+				r = tmp - 1;
+			}
+		}
+
+		return k;
+}

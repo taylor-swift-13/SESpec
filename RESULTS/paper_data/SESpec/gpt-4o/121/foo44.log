@@ -1,0 +1,907 @@
+2026-05-14 22:34:02,074 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo44/20260514_223402_302044_5e8c73a6
+2026-05-14 22:34:02,075 - INFO  - 
+🚀 Starting generation of function: foo44
+2026-05-14 22:34:02,075 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-14 22:34:02,075 - INFO  - ==================================================
+
+2026-05-14 22:34:02,198 - INFO  - [auto only_loop] False — foo44 returns 'int'
+2026-05-14 22:34:02,198 - INFO  - Initial pending functions: ['foo44']
+2026-05-14 22:34:02,198 - INFO  - 
+GENERATE ANNOTATION FOR foo44
+2026-05-14 22:34:02,198 - INFO  - ==================================================
+
+2026-05-14 22:34:02,199 - INFO  - Function foo44 has been initialized
+2026-05-14 22:34:02,199 - INFO  - Starting to generate annotation code for foo44
+2026-05-14 22:34:02,251 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo44
+2026-05-14 22:34:02,251 - INFO  - ==================================================
+
+2026-05-14 22:34:02,311 - INFO  - Variable Maps:[{'i': '0', 'n': 'bits_len@pre', 'bits_len': 'bits_len@pre', 'bits': 'bits@pre'}]
+2026-05-14 22:34:02,312 - INFO  - Path conditions: ['bits_len@pre > 0 && bits_len@pre < 100']
+2026-05-14 22:34:02,312 - INFO  - Pre condition: bits_len@pre > 0 && bits_len@pre < 100 && (i == 0) * (n == bits_len@pre) * (bits_len == bits_len@pre) * (bits == bits@pre) * store_int_array(bits@pre, bits_len@pre, bits_l)
+2026-05-14 22:34:02,312 - INFO  - Loop Condition: i < n - 1
+2026-05-14 22:34:02,313 - INFO  - Array Names: ['bits']
+2026-05-14 22:34:02,313 - INFO  - Updated Loop Conditions: ['0 < bits_len@pre - 1']
+2026-05-14 22:34:02,314 - INFO  - Global Unchanged Variables: ['n', 'bits_len', 'bits']
+2026-05-14 22:34:02,315 - INFO  - Non Inductive Variables: []
+2026-05-14 22:34:02,315 - INFO  - Unchanged Arrays (Read-only): ['bits']
+2026-05-14 22:34:02,316 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-14 22:34:02,317 - INFO  - examples category: array
+2026-05-14 22:34:02,318 - INFO  - examples:
+2026-05-14 22:34:02,318 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-14 22:34:32,389 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-14 22:35:07,007 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:35:44,290 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:35:44,290 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 22:36:05,985 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-14 22:36:37,685 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+2026-05-14 22:36:37,686 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 22:36:59,274 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-14 22:37:34,898 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-14 22:37:34,898 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 22:37:56,510 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-14 22:42:10,304 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:42:10,306 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 22:42:32,380 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-14 22:45:59,948 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8333333333333334, 0.0), clauses=6)
+2026-05-14 22:46:24,602 - INFO  - ACSL format loop invariant
+2026-05-14 22:46:24,602 - INFO  - /*@
+      loop invariant (!(0 < \at(bits_len,Pre) - 1)) ==> ((i == 0)&&(n == \at(bits_len,Pre))&&(bits_len == \at(bits_len,Pre))&&(bits == \at(bits,Pre)));
+      loop invariant n == \at(bits_len,Pre);
+      loop invariant bits_len == \at(bits_len,Pre);
+      loop invariant bits == \at(bits,Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+2026-05-14 22:46:24,603 - INFO  - QCP format loop invariant
+2026-05-14 22:46:24,603 - INFO  - /*@ Inv
+    exists  bits_l,    
+    store_int_array(bits, bits_len, bits_l) && bits_len > 0 && bits_len < 100 &&
+    ((!(0 < bits_len@pre - 1)) => ((i == 0)&&(n == bits_len@pre)&&(bits_len == bits_len@pre)&&(bits == bits@pre))) &&
+(n == bits_len@pre) &&
+(bits_len == bits_len@pre) &&
+(bits == bits@pre) &&
+(unchanged_array{Pre,Here}(bits, bits_len)
+      loop assigns i)
+    */
+    
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+2026-05-14 22:46:26,205 - INFO  - CORRECT INVARIANT
+2026-05-14 22:46:26,206 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo44
+2026-05-14 22:46:26,206 - INFO  - ==================================================
+
+2026-05-14 22:46:26,216 - INFO  - Starting to generate ACSL specification for foo44
+2026-05-14 22:46:56,611 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo44/20260514_223402_302044_5e8c73a6/output/foo44.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo44/20260514_223402_302044_5e8c73a6/output/foo44.c:19: Warning: 
+  unbound logic variable i. Ignoring logic specification of function foo44
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo44/20260514_223402_302044_5e8c73a6/output/foo44.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-14 22:46:56,611 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-14 22:49:01,462 - INFO  - syntax Correct
+2026-05-14 22:49:12,368 - INFO  - Loop Invariant:
+2026-05-14 22:49:12,368 - INFO  - [True, True, True, True, True]
+2026-05-14 22:49:12,368 - INFO  - 
+2026-05-14 22:49:12,368 - INFO  - Assertion:
+2026-05-14 22:49:12,368 - INFO  - []
+2026-05-14 22:49:12,368 - INFO  - 
+2026-05-14 22:49:12,368 - INFO  - Assigns:
+2026-05-14 22:49:12,368 - INFO  - [True, True]
+2026-05-14 22:49:12,369 - INFO  - 
+2026-05-14 22:49:12,369 - INFO  - Post Condition:
+2026-05-14 22:49:12,369 - INFO  - [False, True]
+2026-05-14 22:49:12,369 - INFO  - 
+2026-05-14 22:49:12,369 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=3
+2026-05-14 22:49:12,370 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == (\at(bits_len, Pre) - 1 == 0 ? 0 : 1) [POSTCONDITION FAILED];
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:49:32,124 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 <==> (\at(bits_len, Pre) > 0 && \at(bits_len, Pre) - 1 == 0);
+  ensures \result == 0 <==> (\at(bits_len, Pre) == 0 || \at(bits_len, Pre) - 1 != 0);
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:49:43,165 - INFO  - syntax Correct
+2026-05-14 22:49:54,078 - INFO  - Loop Invariant:
+2026-05-14 22:49:54,078 - INFO  - [True, True, True, True, True]
+2026-05-14 22:49:54,078 - INFO  - 
+2026-05-14 22:49:54,078 - INFO  - Assertion:
+2026-05-14 22:49:54,078 - INFO  - []
+2026-05-14 22:49:54,078 - INFO  - 
+2026-05-14 22:49:54,079 - INFO  - Assigns:
+2026-05-14 22:49:54,079 - INFO  - [True, True]
+2026-05-14 22:49:54,079 - INFO  - 
+2026-05-14 22:49:54,079 - INFO  - Post Condition:
+2026-05-14 22:49:54,079 - INFO  - [False, False, True]
+2026-05-14 22:49:54,079 - INFO  - 
+2026-05-14 22:49:54,080 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=4
+2026-05-14 22:49:54,080 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 <==> (\at(bits_len, Pre) > 0 && \at(bits_len, Pre) - 1 == 0) [POSTCONDITION FAILED];
+  ensures \result == 0 <==> (\at(bits_len, Pre) == 0 || \at(bits_len, Pre) - 1 != 0) [POSTCONDITION FAILED];
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:50:14,368 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 <==> (\exists integer i; 0 <= i < \at(bits_len, Pre) && i == \at(bits_len, Pre) - 1);
+  ensures \result == 0 <==> (\forall integer i; 0 <= i < \at(bits_len, Pre) && i != \at(bits_len, Pre) - 1);
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:50:25,323 - INFO  - syntax Correct
+2026-05-14 22:50:36,187 - INFO  - Loop Invariant:
+2026-05-14 22:50:36,187 - INFO  - [True, True, True, True, True]
+2026-05-14 22:50:36,187 - INFO  - 
+2026-05-14 22:50:36,187 - INFO  - Assertion:
+2026-05-14 22:50:36,187 - INFO  - []
+2026-05-14 22:50:36,187 - INFO  - 
+2026-05-14 22:50:36,188 - INFO  - Assigns:
+2026-05-14 22:50:36,188 - INFO  - [True, True]
+2026-05-14 22:50:36,188 - INFO  - 
+2026-05-14 22:50:36,188 - INFO  - Post Condition:
+2026-05-14 22:50:36,188 - INFO  - [False, False, True]
+2026-05-14 22:50:36,188 - INFO  - 
+2026-05-14 22:50:36,189 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=4
+2026-05-14 22:50:36,189 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 22:50:47,052 - INFO  - syntax Correct
+2026-05-14 22:50:57,810 - INFO  - Loop Invariant:
+2026-05-14 22:50:57,810 - INFO  - [True, True, True, True, True]
+2026-05-14 22:50:57,810 - INFO  - 
+2026-05-14 22:50:57,810 - INFO  - Assertion:
+2026-05-14 22:50:57,810 - INFO  - []
+2026-05-14 22:50:57,811 - INFO  - 
+2026-05-14 22:50:57,811 - INFO  - Assigns:
+2026-05-14 22:50:57,811 - INFO  - [True, True]
+2026-05-14 22:50:57,811 - INFO  - 
+2026-05-14 22:50:57,811 - INFO  - Post Condition:
+2026-05-14 22:50:57,811 - INFO  - [False, True]
+2026-05-14 22:50:57,811 - INFO  - 
+2026-05-14 22:50:57,812 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=3
+2026-05-14 22:50:57,812 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == (\at(bits_len, Pre) - 1 == 0 ? 0 : 1) [POSTCONDITION FAILED];
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:51:27,902 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == (\at(bits_len, Pre) > 1 ? 1 : 0);
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:51:39,514 - INFO  - syntax Correct
+2026-05-14 22:51:50,623 - INFO  - Loop Invariant:
+2026-05-14 22:51:50,624 - INFO  - [True, True, True, True, True]
+2026-05-14 22:51:50,624 - INFO  - 
+2026-05-14 22:51:50,624 - INFO  - Assertion:
+2026-05-14 22:51:50,624 - INFO  - []
+2026-05-14 22:51:50,624 - INFO  - 
+2026-05-14 22:51:50,624 - INFO  - Assigns:
+2026-05-14 22:51:50,624 - INFO  - [True, True]
+2026-05-14 22:51:50,624 - INFO  - 
+2026-05-14 22:51:50,624 - INFO  - Post Condition:
+2026-05-14 22:51:50,625 - INFO  - [False, True]
+2026-05-14 22:51:50,625 - INFO  - 
+2026-05-14 22:51:50,625 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=3
+2026-05-14 22:51:50,625 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 22:52:01,540 - INFO  - syntax Correct
+2026-05-14 22:52:12,568 - INFO  - Loop Invariant:
+2026-05-14 22:52:12,568 - INFO  - [True, True, True, True, True]
+2026-05-14 22:52:12,568 - INFO  - 
+2026-05-14 22:52:12,568 - INFO  - Assertion:
+2026-05-14 22:52:12,568 - INFO  - []
+2026-05-14 22:52:12,568 - INFO  - 
+2026-05-14 22:52:12,568 - INFO  - Assigns:
+2026-05-14 22:52:12,568 - INFO  - [True, True]
+2026-05-14 22:52:12,568 - INFO  - 
+2026-05-14 22:52:12,569 - INFO  - Post Condition:
+2026-05-14 22:52:12,569 - INFO  - [False, True]
+2026-05-14 22:52:12,569 - INFO  - 
+2026-05-14 22:52:12,569 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=3
+2026-05-14 22:52:12,569 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == (\at(bits_len, Pre) - 1 == 0 ? 0 : 1) [POSTCONDITION FAILED];
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:52:35,549 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == (\at(bits_len, Pre) - 1 == 0 ? 0 : 1) [POSTCONDITION FAILED];
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:52:35,897 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo44/20260514_223402_302044_5e8c73a6/output/foo44.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo44/20260514_223402_302044_5e8c73a6/output/foo44.c:19: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo44/20260514_223402_302044_5e8c73a6/output/foo44.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-14 22:52:35,898 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-14 22:52:35,898 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 22:52:46,979 - INFO  - syntax Correct
+2026-05-14 22:52:57,894 - INFO  - Loop Invariant:
+2026-05-14 22:52:57,894 - INFO  - [True, True, True, True, True]
+2026-05-14 22:52:57,894 - INFO  - 
+2026-05-14 22:52:57,894 - INFO  - Assertion:
+2026-05-14 22:52:57,894 - INFO  - []
+2026-05-14 22:52:57,894 - INFO  - 
+2026-05-14 22:52:57,895 - INFO  - Assigns:
+2026-05-14 22:52:57,895 - INFO  - [True, True]
+2026-05-14 22:52:57,895 - INFO  - 
+2026-05-14 22:52:57,895 - INFO  - Post Condition:
+2026-05-14 22:52:57,895 - INFO  - [False, True]
+2026-05-14 22:52:57,895 - INFO  - 
+2026-05-14 22:52:57,896 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=3
+2026-05-14 22:52:57,896 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == (\at(bits_len, Pre) - 1 == 0 ? 0 : 1) [POSTCONDITION FAILED];
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:53:24,973 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 <==> \at(bits_len, Pre) > 0 && 
+                           (\forall integer k; 0 <= k < \at(bits_len, Pre) - 1 ==> 
+                            k + bits[k] + 1 < \at(bits_len, Pre));
+  ensures \result == 0 <==> !(\at(bits_len, Pre) > 0 && 
+                              (\forall integer k; 0 <= k < \at(bits_len, Pre) - 1 ==> 
+                               k + bits[k] + 1 < \at(bits_len, Pre)));
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:53:35,889 - INFO  - syntax Correct
+2026-05-14 22:53:46,855 - INFO  - Loop Invariant:
+2026-05-14 22:53:46,855 - INFO  - [True, True, True, True, True]
+2026-05-14 22:53:46,855 - INFO  - 
+2026-05-14 22:53:46,855 - INFO  - Assertion:
+2026-05-14 22:53:46,855 - INFO  - []
+2026-05-14 22:53:46,855 - INFO  - 
+2026-05-14 22:53:46,855 - INFO  - Assigns:
+2026-05-14 22:53:46,856 - INFO  - [True, True]
+2026-05-14 22:53:46,856 - INFO  - 
+2026-05-14 22:53:46,856 - INFO  - Post Condition:
+2026-05-14 22:53:46,856 - INFO  - [False, False, True]
+2026-05-14 22:53:46,856 - INFO  - 
+2026-05-14 22:53:46,856 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=4
+2026-05-14 22:53:46,856 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 22:53:46,858 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8888888888888888, 0.0), clauses=3)
+2026-05-14 22:53:57,885 - INFO  - syntax Correct
+2026-05-14 22:54:08,831 - INFO  - Loop Invariant:
+2026-05-14 22:54:08,832 - INFO  - [True, True, True, True, True]
+2026-05-14 22:54:08,834 - INFO  - 
+2026-05-14 22:54:08,835 - INFO  - Assertion:
+2026-05-14 22:54:08,835 - INFO  - []
+2026-05-14 22:54:08,835 - INFO  - 
+2026-05-14 22:54:08,835 - INFO  - Assigns:
+2026-05-14 22:54:08,836 - INFO  - [True, True]
+2026-05-14 22:54:08,836 - INFO  - 
+2026-05-14 22:54:08,836 - INFO  - Post Condition:
+2026-05-14 22:54:08,836 - INFO  - [False, True]
+2026-05-14 22:54:08,836 - INFO  - 
+2026-05-14 22:54:10,221 - INFO  - syntax Correct
+2026-05-14 22:54:11,866 - INFO  - Loop Invariant:
+2026-05-14 22:54:11,866 - INFO  - [True, True, True, True, True]
+2026-05-14 22:54:11,866 - INFO  - 
+2026-05-14 22:54:11,866 - INFO  - Assertion:
+2026-05-14 22:54:11,866 - INFO  - []
+2026-05-14 22:54:11,867 - INFO  - 
+2026-05-14 22:54:11,867 - INFO  - Assigns:
+2026-05-14 22:54:11,867 - INFO  - [True, True]
+2026-05-14 22:54:11,867 - INFO  - 
+2026-05-14 22:54:11,867 - INFO  - Post Condition:
+2026-05-14 22:54:11,867 - INFO  - [True]
+2026-05-14 22:54:11,867 - INFO  - 
+2026-05-14 22:54:11,874 - INFO  - 
+SPECIFICATION FOR foo44
+2026-05-14 22:54:11,874 - INFO  - ==================================================
+
+2026-05-14 22:54:11,874 - INFO  - 
+QCP Specification for function foo44:
+/*@
+With bits_l
+Require store_int_array(bits, bits_len, bits_l) && bits_len > 0 && bits_len < 100
+Ensure Results(__return)
+*/
+2026-05-14 22:54:12,096 - INFO  - 
+VERIFICATION FOR foo44
+2026-05-14 22:54:12,097 - INFO  - ==================================================
+
+2026-05-14 22:54:12,097 - INFO  - TRY TIME: 0
+2026-05-14 22:54:13,474 - INFO  - syntax Correct
+2026-05-14 22:54:15,147 - INFO  - Loop Invariant:
+2026-05-14 22:54:15,148 - INFO  - [True, True, True, True, True]
+2026-05-14 22:54:15,150 - INFO  - 
+2026-05-14 22:54:15,152 - INFO  - Assertion:
+2026-05-14 22:54:15,152 - INFO  - []
+2026-05-14 22:54:15,152 - INFO  - 
+2026-05-14 22:54:15,152 - INFO  - Assigns:
+2026-05-14 22:54:15,153 - INFO  - [True, True]
+2026-05-14 22:54:15,153 - INFO  - 
+2026-05-14 22:54:15,154 - INFO  - Post Condition:
+2026-05-14 22:54:15,154 - INFO  - [True]
+2026-05-14 22:54:15,154 - INFO  - 
+2026-05-14 22:54:15,154 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo44
+2026-05-14 22:54:15,154 - INFO  - ==================================================
+2026-05-14 22:54:15,154 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo44/20260514_223402_302044_5e8c73a6/output/foo44.c
+2026-05-14 22:54:15,155 - INFO  - Output file content:
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer prefix_sum(int* array, integer len) =
+    len <= 0 ? 0 : sum(array, 0, len);
+*/
+
+/*@
+  predicate unchanged_array{L1, L2}(int* array, integer len) =
+    \forall integer k; 0 <= k < len ==> \at(array[k], L1) == \at(array[k], L2);
+*/
+
+/*@
+  assigns \nothing;
+  ensures unchanged_array{Pre,Here}(bits, \at(bits_len, Pre));
+*/
+int foo44(int * bits, int bits_len) {
+
+    int n = bits_len, i = 0;
+
+    /*@
+      loop invariant (!(0 < \at(bits_len, Pre) - 1)) ==> ((i == 0) && (n == \at(bits_len, Pre)) && (bits_len == \at(bits_len, Pre)) && (bits == \at(bits, Pre)));
+      loop invariant n == \at(bits_len, Pre);
+      loop invariant bits_len == \at(bits_len, Pre);
+      loop invariant bits == \at(bits, Pre);
+      loop invariant unchanged_array{Pre,Here}(bits, bits_len);
+      loop assigns i;
+    */
+    while (i < n - 1) {
+        i += bits[i] + 1;
+    }
+
+    return i == n - 1;
+}
+
+2026-05-14 22:54:15,155 - INFO  - ==================================================
+2026-05-14 22:54:15,155 - INFO  - first_pass:
+2026-05-14 22:54:15,155 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-14 22:54:15,155 - INFO  - ==================================================
+2026-05-14 22:54:15,155 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-14 22:54:15,156 - INFO  - Total execution time: 1213.08 seconds (20.22 minutes)
+2026-05-14 22:54:15,156 - INFO  - ==================================================
+2026-05-14 22:54:15,156 - INFO  - ==================================================
+2026-05-14 22:54:15,156 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-14 22:54:15,157 - INFO  - Total API calls: 14
+2026-05-14 22:54:15,157 - INFO  - Total prompt tokens (input): 80,307
+2026-05-14 22:54:15,158 - INFO  - Total completion tokens (output): 9,771
+2026-05-14 22:54:15,158 - INFO  - Total tokens: 90,078
+2026-05-14 22:54:15,158 - INFO  - Average prompt tokens per call: 5736.2
+2026-05-14 22:54:15,158 - INFO  - Average completion tokens per call: 697.9
+2026-05-14 22:54:15,158 - INFO  - Average total tokens per call: 6434.1
+2026-05-14 22:54:15,158 - INFO  - ==================================================

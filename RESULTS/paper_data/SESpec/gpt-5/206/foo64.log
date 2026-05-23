@@ -1,0 +1,1164 @@
+2026-05-16 13:45:03,721 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo64/20260516_134503_3258615_4c80419e
+2026-05-16 13:45:03,721 - INFO  - 
+🚀 Starting generation of function: foo64
+2026-05-16 13:45:03,721 - INFO  - 
+OUTER PASS: 1/1
+2026-05-16 13:45:03,721 - INFO  - TRY TIME: 0
+2026-05-16 13:45:03,722 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-16 13:45:03,726 - INFO  - ==================================================
+
+2026-05-16 13:45:11,865 - INFO  - [auto only_loop] False — foo64 returns 'int'
+2026-05-16 13:45:11,866 - INFO  - Initial pending functions: ['foo64']
+2026-05-16 13:45:11,866 - INFO  - 
+GENERATE ANNOTATION FOR foo64
+2026-05-16 13:45:11,866 - INFO  - ==================================================
+
+2026-05-16 13:45:11,866 - INFO  - Function foo64 has been initialized
+2026-05-16 13:45:11,866 - INFO  - Starting to generate annotation code for foo64
+2026-05-16 13:45:12,007 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo64
+2026-05-16 13:45:12,007 - INFO  - ==================================================
+
+2026-05-16 13:45:12,147 - INFO  - Variable Maps:[{'r': '0', 'ret': '0', 'array': 'array@pre', 'arr_len': 'arr_len@pre', 'arr': 'arr@pre', 'args_len': 'args_len@pre', 'args': 'args@pre'}]
+2026-05-16 13:45:12,147 - INFO  - Path conditions: ['args_len@pre > 0 && args_len@pre < 100 && arr_len@pre > 0 && arr_len@pre < 100']
+2026-05-16 13:45:12,147 - INFO  - Pre condition: args_len@pre > 0 && args_len@pre < 100 && arr_len@pre > 0 && arr_len@pre < 100 && (r == 0) * (ret == 0) * (array == array@pre) * (arr_len == arr_len@pre) * (arr == arr@pre) * (args_len == args_len@pre) * (args == args@pre) * store_int_array(args@pre, args_len@pre, args_l) * store_int_array(arr@pre, arr_len@pre, arr_l)
+2026-05-16 13:45:12,148 - INFO  - Loop Condition: ret < args_len && r < arr_len
+2026-05-16 13:45:12,149 - INFO  - Array Names: ['args', 'arr']
+2026-05-16 13:45:12,149 - INFO  - Updated Loop Conditions: ['0 < args_len@pre && 0 < arr_len@pre']
+2026-05-16 13:45:12,151 - INFO  - Global Unchanged Variables: ['array', 'arr_len', 'arr', 'args_len', 'args']
+2026-05-16 13:45:12,155 - INFO  - Non Inductive Variables: []
+2026-05-16 13:45:12,157 - INFO  - Unchanged Arrays (Read-only): ['args', 'arr']
+2026-05-16 13:45:12,160 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-16 13:45:12,176 - INFO  - examples category: array
+2026-05-16 13:45:12,177 - INFO  - examples:
+2026-05-16 13:45:12,177 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-16 13:45:36,544 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-16 13:46:10,413 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=9
+2026-05-16 13:46:26,753 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=9
+2026-05-16 13:46:26,754 - INFO  - [inv-gen] converged at refine 3
+2026-05-16 13:46:30,854 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-16 13:46:35,111 - INFO  - ACSL format loop invariant
+2026-05-16 13:46:35,112 - INFO  - /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+2026-05-16 13:46:35,114 - INFO  - QCP format loop invariant
+2026-05-16 13:46:35,114 - INFO  - /*@ Inv
+    exists  args_l arr_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 && store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (0 <= ret) &&
+(0 <= r) &&
+(array == array@pre) &&
+(arr_len == arr_len@pre) &&
+(args_len == args_len@pre) &&
+(arr == arr@pre) &&
+(args == args@pre) &&
+(forall (k:Z), 0 <= k && k < args_len => args_l[k] == args_l[k]@pre) &&
+(forall (k:Z), 0 <= k && k < arr_len => arr_l[k] == arr_l[k]@pre
+          loop assigns ret, r)
+    */
+    
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+2026-05-16 13:46:39,891 - INFO  - CORRECT INVARIANT
+2026-05-16 13:46:39,891 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo64
+2026-05-16 13:46:39,892 - INFO  - ==================================================
+
+2026-05-16 13:46:39,934 - INFO  - Starting to generate ACSL specification for foo64
+2026-05-16 13:47:23,162 - INFO  - syntax Correct
+2026-05-16 13:47:35,197 - INFO  - Loop Invariant:
+2026-05-16 13:47:35,198 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:47:35,198 - INFO  - 
+2026-05-16 13:47:35,198 - INFO  - Assertion:
+2026-05-16 13:47:35,198 - INFO  - []
+2026-05-16 13:47:35,198 - INFO  - 
+2026-05-16 13:47:35,198 - INFO  - Assigns:
+2026-05-16 13:47:35,198 - INFO  - [True, True, True]
+2026-05-16 13:47:35,199 - INFO  - 
+2026-05-16 13:47:35,199 - INFO  - Post Condition:
+2026-05-16 13:47:35,199 - INFO  - [True, True, True, True, False]
+2026-05-16 13:47:35,199 - INFO  - 
+2026-05-16 13:47:35,200 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=6
+2026-05-16 13:47:35,200 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len > arr_len ? args_len : arr_len) [POSTCONDITION FAILED];
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:47:42,411 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len < arr_len ? args_len : arr_len);
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:47:57,182 - INFO  - syntax Correct
+2026-05-16 13:48:09,588 - INFO  - Loop Invariant:
+2026-05-16 13:48:09,589 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:48:09,589 - INFO  - 
+2026-05-16 13:48:09,589 - INFO  - Assertion:
+2026-05-16 13:48:09,589 - INFO  - []
+2026-05-16 13:48:09,589 - INFO  - 
+2026-05-16 13:48:09,590 - INFO  - Assigns:
+2026-05-16 13:48:09,590 - INFO  - [True, True, True]
+2026-05-16 13:48:09,590 - INFO  - 
+2026-05-16 13:48:09,591 - INFO  - Post Condition:
+2026-05-16 13:48:09,592 - INFO  - [True, True, True, True, False]
+2026-05-16 13:48:09,592 - INFO  - 
+2026-05-16 13:48:09,592 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=6
+2026-05-16 13:48:09,593 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len < arr_len ? args_len : arr_len) [POSTCONDITION FAILED];
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:48:19,681 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len > arr_len ? args_len : arr_len);
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:48:31,257 - INFO  - syntax Correct
+2026-05-16 13:48:42,968 - INFO  - Loop Invariant:
+2026-05-16 13:48:42,969 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:48:42,969 - INFO  - 
+2026-05-16 13:48:42,969 - INFO  - Assertion:
+2026-05-16 13:48:42,969 - INFO  - []
+2026-05-16 13:48:42,969 - INFO  - 
+2026-05-16 13:48:42,969 - INFO  - Assigns:
+2026-05-16 13:48:42,969 - INFO  - [True, True, True]
+2026-05-16 13:48:42,969 - INFO  - 
+2026-05-16 13:48:42,970 - INFO  - Post Condition:
+2026-05-16 13:48:42,971 - INFO  - [True, True, True, True, False]
+2026-05-16 13:48:42,971 - INFO  - 
+2026-05-16 13:48:42,971 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=6
+2026-05-16 13:48:42,978 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 13:48:54,412 - INFO  - syntax Correct
+2026-05-16 13:49:05,866 - INFO  - Loop Invariant:
+2026-05-16 13:49:05,866 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:49:05,866 - INFO  - 
+2026-05-16 13:49:05,867 - INFO  - Assertion:
+2026-05-16 13:49:05,867 - INFO  - []
+2026-05-16 13:49:05,867 - INFO  - 
+2026-05-16 13:49:05,867 - INFO  - Assigns:
+2026-05-16 13:49:05,867 - INFO  - [True, True, True]
+2026-05-16 13:49:05,867 - INFO  - 
+2026-05-16 13:49:05,868 - INFO  - Post Condition:
+2026-05-16 13:49:05,868 - INFO  - [True, True, True, True, False]
+2026-05-16 13:49:05,868 - INFO  - 
+2026-05-16 13:49:05,869 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=6
+2026-05-16 13:49:05,869 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len > arr_len ? args_len : arr_len) [POSTCONDITION FAILED];
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:49:13,538 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len < arr_len ? args_len : arr_len);
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:49:27,307 - INFO  - syntax Correct
+2026-05-16 13:49:39,636 - INFO  - Loop Invariant:
+2026-05-16 13:49:39,636 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:49:39,636 - INFO  - 
+2026-05-16 13:49:39,636 - INFO  - Assertion:
+2026-05-16 13:49:39,636 - INFO  - []
+2026-05-16 13:49:39,636 - INFO  - 
+2026-05-16 13:49:39,636 - INFO  - Assigns:
+2026-05-16 13:49:39,636 - INFO  - [True, True, True]
+2026-05-16 13:49:39,636 - INFO  - 
+2026-05-16 13:49:39,637 - INFO  - Post Condition:
+2026-05-16 13:49:39,637 - INFO  - [True, True, True, True, False]
+2026-05-16 13:49:39,637 - INFO  - 
+2026-05-16 13:49:39,637 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=6
+2026-05-16 13:49:39,637 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 13:49:52,006 - INFO  - syntax Correct
+2026-05-16 13:50:03,481 - INFO  - Loop Invariant:
+2026-05-16 13:50:03,483 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:50:03,483 - INFO  - 
+2026-05-16 13:50:03,483 - INFO  - Assertion:
+2026-05-16 13:50:03,483 - INFO  - []
+2026-05-16 13:50:03,483 - INFO  - 
+2026-05-16 13:50:03,484 - INFO  - Assigns:
+2026-05-16 13:50:03,484 - INFO  - [True, True, True]
+2026-05-16 13:50:03,484 - INFO  - 
+2026-05-16 13:50:03,484 - INFO  - Post Condition:
+2026-05-16 13:50:03,484 - INFO  - [True, True, True, True, False]
+2026-05-16 13:50:03,485 - INFO  - 
+2026-05-16 13:50:03,485 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=6
+2026-05-16 13:50:03,485 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len > arr_len ? args_len : arr_len) [POSTCONDITION FAILED];
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:50:11,333 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/* weakened from max-bound to per-length bounds */
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:50:12,248 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo64/20260516_134503_3258615_4c80419e/output/foo64.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo64/20260516_134503_3258615_4c80419e/output/foo64.c:13: 
+  syntax error:
+  Location: line 13, between columns 0 and 1, before or at token: *
+  11    
+  12    /* weakened from max-bound to per-length bounds */
+  13    */
+        ^^
+  14    int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+  15
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 13:50:12,249 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 13:50:12,249 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 13:50:25,792 - INFO  - syntax Correct
+2026-05-16 13:50:37,919 - INFO  - Loop Invariant:
+2026-05-16 13:50:37,919 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:50:37,919 - INFO  - 
+2026-05-16 13:50:37,919 - INFO  - Assertion:
+2026-05-16 13:50:37,919 - INFO  - []
+2026-05-16 13:50:37,919 - INFO  - 
+2026-05-16 13:50:37,919 - INFO  - Assigns:
+2026-05-16 13:50:37,919 - INFO  - [True, True, True]
+2026-05-16 13:50:37,919 - INFO  - 
+2026-05-16 13:50:37,920 - INFO  - Post Condition:
+2026-05-16 13:50:37,920 - INFO  - [True, True, True, True, False]
+2026-05-16 13:50:37,920 - INFO  - 
+2026-05-16 13:50:37,920 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=6
+2026-05-16 13:50:37,920 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len > arr_len ? args_len : arr_len) [POSTCONDITION FAILED];
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:50:45,825 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len < arr_len ? args_len : arr_len);
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:50:59,641 - INFO  - syntax Correct
+2026-05-16 13:51:12,164 - INFO  - Loop Invariant:
+2026-05-16 13:51:12,164 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:51:12,165 - INFO  - 
+2026-05-16 13:51:12,165 - INFO  - Assertion:
+2026-05-16 13:51:12,165 - INFO  - []
+2026-05-16 13:51:12,165 - INFO  - 
+2026-05-16 13:51:12,165 - INFO  - Assigns:
+2026-05-16 13:51:12,165 - INFO  - [True, True, True]
+2026-05-16 13:51:12,166 - INFO  - 
+2026-05-16 13:51:12,166 - INFO  - Post Condition:
+2026-05-16 13:51:12,166 - INFO  - [True, True, True, True, False]
+2026-05-16 13:51:12,166 - INFO  - 
+2026-05-16 13:51:12,167 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=6
+2026-05-16 13:51:12,167 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 13:51:25,927 - INFO  - syntax Correct
+2026-05-16 13:51:37,917 - INFO  - Loop Invariant:
+2026-05-16 13:51:37,917 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:51:37,917 - INFO  - 
+2026-05-16 13:51:37,918 - INFO  - Assertion:
+2026-05-16 13:51:37,918 - INFO  - []
+2026-05-16 13:51:37,918 - INFO  - 
+2026-05-16 13:51:37,918 - INFO  - Assigns:
+2026-05-16 13:51:37,918 - INFO  - [True, True, True]
+2026-05-16 13:51:37,918 - INFO  - 
+2026-05-16 13:51:37,918 - INFO  - Post Condition:
+2026-05-16 13:51:37,919 - INFO  - [True, True, True, True, False]
+2026-05-16 13:51:37,919 - INFO  - 
+2026-05-16 13:51:37,919 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=6
+2026-05-16 13:51:37,919 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len > arr_len ? args_len : arr_len) [POSTCONDITION FAILED];
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:51:45,455 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+  ensures \result <= (args_len < arr_len ? args_len : arr_len);
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:51:45,462 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9411764705882353, 0.0), clauses=6)
+2026-05-16 13:52:00,162 - INFO  - syntax Correct
+2026-05-16 13:52:11,966 - INFO  - Loop Invariant:
+2026-05-16 13:52:11,970 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:52:11,970 - INFO  - 
+2026-05-16 13:52:11,971 - INFO  - Assertion:
+2026-05-16 13:52:11,971 - INFO  - []
+2026-05-16 13:52:11,971 - INFO  - 
+2026-05-16 13:52:11,971 - INFO  - Assigns:
+2026-05-16 13:52:11,971 - INFO  - [True, True, True]
+2026-05-16 13:52:11,971 - INFO  - 
+2026-05-16 13:52:11,972 - INFO  - Post Condition:
+2026-05-16 13:52:11,972 - INFO  - [True, True, True, True, False]
+2026-05-16 13:52:11,972 - INFO  - 
+2026-05-16 13:52:14,435 - INFO  - syntax Correct
+2026-05-16 13:52:17,054 - INFO  - Loop Invariant:
+2026-05-16 13:52:17,055 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:52:17,055 - INFO  - 
+2026-05-16 13:52:17,055 - INFO  - Assertion:
+2026-05-16 13:52:17,055 - INFO  - []
+2026-05-16 13:52:17,055 - INFO  - 
+2026-05-16 13:52:17,055 - INFO  - Assigns:
+2026-05-16 13:52:17,055 - INFO  - [True, True, True]
+2026-05-16 13:52:17,055 - INFO  - 
+2026-05-16 13:52:17,055 - INFO  - Post Condition:
+2026-05-16 13:52:17,055 - INFO  - [True, True, True, True]
+2026-05-16 13:52:17,055 - INFO  - 
+2026-05-16 13:52:17,057 - INFO  - 
+SPECIFICATION FOR foo64
+2026-05-16 13:52:17,062 - INFO  - ==================================================
+
+2026-05-16 13:52:17,062 - INFO  - 
+QCP Specification for function foo64:
+/*@
+With args_l arr_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 && store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100
+Ensure Results(__return)
+*/
+2026-05-16 13:52:17,225 - INFO  - 
+VERIFICATION FOR foo64
+2026-05-16 13:52:17,226 - INFO  - ==================================================
+
+2026-05-16 13:52:19,327 - INFO  - syntax Correct
+2026-05-16 13:52:21,512 - INFO  - Loop Invariant:
+2026-05-16 13:52:21,512 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 13:52:21,512 - INFO  - 
+2026-05-16 13:52:21,513 - INFO  - Assertion:
+2026-05-16 13:52:21,513 - INFO  - []
+2026-05-16 13:52:21,513 - INFO  - 
+2026-05-16 13:52:21,513 - INFO  - Assigns:
+2026-05-16 13:52:21,513 - INFO  - [True, True, True]
+2026-05-16 13:52:21,513 - INFO  - 
+2026-05-16 13:52:21,513 - INFO  - Post Condition:
+2026-05-16 13:52:21,513 - INFO  - [True, True, True, True]
+2026-05-16 13:52:21,513 - INFO  - 
+2026-05-16 13:52:21,513 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo64
+2026-05-16 13:52:21,514 - INFO  - ==================================================
+2026-05-16 13:52:21,514 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo64/20260516_134503_3258615_4c80419e/output/foo64.c
+2026-05-16 13:52:21,514 - INFO  - Output file content:
+
+/*@
+  logic integer count_lt(int* a, integer lo, integer hi, int v) =
+    lo >= hi ? 0 : count_lt(a, lo, hi - 1, v) + (a[hi - 1] < v ? 1 : 0);
+*/
+
+/*@
+  logic integer count_lt_val(int* a, integer lo, integer hi, int* b, integer j) =
+    (j <= 0) ? 0 : count_lt(a, lo, hi, b[j-1]);
+*/
+
+/*@
+  assigns \nothing;
+  ensures args == \at(args,Pre) && arr == \at(arr,Pre) && args_len == \at(args_len,Pre) && arr_len == \at(arr_len,Pre) && array == \at(array,Pre);
+  ensures \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+  ensures \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+  ensures 0 <= \result;
+*/
+int foo64(int * args, int args_len, int * arr, int arr_len, int array) {
+
+		int ret = 0;
+		int r = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret;
+          loop invariant 0 <= r;
+          loop invariant array == \at(array,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop invariant \forall integer k; 0 <= k < arr_len ==> arr[k] == \at(arr[k],Pre);
+          loop assigns ret, r;
+            */
+            while (ret < args_len && r < arr_len) {
+			if (args[ret] < arr[r]) {
+				ret++;
+			} else if (args[ret] > arr[r]) {
+				r++;
+			} else {
+				ret++;
+				r++;
+			}
+		}
+            
+		return ret < args_len ? ret : r;
+}
+
+2026-05-16 13:52:21,514 - INFO  - ==================================================
+2026-05-16 13:52:21,514 - INFO  - first_pass:
+2026-05-16 13:52:21,514 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-16 13:52:21,514 - INFO  - ==================================================
+2026-05-16 13:52:21,514 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-16 13:52:21,515 - INFO  - Total execution time: 437.79 seconds (7.30 minutes)
+2026-05-16 13:52:21,515 - INFO  - ==================================================
+2026-05-16 13:52:21,515 - INFO  - ==================================================
+2026-05-16 13:52:21,515 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-16 13:52:21,515 - INFO  - Total API calls: 12
+2026-05-16 13:52:21,515 - INFO  - Total prompt tokens (input): 72,763
+2026-05-16 13:52:21,515 - INFO  - Total completion tokens (output): 8,845
+2026-05-16 13:52:21,515 - INFO  - Total tokens: 81,608
+2026-05-16 13:52:21,515 - INFO  - Average prompt tokens per call: 6063.6
+2026-05-16 13:52:21,515 - INFO  - Average completion tokens per call: 737.1
+2026-05-16 13:52:21,515 - INFO  - Average total tokens per call: 6800.7
+2026-05-16 13:52:21,515 - INFO  - ==================================================

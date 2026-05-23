@@ -563,14 +563,27 @@ class SpecificationConvertor:
                 if parameter.is_ptr and not parameter.is_struct and parameter.array_length != -1:
                     #分别添加数组的数组符号,地址,长度
                     if parameter.array_length == 'INT_MAX':
-                        idx = parameter_list.index(parameter)
                         exists_list.append(f'{value_str}{parameter.name}_l')
-                        if idx + 1 < len(parameter_list):
-                            next_parameter = parameter_list[idx + 1]
-                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, {next_parameter.name}, {value_str}{parameter.name}_l)')
-                            require_list.append(f'{next_parameter.name} > 0 && {next_parameter.name} < 100')
+                        # See spec_gen.py: positional `idx+1` heuristic replaced
+                        # by Utils.utils.resolve_array_lengths which populates
+                        # `length_expr` from name / body / LLM. Falls back to
+                        # a plain `\valid(p)` (store_int_ptr) when nothing
+                        # resolves.
+                        if parameter.length_expr:
+                            require_list.append(
+                                f'store_int_array({syntax_str}{parameter.name}, '
+                                f'{parameter.length_expr}, '
+                                f'{value_str}{parameter.name}_l)'
+                            )
+                            if parameter.length_source != 'name':
+                                require_list.append(
+                                    f'{parameter.length_expr} > 0 && '
+                                    f'{parameter.length_expr} < 100'
+                                )
                         else:
-                            require_list.append(f'store_int_array({syntax_str}{parameter.name}, 100, {value_str}{parameter.name}_l)')
+                            require_list.append(
+                                f'store_int_ptr({syntax_str}{parameter.name})'
+                            )
                     else:
                         require_list.extend([f'store_int_array({syntax_str}{parameter.name},{value_str}{parameter.array_length}, {value_str}{parameter.name}_l)',
                                             ])
@@ -1394,6 +1407,25 @@ class SpecificationConvertor:
                         add(f"\\valid({root.group(1)})")
                 continue
 
+            # store_int_ptr(p) → \valid(p)
+            # Emitted by spec_gen.py / convertor when a pointer is indexed in
+            # the body but no length expression could be resolved (resolver
+            # fell through all three layers). We give WP a usable lower bound:
+            # the pointer itself is dereferenceable. Without this fallback the
+            # LLM would have to invent the bound (and historically guessed
+            # wrong — see the IP_framac mat_mul case where it confused a
+            # pointer for a length).
+            m3 = re.match(r"store_int_ptr\s*\(\s*([^\)]+?)\s*\)\s*$", conj)
+            if m3:
+                p = m3.group(1).strip()
+                ptr_value = p[1:].strip() if p.startswith("&") else p
+                add(f"\\valid({ptr_value})")
+                if "->" in ptr_value or "." in ptr_value:
+                    root = re.match(r"^(\w+)", ptr_value)
+                    if root:
+                        add(f"\\valid({root.group(1)})")
+                continue
+
             # <ptr-expr> == <ghost>_v   →   \valid(<root pointer>)
             m3 = re.match(r"^(.+?)\s*==\s*[A-Za-z_]\w*_v\s*$", conj)
             if m3:
@@ -2166,14 +2198,49 @@ ensures {result};
         except Exception:
             category_hints = ''
 
+        # Array-length facts already resolved by Utils.utils.resolve_array_lengths.
+        # Surfacing them in the prompt prevents the LLM from re-deriving (and
+        # historically mis-deriving — e.g. treating a sibling pointer
+        # parameter as a length) the bound for each pointer.
+        array_length_facts = self._format_array_facts()
+
         # 替换模板中的 {code} 占位符
         specgen_prompt = prompt_template.format(
             code=annotations,
             loop_guide=loop_guide,
             category_hints=category_hints,
+            array_length_facts=array_length_facts,
         )
 
         return specgen_prompt
+
+    def _format_array_facts(self) -> str:
+        """Render resolved array-length metadata for the LLM prompt.
+
+        Returns an empty string if no pointer parameter has a resolved
+        length (the framework couldn't determine bounds, so we don't put
+        anything authoritative-sounding in front of the model)."""
+        params = getattr(self.function_info, 'parameter_list', None) or []
+        lines = []
+        for p in params:
+            if not getattr(p, 'is_ptr', False):
+                continue
+            length_expr = getattr(p, 'length_expr', None)
+            if not length_expr:
+                continue
+            tname = p.type if isinstance(p.type, str) else getattr(p.type, 'type', '?')
+            stars = '*' * max(getattr(p, 'ptr_depth', 1), 1)
+            dims = getattr(p, 'length_dims', None)
+            dim_hint = ''
+            if dims and len(dims) == 2:
+                dim_hint = f'  (= {dims[0]} rows x {dims[1]} cols, row-major flat)'
+            lines.append(f'- {p.name} ({tname} {stars}) has length {length_expr}{dim_hint}')
+        if not lines:
+            return ''
+        return (
+            '### Parameter array sizes (resolved by the framework — '
+            'DO NOT re-derive): ###\n' + '\n'.join(lines) + '\n'
+        )
 
     
 if __name__ == "__main__":

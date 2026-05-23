@@ -1,0 +1,15 @@
+#include <limits.h>
+
+/*@ requires (array == \at(array,Pre)) && (positions_len == \at(positions_len,Pre)) && (positions == \at(positions,Pre)) && (0 <= ret) && ((0 < \at(array,Pre)) ==> (ret <= \at(array,Pre))) && ((0 < \at(array,Pre)) ==> (ret >= 0)) && ((0 < \at(array,Pre)) ==> (ret == 0 || ret > 0)) && ((!(0 < \at(array,Pre))) ==> ((ret == 0)&&(array == \at(array,Pre))&&(positions_len == \at(positions_len,Pre))&&(positions == \at(positions,Pre)))) && (0 <= ret) && (\forall integer k) && (positions == \at(positions,Pre));
+    assigns \nothing;
+*/
+void check_A_implies_B(int *array, int k, int *positions, int positions_len, int *ret) {
+    /*@ assert (ret == array || positions[ret] == ret + 1 || positions[ret] != ret + 1) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\exists integer k) && (\exists integer k) && (\exists integer k) && (0 <= ret) && (ret == array ==> \forall integer k) && (ret == 0 || positions[ret-1] == ret) && (ret == 0 || positions[ret - 1] == ret) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (0 <= ret); */
+}
+
+/*@ requires (ret == array || positions[ret] == ret + 1 || positions[ret] != ret + 1) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\exists integer k) && (\exists integer k) && (\exists integer k) && (0 <= ret) && (ret == array ==> \forall integer k) && (ret == 0 || positions[ret-1] == ret) && (ret == 0 || positions[ret - 1] == ret) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (0 <= ret);
+    assigns \nothing;
+*/
+void check_B_implies_A(int *array, int k, int *positions, int positions_len, int *ret) {
+    /*@ assert (array == \at(array,Pre)) && (positions_len == \at(positions_len,Pre)) && (positions == \at(positions,Pre)) && (0 <= ret) && ((0 < \at(array,Pre)) ==> (ret <= \at(array,Pre))) && ((0 < \at(array,Pre)) ==> (ret >= 0)) && ((0 < \at(array,Pre)) ==> (ret == 0 || ret > 0)) && ((!(0 < \at(array,Pre))) ==> ((ret == 0)&&(array == \at(array,Pre))&&(positions_len == \at(positions_len,Pre))&&(positions == \at(positions,Pre)))) && (0 <= ret) && (\forall integer k) && (positions == \at(positions,Pre)); */
+}

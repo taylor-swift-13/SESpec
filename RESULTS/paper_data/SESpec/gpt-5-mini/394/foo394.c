@@ -1,0 +1,29 @@
+
+/*@ logic integer fact(integer n) =
+      n <= 1 ? 1 : n * fact(n-1);
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  
+*/
+int foo394(int num) {
+
+		int ret = 1;
+		
+            
+        /*@
+          loop invariant 1 <= loop;
+          loop invariant (loop <= \at(num,Pre) + 1) ==> ret == fact(loop - 1);
+          loop invariant (!(loop <= \at(num,Pre))) ==> ret == fact(\at(num,Pre));
+          loop invariant num == \at(num,Pre);
+          loop assigns loop, ret;
+        */
+            for (int loop = 1; loop <= num; loop++) {
+			ret *= loop;
+		}
+            
+		int result = (int) (ret % 100);
+		return result;
+}

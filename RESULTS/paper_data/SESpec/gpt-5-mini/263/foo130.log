@@ -1,0 +1,1494 @@
+2026-05-15 01:03:35,456 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c
+2026-05-15 01:03:35,457 - INFO  - 
+🚀 Starting generation of function: foo130
+2026-05-15 01:03:35,457 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 01:03:35,457 - INFO  - ==================================================
+
+2026-05-15 01:03:35,640 - INFO  - [auto only_loop] False — foo130 returns 'int'
+2026-05-15 01:03:35,640 - INFO  - Initial pending functions: ['foo130']
+2026-05-15 01:03:35,640 - INFO  - 
+GENERATE ANNOTATION FOR foo130
+2026-05-15 01:03:35,640 - INFO  - ==================================================
+
+2026-05-15 01:03:35,640 - INFO  - Function foo130 has been initialized
+2026-05-15 01:03:35,640 - INFO  - Starting to generate annotation code for foo130
+2026-05-15 01:03:35,677 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo130
+2026-05-15 01:03:35,677 - INFO  - ==================================================
+
+2026-05-15 01:03:35,732 - INFO  - Variable Maps:[{'end': 'n@pre - 1', 'start': '0', 'n': 'n@pre', 'arr_len': 'arr_len@pre', 'arr': 'arr@pre'}]
+2026-05-15 01:03:35,732 - INFO  - Path conditions: ['arr_len@pre > 0 && arr_len@pre < 100']
+2026-05-15 01:03:35,732 - INFO  - Pre condition: arr_len@pre > 0 && arr_len@pre < 100 && (end == n@pre - 1) * (start == 0) * (n == n@pre) * (arr_len == arr_len@pre) * (arr == arr@pre) * store_int_array(arr@pre, arr_len@pre, arr_l)
+2026-05-15 01:03:35,732 - INFO  - Loop Condition: start <= end
+2026-05-15 01:03:35,733 - INFO  - Array Names: ['arr']
+2026-05-15 01:03:35,733 - INFO  - Updated Loop Conditions: ['0 <= n@pre - 1']
+2026-05-15 01:03:35,734 - INFO  - Global Unchanged Variables: ['n', 'arr_len', 'arr']
+2026-05-15 01:03:35,734 - INFO  - Non Inductive Variables: ['start', 'end']
+2026-05-15 01:03:35,734 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 01:03:35,736 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 01:03:35,737 - INFO  - examples category: array
+2026-05-15 01:03:35,737 - INFO  - examples:
+2026-05-15 01:03:35,737 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-15 01:03:48,341 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-15 01:04:10,719 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=8
+2026-05-15 01:04:10,720 - INFO  - [inv-gen] converged at refine 2
+2026-05-15 01:04:13,425 - INFO  - ACSL format loop invariant
+2026-05-15 01:04:13,425 - INFO  - /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+2026-05-15 01:04:13,427 - INFO  - QCP format loop invariant
+2026-05-15 01:04:13,427 - INFO  - /*@ Inv
+    exists  arr_l,    
+    store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (n == n@pre) &&
+(arr_len == arr_len@pre) &&
+(arr == arr@pre) &&
+(0 <= start && start <= n@pre) &&
+(-1 <= end && end <= n@pre - 1) &&
+(start <= n@pre) &&
+(end < n@pre) &&
+(same_array{Pre,Here}(arr, arr_len)
+      loop assigns start, end)
+    */
+    
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+2026-05-15 01:04:16,066 - INFO  - CORRECT INVARIANT
+2026-05-15 01:04:16,066 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo130
+2026-05-15 01:04:16,066 - INFO  - ==================================================
+
+2026-05-15 01:04:16,076 - INFO  - Starting to generate ACSL specification for foo130
+2026-05-15 01:04:37,642 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:16: Warning: 
+  syntax error (expression expected but predicate found). Ignoring logic specification of function foo130
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:04:37,643 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 01:04:50,549 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:16: Warning: 
+  syntax error (expression expected but predicate found). Ignoring logic specification of function foo130
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:04:50,550 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 01:05:02,133 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:16: Warning: 
+  syntax error (expression expected but predicate found). Ignoring logic specification of function foo130
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:05:02,134 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 01:05:02,134 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:05:02,462 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:16: Warning: 
+  syntax error (expression expected but predicate found). Ignoring logic specification of function foo130
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:05:02,463 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 01:05:35,209 - INFO  - syntax Correct
+2026-05-15 01:05:46,181 - INFO  - Loop Invariant:
+2026-05-15 01:05:46,181 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:05:46,181 - INFO  - 
+2026-05-15 01:05:46,181 - INFO  - Assertion:
+2026-05-15 01:05:46,182 - INFO  - []
+2026-05-15 01:05:46,182 - INFO  - 
+2026-05-15 01:05:46,182 - INFO  - Assigns:
+2026-05-15 01:05:46,182 - INFO  - [True, True, True]
+2026-05-15 01:05:46,182 - INFO  - 
+2026-05-15 01:05:46,182 - INFO  - Post Condition:
+2026-05-15 01:05:46,182 - INFO  - [False]
+2026-05-15 01:05:46,182 - INFO  - 
+2026-05-15 01:05:46,183 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=5
+2026-05-15 01:05:46,183 - INFO  - postconditon before refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures ( (\exists integer i [POSTCONDITION FAILED]; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> (0 <= \result < n && \at(arr[\result],Pre) == \result) )
+          && ( !(\exists integer i; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> \result == -1 );
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:06:00,449 - INFO  - postconditon after refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures ( (\exists integer i [POSTCONDITION FAILED]; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> (0 <= \result < n && \at(arr[\result],Pre) == \result) )
+          && ( !(\exists integer i; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> \result == -1 );
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:06:00,711 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:12: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:06:00,711 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 01:06:14,309 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:12: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:06:14,310 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 01:06:14,310 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 01:06:25,002 - INFO  - syntax Correct
+2026-05-15 01:06:35,972 - INFO  - Loop Invariant:
+2026-05-15 01:06:35,973 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:06:35,973 - INFO  - 
+2026-05-15 01:06:35,973 - INFO  - Assertion:
+2026-05-15 01:06:35,973 - INFO  - []
+2026-05-15 01:06:35,973 - INFO  - 
+2026-05-15 01:06:35,973 - INFO  - Assigns:
+2026-05-15 01:06:35,973 - INFO  - [True, True, True]
+2026-05-15 01:06:35,973 - INFO  - 
+2026-05-15 01:06:35,974 - INFO  - Post Condition:
+2026-05-15 01:06:35,974 - INFO  - [False]
+2026-05-15 01:06:35,974 - INFO  - 
+2026-05-15 01:06:35,975 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=5
+2026-05-15 01:06:35,975 - INFO  - postconditon before refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures ( (\exists integer i [POSTCONDITION FAILED]; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> (0 <= \result < n && \at(arr[\result],Pre) == \result) )
+          && ( !(\exists integer i; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> \result == -1 );
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:06:49,915 - INFO  - postconditon after refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures ( (\exists integer i [POSTCONDITION FAILED]; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> (0 <= \result < n && \at(arr[\result],Pre) == \result) )
+          && ( !(\exists integer i; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> \result == -1 );
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:06:50,192 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:12: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:06:50,193 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 01:06:50,193 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 01:07:01,046 - INFO  - syntax Correct
+2026-05-15 01:07:11,896 - INFO  - Loop Invariant:
+2026-05-15 01:07:11,896 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:07:11,896 - INFO  - 
+2026-05-15 01:07:11,897 - INFO  - Assertion:
+2026-05-15 01:07:11,897 - INFO  - []
+2026-05-15 01:07:11,897 - INFO  - 
+2026-05-15 01:07:11,897 - INFO  - Assigns:
+2026-05-15 01:07:11,897 - INFO  - [True, True, True]
+2026-05-15 01:07:11,897 - INFO  - 
+2026-05-15 01:07:11,897 - INFO  - Post Condition:
+2026-05-15 01:07:11,898 - INFO  - [False]
+2026-05-15 01:07:11,898 - INFO  - 
+2026-05-15 01:07:11,898 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=5
+2026-05-15 01:07:11,899 - INFO  - postconditon before refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures ( (\exists integer i [POSTCONDITION FAILED]; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> (0 <= \result < n && \at(arr[\result],Pre) == \result) )
+          && ( !(\exists integer i; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> \result == -1 );
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:07:26,461 - INFO  - postconditon after refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures ( (\exists integer i [POSTCONDITION FAILED]; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> (0 <= \result < n && \at(arr[\result],Pre) == \result) )
+          && ( !(\exists integer i; 0 <= i < n && \at(arr[i],Pre) == i) 
+              ==> \result == -1 );
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:07:26,463 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9166666666666666, 0.0), clauses=5)
+2026-05-15 01:07:37,522 - INFO  - syntax Correct
+2026-05-15 01:07:48,641 - INFO  - Loop Invariant:
+2026-05-15 01:07:48,642 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:07:48,642 - INFO  - 
+2026-05-15 01:07:48,642 - INFO  - Assertion:
+2026-05-15 01:07:48,642 - INFO  - []
+2026-05-15 01:07:48,642 - INFO  - 
+2026-05-15 01:07:48,642 - INFO  - Assigns:
+2026-05-15 01:07:48,642 - INFO  - [True, True, True]
+2026-05-15 01:07:48,642 - INFO  - 
+2026-05-15 01:07:48,642 - INFO  - Post Condition:
+2026-05-15 01:07:48,642 - INFO  - [False]
+2026-05-15 01:07:48,642 - INFO  - 
+2026-05-15 01:07:49,008 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:12: Warning: 
+  unexpected token '==>'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:07:49,010 - INFO  - 
+SPECIFICATION FOR foo130
+2026-05-15 01:07:49,011 - INFO  - ==================================================
+
+2026-05-15 01:07:49,011 - INFO  - 
+QCP Specification for function foo130:
+/*@
+With arr_l
+Require store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100
+Ensure Results(__return)
+*/
+2026-05-15 01:07:49,140 - INFO  - 
+VERIFICATION FOR foo130
+2026-05-15 01:07:49,141 - INFO  - ==================================================
+
+2026-05-15 01:07:49,142 - INFO  - TRY TIME: 0
+2026-05-15 01:07:49,498 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:12: Warning: 
+  unexpected token '==>'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:08:16,357 - INFO  - syntax Correct
+2026-05-15 01:08:27,549 - INFO  - Loop Invariant:
+2026-05-15 01:08:27,549 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:08:27,549 - INFO  - 
+2026-05-15 01:08:27,549 - INFO  - Assertion:
+2026-05-15 01:08:27,549 - INFO  - []
+2026-05-15 01:08:27,550 - INFO  - 
+2026-05-15 01:08:27,550 - INFO  - Assigns:
+2026-05-15 01:08:27,550 - INFO  - [True, True, True]
+2026-05-15 01:08:27,550 - INFO  - 
+2026-05-15 01:08:27,550 - INFO  - Post Condition:
+2026-05-15 01:08:27,550 - INFO  - [True, True, False]
+2026-05-15 01:08:27,551 - INFO  - 
+2026-05-15 01:08:27,551 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-15 01:08:27,551 - INFO  - postconditon before refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < \at(n,Pre) ==> \at(arr[i],Pre) != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:08:39,131 - INFO  - postconditon after refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i; 0 <= i < \at(n,Pre) ==> \at(arr[i],Pre) != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:08:50,027 - INFO  - syntax Correct
+2026-05-15 01:09:00,863 - INFO  - Loop Invariant:
+2026-05-15 01:09:00,863 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:09:00,863 - INFO  - 
+2026-05-15 01:09:00,863 - INFO  - Assertion:
+2026-05-15 01:09:00,863 - INFO  - []
+2026-05-15 01:09:00,863 - INFO  - 
+2026-05-15 01:09:00,863 - INFO  - Assigns:
+2026-05-15 01:09:00,863 - INFO  - [True, True, True]
+2026-05-15 01:09:00,863 - INFO  - 
+2026-05-15 01:09:00,863 - INFO  - Post Condition:
+2026-05-15 01:09:00,864 - INFO  - [True, True, False]
+2026-05-15 01:09:00,864 - INFO  - 
+2026-05-15 01:09:00,864 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-15 01:09:00,864 - INFO  - postconditon before refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < \at(n,Pre) ==> \at(arr[i],Pre) != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:09:09,831 - INFO  - postconditon after refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i; 0 <= i < \at(n,Pre) ==> \at(arr,Pre)[i] != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:09:21,126 - INFO  - syntax Correct
+2026-05-15 01:09:32,458 - INFO  - Loop Invariant:
+2026-05-15 01:09:32,459 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:09:32,459 - INFO  - 
+2026-05-15 01:09:32,459 - INFO  - Assertion:
+2026-05-15 01:09:32,459 - INFO  - []
+2026-05-15 01:09:32,459 - INFO  - 
+2026-05-15 01:09:32,460 - INFO  - Assigns:
+2026-05-15 01:09:32,460 - INFO  - [True, True, True]
+2026-05-15 01:09:32,460 - INFO  - 
+2026-05-15 01:09:32,460 - INFO  - Post Condition:
+2026-05-15 01:09:32,460 - INFO  - [True, True, False]
+2026-05-15 01:09:32,461 - INFO  - 
+2026-05-15 01:09:32,461 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-15 01:09:32,461 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:09:43,558 - INFO  - syntax Correct
+2026-05-15 01:09:54,794 - INFO  - Loop Invariant:
+2026-05-15 01:09:54,794 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:09:54,794 - INFO  - 
+2026-05-15 01:09:54,794 - INFO  - Assertion:
+2026-05-15 01:09:54,795 - INFO  - []
+2026-05-15 01:09:54,795 - INFO  - 
+2026-05-15 01:09:54,795 - INFO  - Assigns:
+2026-05-15 01:09:54,795 - INFO  - [True, True, True]
+2026-05-15 01:09:54,795 - INFO  - 
+2026-05-15 01:09:54,795 - INFO  - Post Condition:
+2026-05-15 01:09:54,795 - INFO  - [True, True, False]
+2026-05-15 01:09:54,795 - INFO  - 
+2026-05-15 01:09:54,796 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-15 01:09:54,796 - INFO  - postconditon before refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < \at(n,Pre) ==> \at(arr[i],Pre) != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:10:05,407 - INFO  - postconditon after refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/* Weakened/rewritten postcondition so it refers to the current array values (arr unchanged by the function)
+     and avoids mixing \at on array elements unnecessarily. This states that if no index was found (result == -1)
+     then there is no i in [0..n-1] with arr[i] == i. */
+  ensures (\result == -1) ==> (\forall integer i; 0 <= i < \at(n,Pre) ==> arr[i] != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:10:05,726 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:10: 
+  Invalid symbol:
+  Location: line 10, between columns 10 and 12, before or at token: \
+  8          and avoids mixing \at on array elements unnecessarily. This states that if no index was found (result == -1)
+  9          then there is no i in [0..n-1] with arr[i] == i. */
+  10      ensures (\result == -1) ==> (\forall integer i; 0 <= i < \at(n,Pre) ==> arr[i] != i);
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  11    */
+  12    int foo130(int * arr, int arr_len, int n) {
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:10:05,726 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=1
+2026-05-15 01:10:05,726 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:10:16,754 - INFO  - syntax Correct
+2026-05-15 01:10:28,003 - INFO  - Loop Invariant:
+2026-05-15 01:10:28,003 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:10:28,003 - INFO  - 
+2026-05-15 01:10:28,003 - INFO  - Assertion:
+2026-05-15 01:10:28,004 - INFO  - []
+2026-05-15 01:10:28,004 - INFO  - 
+2026-05-15 01:10:28,004 - INFO  - Assigns:
+2026-05-15 01:10:28,004 - INFO  - [True, True, True]
+2026-05-15 01:10:28,004 - INFO  - 
+2026-05-15 01:10:28,004 - INFO  - Post Condition:
+2026-05-15 01:10:28,004 - INFO  - [True, True, False]
+2026-05-15 01:10:28,005 - INFO  - 
+2026-05-15 01:10:28,005 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-15 01:10:28,005 - INFO  - postconditon before refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < \at(n,Pre) ==> \at(arr[i],Pre) != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:10:38,883 - INFO  - postconditon after refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. \at(arr_len,Pre)-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= \at(n,Pre) && \at(n,Pre) <= \at(arr_len,Pre);
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i; 0 <= i < \at(n,Pre) ==> \at(arr[i],Pre) != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:10:49,875 - INFO  - syntax Correct
+2026-05-15 01:11:00,835 - INFO  - Loop Invariant:
+2026-05-15 01:11:00,835 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:11:00,835 - INFO  - 
+2026-05-15 01:11:00,835 - INFO  - Assertion:
+2026-05-15 01:11:00,835 - INFO  - []
+2026-05-15 01:11:00,835 - INFO  - 
+2026-05-15 01:11:00,836 - INFO  - Assigns:
+2026-05-15 01:11:00,836 - INFO  - [True, True, True]
+2026-05-15 01:11:00,836 - INFO  - 
+2026-05-15 01:11:00,836 - INFO  - Post Condition:
+2026-05-15 01:11:00,836 - INFO  - [True, True, False]
+2026-05-15 01:11:00,836 - INFO  - 
+2026-05-15 01:11:00,836 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-15 01:11:00,836 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:11:11,664 - INFO  - syntax Correct
+2026-05-15 01:11:22,896 - INFO  - Loop Invariant:
+2026-05-15 01:11:22,896 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:11:22,897 - INFO  - 
+2026-05-15 01:11:22,897 - INFO  - Assertion:
+2026-05-15 01:11:22,897 - INFO  - []
+2026-05-15 01:11:22,897 - INFO  - 
+2026-05-15 01:11:22,897 - INFO  - Assigns:
+2026-05-15 01:11:22,897 - INFO  - [True, True, True]
+2026-05-15 01:11:22,897 - INFO  - 
+2026-05-15 01:11:22,898 - INFO  - Post Condition:
+2026-05-15 01:11:22,898 - INFO  - [True, True, False]
+2026-05-15 01:11:22,898 - INFO  - 
+2026-05-15 01:11:22,899 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-15 01:11:22,899 - INFO  - postconditon before refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < \at(n,Pre) ==> \at(arr[i],Pre) != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:11:32,493 - INFO  - postconditon after refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/* Strengthen precondition: require that the search length n equals arr_len,
+     so the function actually examines the whole prefix 0..n-1. */
+  requires 0 <= n <= arr_len;
+  requires \at(n,Pre) == \at(arr_len,Pre);
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i; 0 <= i < \at(n,Pre) ==> \at(arr[i],Pre) != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:11:32,791 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c:9: 
+  syntax error:
+  Location: line 9, between columns 11 and 12, before or at token: 0
+  7     /* Strengthen precondition: require that the search length n equals arr_len,
+  8          so the function actually examines the whole prefix 0..n-1. */
+  9       requires 0 <= n <= arr_len;
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10      requires \at(n,Pre) == \at(arr_len,Pre);
+  11      assigns \nothing;
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:11:32,792 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 01:11:32,792 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:11:43,666 - INFO  - syntax Correct
+2026-05-15 01:11:54,678 - INFO  - Loop Invariant:
+2026-05-15 01:11:54,678 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:11:54,678 - INFO  - 
+2026-05-15 01:11:54,678 - INFO  - Assertion:
+2026-05-15 01:11:54,678 - INFO  - []
+2026-05-15 01:11:54,679 - INFO  - 
+2026-05-15 01:11:54,679 - INFO  - Assigns:
+2026-05-15 01:11:54,679 - INFO  - [True, True, True]
+2026-05-15 01:11:54,679 - INFO  - 
+2026-05-15 01:11:54,679 - INFO  - Post Condition:
+2026-05-15 01:11:54,679 - INFO  - [True, True, False]
+2026-05-15 01:11:54,679 - INFO  - 
+2026-05-15 01:11:54,680 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-15 01:11:54,680 - INFO  - postconditon before refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < \at(n,Pre) ==> \at(arr[i],Pre) != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:12:04,018 - INFO  - postconditon after refine: 
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer i; 0 <= i < \at(n,Pre) ==> arr[i] != i);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:12:04,020 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9285714285714286, 0.0), clauses=7)
+2026-05-15 01:12:14,759 - INFO  - syntax Correct
+2026-05-15 01:12:25,961 - INFO  - Loop Invariant:
+2026-05-15 01:12:25,962 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:12:25,962 - INFO  - 
+2026-05-15 01:12:25,962 - INFO  - Assertion:
+2026-05-15 01:12:25,962 - INFO  - []
+2026-05-15 01:12:25,962 - INFO  - 
+2026-05-15 01:12:25,963 - INFO  - Assigns:
+2026-05-15 01:12:25,963 - INFO  - [True, True, True]
+2026-05-15 01:12:25,963 - INFO  - 
+2026-05-15 01:12:25,963 - INFO  - Post Condition:
+2026-05-15 01:12:25,963 - INFO  - [True, True, False]
+2026-05-15 01:12:25,963 - INFO  - 
+2026-05-15 01:12:27,828 - INFO  - syntax Correct
+2026-05-15 01:12:29,763 - INFO  - Loop Invariant:
+2026-05-15 01:12:29,763 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:12:29,763 - INFO  - 
+2026-05-15 01:12:29,764 - INFO  - Assertion:
+2026-05-15 01:12:29,764 - INFO  - []
+2026-05-15 01:12:29,764 - INFO  - 
+2026-05-15 01:12:29,764 - INFO  - Assigns:
+2026-05-15 01:12:29,764 - INFO  - [True, True, True]
+2026-05-15 01:12:29,764 - INFO  - 
+2026-05-15 01:12:29,764 - INFO  - Post Condition:
+2026-05-15 01:12:29,764 - INFO  - [True, True]
+2026-05-15 01:12:29,764 - INFO  - 
+2026-05-15 01:12:31,218 - INFO  - syntax Correct
+2026-05-15 01:12:32,656 - INFO  - Loop Invariant:
+2026-05-15 01:12:32,656 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-15 01:12:32,656 - INFO  - 
+2026-05-15 01:12:32,656 - INFO  - Assertion:
+2026-05-15 01:12:32,656 - INFO  - []
+2026-05-15 01:12:32,656 - INFO  - 
+2026-05-15 01:12:32,656 - INFO  - Assigns:
+2026-05-15 01:12:32,656 - INFO  - [True, True, True]
+2026-05-15 01:12:32,656 - INFO  - 
+2026-05-15 01:12:32,656 - INFO  - Post Condition:
+2026-05-15 01:12:32,657 - INFO  - [True, True]
+2026-05-15 01:12:32,657 - INFO  - 
+2026-05-15 01:12:32,657 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo130
+2026-05-15 01:12:32,657 - INFO  - ==================================================
+2026-05-15 01:12:32,657 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo130/20260515_010335_659664_891d9f0c/output/foo130.c
+2026-05-15 01:12:32,657 - INFO  - Output file content:
+
+/*@
+  predicate same_array{L1,L2}(int* a, integer len) =
+    \forall integer i; 0 <= i < len ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(arr + (0 .. arr_len-1));
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires 0 <= n <= arr_len;
+  assigns \nothing;
+  ensures same_array{Pre,Here}(arr, arr_len);
+  ensures (\result != -1) ==> (0 <= \result && \result < \at(n,Pre) && arr[\result] == \result);
+*/
+int foo130(int * arr, int arr_len, int n) {
+
+    int start = 0;
+    int end = n - 1;
+
+    /*@
+      loop invariant n == \at(n,Pre);
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant 0 <= start <= \at(n,Pre);
+      loop invariant -1 <= end <= \at(n,Pre) - 1;
+      loop invariant start <= \at(n,Pre);
+      loop invariant end < \at(n,Pre);
+      loop invariant same_array{Pre,Here}(arr, arr_len);
+      loop assigns start, end;
+    */
+    while (start <= end) {
+        int mid = start + (end - start) / 2;
+        if (arr[mid] == mid) {
+            return mid;
+        } else if (arr[mid] < mid) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 01:12:32,657 - INFO  - ==================================================
+2026-05-15 01:12:32,657 - INFO  - first_pass:
+2026-05-15 01:12:32,657 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 01:12:32,657 - INFO  - ==================================================
+2026-05-15 01:12:32,657 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 01:12:32,657 - INFO  - Total execution time: 537.20 seconds (8.95 minutes)
+2026-05-15 01:12:32,657 - INFO  - ==================================================
+2026-05-15 01:12:32,657 - INFO  - ==================================================
+2026-05-15 01:12:32,657 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 01:12:32,657 - INFO  - Total API calls: 11
+2026-05-15 01:12:32,658 - INFO  - Total prompt tokens (input): 47,865
+2026-05-15 01:12:32,658 - INFO  - Total completion tokens (output): 7,510
+2026-05-15 01:12:32,658 - INFO  - Total tokens: 55,375
+2026-05-15 01:12:32,658 - INFO  - Average prompt tokens per call: 4351.4
+2026-05-15 01:12:32,658 - INFO  - Average completion tokens per call: 682.7
+2026-05-15 01:12:32,658 - INFO  - Average total tokens per call: 5034.1
+2026-05-15 01:12:32,658 - INFO  - ==================================================

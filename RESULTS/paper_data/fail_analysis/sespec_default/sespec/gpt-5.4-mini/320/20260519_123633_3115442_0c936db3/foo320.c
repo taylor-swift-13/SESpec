@@ -1,0 +1,27 @@
+
+int foo320(int n, int y) {
+
+		int ret = 1;
+		int g = 1;
+		if (n > y) {
+			int r = n;
+			n = y;
+			y = r;
+		}
+		
+            /*@
+          loop invariant ret > 0;
+          loop invariant ret <= l;
+          loop invariant n % ret == 0 && y % ret == 0;
+          loop invariant g == 1;
+          loop assigns l, ret;
+            */
+            for (int l = 1; l <= n; l++) {
+			if (n % l == 0 && y % l == 0) {
+				ret = l;
+			}
+		}
+            
+		g = (n * y) / ret;
+		return g;
+}

@@ -1,0 +1,165 @@
+#include <limits.h>
+
+
+
+/*@requires array >= 0;
+  requires \valid_read(a + (0 .. array-1));
+  assigns \nothing;
+  ensures array == 0 ==> \result >= 0;
+  ensures array > 0 ==> \result >= 0;
+  ensures array > 0 ==> \result <= array + 1;
+  ensures \result >= 0;
+  ensures \result >= 0;*/
+int stub_A(int * a, int a_len, int array);
+
+/*@loop invariant stop == 0 || stop < array;
+		loop invariant stop == 0 || max_so_far >= a[stop];
+		loop invariant stop == 0 || a[stop] <= max_so_far;
+		loop invariant stop <= n;
+		loop invariant stop <= n || stop <= array;
+		loop invariant stop <= n || step <= stop + 1;
+		loop invariant stop <= n || step <= array;
+		loop invariant stop <= n || n <= array;
+		loop invariant stop <= n || max <= step;
+		loop invariant stop <= n || max <= array;
+		loop invariant stop <= array || step <= stop + 1;
+		loop invariant stop <= array || step <= n;
+		loop invariant stop <= array || max <= step;
+		loop invariant stop <= array || max <= n + 1;
+		loop invariant stop < array || stop == 0;
+		loop invariant step == 0 || step <= n + 1;
+		loop invariant step == 0 || step <= array;
+		loop invariant step == 0 || 0 <= step <= n;
+		loop invariant step <= stop + 1 || step <= n;
+		loop invariant step <= stop + 1 || n <= array;
+		loop invariant step <= stop + 1 || max <= n + 1;
+		loop invariant step <= stop + 1 || max <= array;
+		loop invariant step <= n;
+		loop invariant step <= n || n <= array;
+		loop invariant step <= n || max <= n + 1;
+		loop invariant step <= n || max <= array;
+		loop invariant step <= n + 1;
+		loop invariant step <= array || step <= stop + 1;
+		loop invariant step <= array || step <= n;
+		loop invariant step <= array || max <= step;
+		loop invariant step <= array || max <= n + 1;
+		loop invariant max_so_far >= max_ending_here || max_ending_here >= max_so_far;
+		loop invariant max_so_far >= max_ending_here || max_ending_here == 0;
+		loop invariant max_ending_here >= 0 || step == n + 1;
+		loop invariant max_ending_here >= 0 || max_ending_here < 0;
+		loop invariant max_ending_here == 0 || step <= n;
+		loop invariant max_ending_here == 0 || step <= n + 1;
+		loop invariant max_ending_here == 0 || max_ending_here > 0;
+		loop invariant max_ending_here <= max_so_far;
+		loop invariant max_ending_here <= max_so_far || max_so_far == 0;
+		loop invariant max_ending_here <= max_so_far || max_so_far < 0;
+		loop invariant max == step || max <= step;
+		loop invariant max == 0 || max < n + 1;
+		loop invariant max <= stop + 1;
+		loop invariant max <= step;
+		loop invariant max <= step || step <= stop + 1;
+		loop invariant max <= step || n <= array;
+		loop invariant max <= step || max <= array;
+		loop invariant max <= step + 1;
+		loop invariant max <= n + 1;
+		loop invariant max <= n + 1 || n <= array;
+		loop invariant max <= array || max <= n + 1;
+		loop invariant max < n + 1;
+		loop invariant max - 1 <= stop;
+		loop invariant 0 <= stop;
+		loop invariant 0 <= stop < array || stop == 0;
+		loop invariant 0 <= step;
+		loop invariant 0 <= n;
+		loop invariant 0 <= max_so_far;
+		loop invariant 0 <= max_ending_here;
+		loop invariant 0 <= max;
+		loop assigns stop;
+		loop assigns step;
+		loop assigns n;
+		loop assigns max_so_far;
+		loop assigns max_ending_here;
+		loop assigns max;*/
+int stub_B(int * a, int a_len, int array);
+
+/*@loop invariant stop == 0 || stop < array;
+		loop invariant stop == 0 || max_so_far >= a[stop];
+		loop invariant stop == 0 || a[stop] <= max_so_far;
+		loop invariant stop <= n;
+		loop invariant stop <= n || stop <= array;
+		loop invariant stop <= n || step <= stop + 1;
+		loop invariant stop <= n || step <= array;
+		loop invariant stop <= n || n <= array;
+		loop invariant stop <= n || max <= step;
+		loop invariant stop <= n || max <= array;
+		loop invariant stop <= array || step <= stop + 1;
+		loop invariant stop <= array || step <= n;
+		loop invariant stop <= array || max <= step;
+		loop invariant stop <= array || max <= n + 1;
+		loop invariant stop < array || stop == 0;
+		loop invariant step == 0 || step <= n + 1;
+		loop invariant step == 0 || step <= array;
+		loop invariant step == 0 || 0 <= step <= n;
+		loop invariant step <= stop + 1 || step <= n;
+		loop invariant step <= stop + 1 || n <= array;
+		loop invariant step <= stop + 1 || max <= n + 1;
+		loop invariant step <= stop + 1 || max <= array;
+		loop invariant step <= n;
+		loop invariant step <= n || n <= array;
+		loop invariant step <= n || max <= n + 1;
+		loop invariant step <= n || max <= array;
+		loop invariant step <= n + 1;
+		loop invariant step <= array || step <= stop + 1;
+		loop invariant step <= array || step <= n;
+		loop invariant step <= array || max <= step;
+		loop invariant step <= array || max <= n + 1;
+		loop invariant max_so_far >= max_ending_here || max_ending_here >= max_so_far;
+		loop invariant max_so_far >= max_ending_here || max_ending_here == 0;
+		loop invariant max_ending_here >= 0 || step == n + 1;
+		loop invariant max_ending_here >= 0 || max_ending_here < 0;
+		loop invariant max_ending_here == 0 || step <= n;
+		loop invariant max_ending_here == 0 || step <= n + 1;
+		loop invariant max_ending_here == 0 || max_ending_here > 0;
+		loop invariant max_ending_here <= max_so_far;
+		loop invariant max_ending_here <= max_so_far || max_so_far == 0;
+		loop invariant max_ending_here <= max_so_far || max_so_far < 0;
+		loop invariant max == step || max <= step;
+		loop invariant max == 0 || max < n + 1;
+		loop invariant max <= stop + 1;
+		loop invariant max <= step;
+		loop invariant max <= step || step <= stop + 1;
+		loop invariant max <= step || n <= array;
+		loop invariant max <= step || max <= array;
+		loop invariant max <= step + 1;
+		loop invariant max <= n + 1;
+		loop invariant max <= n + 1 || n <= array;
+		loop invariant max <= array || max <= n + 1;
+		loop invariant max < n + 1;
+		loop invariant max - 1 <= stop;
+		loop invariant 0 <= stop;
+		loop invariant 0 <= stop < array || stop == 0;
+		loop invariant 0 <= step;
+		loop invariant 0 <= n;
+		loop invariant 0 <= max_so_far;
+		loop invariant 0 <= max_ending_here;
+		loop invariant 0 <= max;
+		loop assigns stop;
+		loop assigns step;
+		loop assigns n;
+		loop assigns max_so_far;
+		loop assigns max_ending_here;
+		loop assigns max;*/
+int check_A_implies_B(int * a, int a_len, int array) {
+    return stub_A(a, a_len, array);
+}
+
+/*@requires array >= 0;
+  requires \valid_read(a + (0 .. array-1));
+  assigns \nothing;
+  ensures array == 0 ==> \result >= 0;
+  ensures array > 0 ==> \result >= 0;
+  ensures array > 0 ==> \result <= array + 1;
+  ensures \result >= 0;
+  ensures \result >= 0;*/
+int check_B_implies_A(int * a, int a_len, int array) {
+    return stub_B(a, a_len, array);
+}

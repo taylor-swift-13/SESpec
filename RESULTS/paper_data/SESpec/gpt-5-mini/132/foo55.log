@@ -1,0 +1,539 @@
+2026-05-15 00:11:01,938 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo55/20260515_001101_539937_b9f1eb17
+2026-05-15 00:11:01,938 - INFO  - 
+🚀 Starting generation of function: foo55
+2026-05-15 00:11:01,938 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 00:11:01,938 - INFO  - ==================================================
+
+2026-05-15 00:11:02,023 - INFO  - [auto only_loop] False — foo55 returns 'int'
+2026-05-15 00:11:02,023 - INFO  - Initial pending functions: ['foo55']
+2026-05-15 00:11:02,023 - INFO  - 
+GENERATE ANNOTATION FOR foo55
+2026-05-15 00:11:02,023 - INFO  - ==================================================
+
+2026-05-15 00:11:02,023 - INFO  - Function foo55 has been initialized
+2026-05-15 00:11:02,023 - INFO  - Starting to generate annotation code for foo55
+2026-05-15 00:11:02,058 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo55
+2026-05-15 00:11:02,058 - INFO  - ==================================================
+
+2026-05-15 00:11:02,101 - INFO  - Variable Maps:[{}]
+2026-05-15 00:11:02,102 - INFO  - Path conditions: [None]
+2026-05-15 00:11:02,102 - INFO  - Pre condition: 
+2026-05-15 00:11:02,102 - INFO  - Loop Condition: i < a_len
+2026-05-15 00:11:02,103 - INFO  - Array Names: ['a']
+2026-05-15 00:11:02,103 - INFO  - Updated Loop Conditions: ['i < a_len']
+2026-05-15 00:11:02,103 - INFO  - Global Unchanged Variables: []
+2026-05-15 00:11:02,103 - INFO  - Non Inductive Variables: []
+2026-05-15 00:11:02,103 - INFO  - Unchanged Arrays (Read-only): ['a']
+2026-05-15 00:11:02,104 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 00:11:02,105 - INFO  - examples category: array
+2026-05-15 00:11:02,105 - INFO  - examples:
+2026-05-15 00:11:02,105 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-15 00:11:08,521 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 00:11:19,547 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 00:11:28,992 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 00:11:28,992 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 00:11:29,234 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 00:11:41,301 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 00:11:41,302 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 00:11:41,539 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 00:11:51,499 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 00:11:51,500 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 00:11:51,769 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 00:12:26,334 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-15 00:13:15,384 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=3
+2026-05-15 00:13:15,387 - INFO  - [inv-gen] converged at refine 10
+2026-05-15 00:13:37,146 - INFO  - ACSL format loop invariant
+2026-05-15 00:13:37,148 - INFO  - /*@
+          loop invariant 0 <= i <= a_len;
+          loop invariant res == (i == 0
+                                 ? INT_MIN
+                                 : (min_prefix(a, 0, i) < INT_MIN ? min_prefix(a, 0, i) : INT_MIN));
+          loop invariant \forall integer k; 0 <= k < a_len ==> a[k] == \at(a[k], Pre);
+          loop assigns i, res;
+        */
+        for(int i = 0; i < a_len; i++) {
+            res = ((a[i] < res) ? a[i] : res);
+        }
+2026-05-15 00:13:37,149 - INFO  - QCP format loop invariant
+2026-05-15 00:13:37,149 - INFO  - /*@ Inv
+    exists  a_l,    
+    store_int_array(a, a_len, a_l) && a_len > 0 && a_len < 100 &&
+    (0 <= i && i <= a_len) &&
+(res == (i == 0
+                                 ? INT_MIN
+                                 : (min_prefix(a, 0, i) < INT_MIN ? min_prefix(a, 0, i) : INT_MIN))) &&
+(forall (k:Z), 0 <= k && k < a_len => a_l[k] == a_l[k]@pre
+          loop assigns i, res)
+    */
+    
+        for(int i = 0; i < a_len; i++) {
+            res = ((a[i] < res) ? a[i] : res);
+        }
+2026-05-15 00:13:58,682 - INFO  - CORRECT INVARIANT
+2026-05-15 00:13:58,682 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo55
+2026-05-15 00:13:58,682 - INFO  - ==================================================
+
+2026-05-15 00:13:58,697 - INFO  - Starting to generate ACSL specification for foo55
+2026-05-15 00:14:17,165 - INFO  - syntax Correct
+2026-05-15 00:14:27,991 - INFO  - Loop Invariant:
+2026-05-15 00:14:27,992 - INFO  - [True, True, True]
+2026-05-15 00:14:27,992 - INFO  - 
+2026-05-15 00:14:27,992 - INFO  - Assertion:
+2026-05-15 00:14:27,992 - INFO  - []
+2026-05-15 00:14:27,992 - INFO  - 
+2026-05-15 00:14:27,992 - INFO  - Assigns:
+2026-05-15 00:14:27,992 - INFO  - [True, True, True]
+2026-05-15 00:14:27,992 - INFO  - 
+2026-05-15 00:14:27,992 - INFO  - Post Condition:
+2026-05-15 00:14:27,993 - INFO  - [True, False]
+2026-05-15 00:14:27,993 - INFO  - 
+2026-05-15 00:14:27,993 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-15 00:14:27,993 - INFO  - postconditon before refine: 
+
+#include <limits.h>
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (min_prefix(a, lo, hi - 1) < a[hi - 1] ? min_prefix(a, lo, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  requires \valid_read(a + (0..a_len-1));
+  requires a_len >= 0;
+  assigns \nothing;
+  ensures a_len == 0 ==> \result == -1;
+  ensures a_len > 0  ==> \result == min_prefix(a, 0, a_len) [POSTCONDITION FAILED];
+*/
+int foo55(int * a, int a_len) {
+
+        if (a_len == 0) return -1;
+        int res = INT_MIN;
+        
+        /*@
+          loop invariant 0 <= i <= a_len;
+          loop invariant res == (i == 0
+                                 ? INT_MIN
+                                 : (min_prefix(a, 0, i) < INT_MIN ? min_prefix(a, 0, i) : INT_MIN));
+          loop invariant \forall integer k; 0 <= k < a_len ==> a[k] == \at(a[k], Pre);
+          loop assigns i, res;
+        */
+        for(int i = 0; i < a_len; i++) {
+            res = ((a[i] < res) ? a[i] : res);
+        }
+            
+        return res;
+}
+
+2026-05-15 00:14:37,038 - INFO  - postconditon after refine: 
+
+#include <limits.h>
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (min_prefix(a, lo, hi - 1) < a[hi - 1] ? min_prefix(a, lo, hi - 1) : a[hi - 1]);
+*/
+
+/* The implementation computes the minimum of INT_MIN and all elements a[0..a_len-1].
+     If a_len > 0 the result equals the minimum of INT_MIN and the array prefix. */
+  ensures a_len > 0 ==>
+    (\forall integer k; 0 <= k < a_len ==> (\result <= a[k]))
+    && (\result == INT_MIN || (\exists integer k; 0 <= k < a_len && \result == a[k]));
+*/
+int foo55(int * a, int a_len) {
+
+        if (a_len == 0) return -1;
+        int res = INT_MIN;
+        
+        /*@
+          loop invariant 0 <= i <= a_len;
+          loop invariant res == (i == 0
+                                 ? INT_MIN
+                                 : (min_prefix(a, 0, i) < INT_MIN ? min_prefix(a, 0, i) : INT_MIN));
+          loop invariant \forall integer k; 0 <= k < a_len ==> a[k] == \at(a[k], Pre);
+          loop assigns i, res;
+        */
+        for(int i = 0; i < a_len; i++) {
+            res = ((a[i] < res) ? a[i] : res);
+        }
+            
+        return res;
+}
+
+2026-05-15 00:14:37,303 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo55/20260515_001101_539937_b9f1eb17/output/foo55.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo55/20260515_001101_539937_b9f1eb17/output/foo55.c:12: 
+  syntax error:
+  Location: line 12, between columns 10 and 15, before or at token: a_len
+  10    /* The implementation computes the minimum of INT_MIN and all elements a[0..a_len-1].
+  11         If a_len > 0 the result equals the minimum of INT_MIN and the array prefix. */
+  12      ensures a_len > 0 ==>
+        ^^^^^^^^^^^^^^^^^^^^^^^
+  13        (\forall integer k; 0 <= k < a_len ==> (\result <= a[k]))
+  14        && (\result == INT_MIN || (\exists integer k; 0 <= k < a_len && \result == a[k]));
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 00:14:37,303 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=1
+2026-05-15 00:14:56,397 - INFO  - syntax Correct
+2026-05-15 00:15:07,326 - INFO  - Loop Invariant:
+2026-05-15 00:15:07,327 - INFO  - [True, True, True]
+2026-05-15 00:15:07,327 - INFO  - 
+2026-05-15 00:15:07,327 - INFO  - Assertion:
+2026-05-15 00:15:07,327 - INFO  - []
+2026-05-15 00:15:07,327 - INFO  - 
+2026-05-15 00:15:07,327 - INFO  - Assigns:
+2026-05-15 00:15:07,327 - INFO  - [True, True, True]
+2026-05-15 00:15:07,327 - INFO  - 
+2026-05-15 00:15:07,327 - INFO  - Post Condition:
+2026-05-15 00:15:07,328 - INFO  - [True, False]
+2026-05-15 00:15:07,328 - INFO  - 
+2026-05-15 00:15:07,328 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-15 00:15:07,328 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 00:15:18,074 - INFO  - syntax Correct
+2026-05-15 00:15:28,920 - INFO  - Loop Invariant:
+2026-05-15 00:15:28,920 - INFO  - [True, True, True]
+2026-05-15 00:15:28,921 - INFO  - 
+2026-05-15 00:15:28,921 - INFO  - Assertion:
+2026-05-15 00:15:28,921 - INFO  - []
+2026-05-15 00:15:28,921 - INFO  - 
+2026-05-15 00:15:28,921 - INFO  - Assigns:
+2026-05-15 00:15:28,921 - INFO  - [True, True, True]
+2026-05-15 00:15:28,921 - INFO  - 
+2026-05-15 00:15:28,921 - INFO  - Post Condition:
+2026-05-15 00:15:28,921 - INFO  - [True, False]
+2026-05-15 00:15:28,921 - INFO  - 
+2026-05-15 00:15:28,922 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-15 00:15:28,922 - INFO  - postconditon before refine: 
+
+#include <limits.h>
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (min_prefix(a, lo, hi - 1) < a[hi - 1] ? min_prefix(a, lo, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  requires \valid_read(a + (0..a_len-1));
+  requires a_len >= 0;
+  assigns \nothing;
+  ensures a_len == 0 ==> \result == -1;
+  ensures a_len > 0  ==> \result == min_prefix(a, 0, a_len) [POSTCONDITION FAILED];
+*/
+int foo55(int * a, int a_len) {
+
+        if (a_len == 0) return -1;
+        int res = INT_MIN;
+        
+        /*@
+          loop invariant 0 <= i <= a_len;
+          loop invariant res == (i == 0
+                                 ? INT_MIN
+                                 : (min_prefix(a, 0, i) < INT_MIN ? min_prefix(a, 0, i) : INT_MIN));
+          loop invariant \forall integer k; 0 <= k < a_len ==> a[k] == \at(a[k], Pre);
+          loop assigns i, res;
+        */
+        for(int i = 0; i < a_len; i++) {
+            res = ((a[i] < res) ? a[i] : res);
+        }
+            
+        return res;
+}
+
+2026-05-15 00:15:39,955 - INFO  - postconditon after refine: 
+
+#include <limits.h>
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (min_prefix(a, lo, hi - 1) < a[hi - 1] ? min_prefix(a, lo, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  requires \valid_read(a + (0..a_len-1));
+  requires a_len >= 0;
+  assigns \nothing;
+  ensures a_len == 0 ==> \result == -1;
+  ensures a_len > 0  ==> \result == (min_prefix(a, 0, a_len) < INT_MIN ? min_prefix(a, 0, a_len) : INT_MIN);
+*/
+int foo55(int * a, int a_len) {
+
+        if (a_len == 0) return -1;
+        int res = INT_MIN;
+        
+        /*@
+          loop invariant 0 <= i <= a_len;
+          loop invariant res == (i == 0
+                                 ? INT_MIN
+                                 : (min_prefix(a, 0, i) < INT_MIN ? min_prefix(a, 0, i) : INT_MIN));
+          loop invariant \forall integer k; 0 <= k < a_len ==> a[k] == \at(a[k], Pre);
+          loop assigns i, res;
+        */
+        for(int i = 0; i < a_len; i++) {
+            res = ((a[i] < res) ? a[i] : res);
+        }
+            
+        return res;
+}
+
+2026-05-15 00:15:40,921 - INFO  - syntax Correct
+2026-05-15 00:15:42,003 - INFO  - Loop Invariant:
+2026-05-15 00:15:42,004 - INFO  - [True, True, True]
+2026-05-15 00:15:42,004 - INFO  - 
+2026-05-15 00:15:42,004 - INFO  - Assertion:
+2026-05-15 00:15:42,004 - INFO  - []
+2026-05-15 00:15:42,004 - INFO  - 
+2026-05-15 00:15:42,004 - INFO  - Assigns:
+2026-05-15 00:15:42,004 - INFO  - [True, True, True]
+2026-05-15 00:15:42,005 - INFO  - 
+2026-05-15 00:15:42,005 - INFO  - Post Condition:
+2026-05-15 00:15:42,005 - INFO  - [True, True]
+2026-05-15 00:15:42,005 - INFO  - 
+2026-05-15 00:15:42,005 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=5
+2026-05-15 00:15:42,005 - INFO  - [spec-gen] converged at refine 5
+2026-05-15 00:15:42,006 - INFO  - 
+SPECIFICATION FOR foo55
+2026-05-15 00:15:42,006 - INFO  - ==================================================
+
+2026-05-15 00:15:42,006 - INFO  - 
+QCP Specification for function foo55:
+/*@
+With a_l
+Require store_int_array(a, a_len, a_l) && a_len > 0 && a_len < 100
+Ensure Results(__return)
+*/
+2026-05-15 00:15:42,092 - INFO  - 
+VERIFICATION FOR foo55
+2026-05-15 00:15:42,093 - INFO  - ==================================================
+
+2026-05-15 00:15:42,093 - INFO  - TRY TIME: 0
+2026-05-15 00:15:42,938 - INFO  - syntax Correct
+2026-05-15 00:15:44,080 - INFO  - Loop Invariant:
+2026-05-15 00:15:44,081 - INFO  - [True, True, True]
+2026-05-15 00:15:44,081 - INFO  - 
+2026-05-15 00:15:44,081 - INFO  - Assertion:
+2026-05-15 00:15:44,081 - INFO  - []
+2026-05-15 00:15:44,081 - INFO  - 
+2026-05-15 00:15:44,081 - INFO  - Assigns:
+2026-05-15 00:15:44,081 - INFO  - [True, True, True]
+2026-05-15 00:15:44,081 - INFO  - 
+2026-05-15 00:15:44,081 - INFO  - Post Condition:
+2026-05-15 00:15:44,082 - INFO  - [True, True]
+2026-05-15 00:15:44,082 - INFO  - 
+2026-05-15 00:15:44,082 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo55
+2026-05-15 00:15:44,082 - INFO  - ==================================================
+2026-05-15 00:15:44,082 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo55/20260515_001101_539937_b9f1eb17/output/foo55.c
+2026-05-15 00:15:44,082 - INFO  - Output file content:
+
+#include <limits.h>
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (min_prefix(a, lo, hi - 1) < a[hi - 1] ? min_prefix(a, lo, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  requires \valid_read(a + (0..a_len-1));
+  requires a_len >= 0;
+  assigns \nothing;
+  ensures a_len == 0 ==> \result == -1;
+  ensures a_len > 0  ==> \result == (min_prefix(a, 0, a_len) < INT_MIN ? min_prefix(a, 0, a_len) : INT_MIN);
+*/
+int foo55(int * a, int a_len) {
+
+        if (a_len == 0) return -1;
+        int res = INT_MIN;
+        
+        /*@
+          loop invariant 0 <= i <= a_len;
+          loop invariant res == (i == 0
+                                 ? INT_MIN
+                                 : (min_prefix(a, 0, i) < INT_MIN ? min_prefix(a, 0, i) : INT_MIN));
+          loop invariant \forall integer k; 0 <= k < a_len ==> a[k] == \at(a[k], Pre);
+          loop assigns i, res;
+        */
+        for(int i = 0; i < a_len; i++) {
+            res = ((a[i] < res) ? a[i] : res);
+        }
+            
+        return res;
+}
+
+2026-05-15 00:15:44,083 - INFO  - ==================================================
+2026-05-15 00:15:44,083 - INFO  - first_pass:
+2026-05-15 00:15:44,083 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 00:15:44,083 - INFO  - ==================================================
+2026-05-15 00:15:44,083 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 00:15:44,083 - INFO  - Total execution time: 282.14 seconds (4.70 minutes)
+2026-05-15 00:15:44,083 - INFO  - ==================================================
+2026-05-15 00:15:44,083 - INFO  - ==================================================
+2026-05-15 00:15:44,084 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 00:15:44,084 - INFO  - Total API calls: 11
+2026-05-15 00:15:44,084 - INFO  - Total prompt tokens (input): 63,256
+2026-05-15 00:15:44,084 - INFO  - Total completion tokens (output): 7,164
+2026-05-15 00:15:44,084 - INFO  - Total tokens: 70,420
+2026-05-15 00:15:44,084 - INFO  - Average prompt tokens per call: 5750.5
+2026-05-15 00:15:44,084 - INFO  - Average completion tokens per call: 651.3
+2026-05-15 00:15:44,084 - INFO  - Average total tokens per call: 6401.8
+2026-05-15 00:15:44,085 - INFO  - ==================================================

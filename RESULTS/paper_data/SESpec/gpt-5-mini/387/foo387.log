@@ -1,0 +1,671 @@
+2026-05-18 22:41:30,295 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46
+2026-05-18 22:41:30,296 - INFO  - 
+🚀 Starting generation of function: foo387
+2026-05-18 22:41:30,296 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 22:41:30,296 - INFO  - TRY TIME: 0
+2026-05-18 22:41:30,296 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 22:41:30,296 - INFO  - ==================================================
+
+2026-05-18 22:41:30,931 - INFO  - [auto only_loop] False — foo387 returns 'int'
+2026-05-18 22:41:30,932 - INFO  - Initial pending functions: ['foo387']
+2026-05-18 22:41:30,932 - INFO  - 
+GENERATE ANNOTATION FOR foo387
+2026-05-18 22:41:30,932 - INFO  - ==================================================
+
+2026-05-18 22:41:30,932 - INFO  - Function foo387 has been initialized
+2026-05-18 22:41:30,932 - INFO  - Starting to generate annotation code for foo387
+2026-05-18 22:41:30,981 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo387
+2026-05-18 22:41:30,981 - INFO  - ==================================================
+
+2026-05-18 22:41:31,044 - INFO  - Variable Maps:[{'ret': '0', 'r': 'r@pre', 'c': 'c@pre', 'num': 'num@pre'}]
+2026-05-18 22:41:31,044 - INFO  - Path conditions: [None]
+2026-05-18 22:41:31,044 - INFO  - Pre condition: (ret == 0) * (r == r@pre) * (c == c@pre) * (num == num@pre)
+2026-05-18 22:41:31,044 - INFO  - Loop Condition: r > 0
+2026-05-18 22:41:31,045 - INFO  - Array Names: []
+2026-05-18 22:41:31,045 - INFO  - Updated Loop Conditions: ['r@pre > 0']
+2026-05-18 22:41:31,046 - INFO  - Global Unchanged Variables: ['c']
+2026-05-18 22:41:31,046 - INFO  - Non Inductive Variables: ['ret']
+2026-05-18 22:41:31,047 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-18 22:41:31,048 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 22:41:31,049 - INFO  - examples category: numeric
+2026-05-18 22:41:31,049 - INFO  - examples:
+2026-05-18 22:41:31,050 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-18 22:42:02,001 - INFO  - [inv-gen] refine 1/3 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-18 22:42:22,072 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 22:42:22,074 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:42:52,537 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-18 22:42:52,538 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-18 22:42:52,539 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6666666666666666, 0.0), clauses=6)
+2026-05-18 22:43:40,256 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-18 22:43:41,692 - INFO  - ACSL format loop invariant
+2026-05-18 22:43:41,692 - INFO  - /*@
+          loop invariant (\at(r,Pre) > 0) ==> ( \at(r,Pre) - r >= 0 );
+          loop invariant (!(\at(r,Pre) > 0)) ==> ((ret == 0)&&(r == \at(r,Pre))&&(c == \at(c,Pre))&&(num == \at(num,Pre)));
+          loop invariant c == \at(c,Pre);
+          loop assigns r, num, ret;
+            */
+            while (r > 0) {
+			r -= 1;
+			num *= 10;
+			ret = num / c;
+			num %= c;
+		}
+2026-05-18 22:43:41,693 - INFO  - QCP format loop invariant
+2026-05-18 22:43:41,693 - INFO  - /*@ Inv
+    ((r@pre > 0) => ( r@pre - r >= 0 )) &&
+((!(r@pre > 0)) => ((ret == 0)&&(r == r@pre)&&(c == c@pre)&&(num == num@pre))) &&
+(c == c@pre
+          loop assigns r, num, ret)
+    */
+    
+            while (r > 0) {
+			r -= 1;
+			num *= 10;
+			ret = num / c;
+			num %= c;
+		}
+2026-05-18 22:43:43,125 - INFO  - CORRECT INVARIANT
+2026-05-18 22:43:43,126 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo387
+2026-05-18 22:43:43,126 - INFO  - ==================================================
+
+2026-05-18 22:43:43,138 - INFO  - Starting to generate ACSL specification for foo387
+2026-05-18 22:43:52,125 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c:12: 
+  syntax error:
+  Location: line 12, between columns 21 and 22, before or at token: 0
+  10                            More precisely, running the loop r_pre times yields that at exit r==0 and \result == floor( ( ( (\at(num,Pre) * pow10(\at(r,Pre))) mod (c * pow10(1)) ) ) / c) ).
+  11                         */
+  12                         0
+        ^^^^^^^^^^^^^^^^^^^^^^
+  13                      )))
+  14               ;
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:43:52,126 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=0
+2026-05-18 22:43:52,127 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:44:02,950 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c:8: Warning: 
+  logic function pow10 is already declared with the same profile. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:44:02,951 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=0
+2026-05-18 22:44:02,951 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 22:44:03,292 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c:12: 
+  syntax error:
+  Location: line 12, between columns 21 and 22, before or at token: 0
+  10                            More precisely, running the loop r_pre times yields that at exit r==0 and \result == floor( ( ( (\at(num,Pre) * pow10(\at(r,Pre))) mod (c * pow10(1)) ) ) / c) ).
+  11                         */
+  12                         0
+        ^^^^^^^^^^^^^^^^^^^^^^
+  13                      )))
+  14               ;
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:44:03,293 - INFO  - [spec-gen] refine 3/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=0
+2026-05-18 22:44:03,294 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:44:11,832 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-18 22:44:12,152 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c:12: 
+  syntax error:
+  Location: line 12, between columns 21 and 22, before or at token: 0
+  10                            More precisely, running the loop r_pre times yields that at exit r==0 and \result == floor( ( ( (\at(num,Pre) * pow10(\at(r,Pre))) mod (c * pow10(1)) ) ) / c) ).
+  11                         */
+  12                         0
+        ^^^^^^^^^^^^^^^^^^^^^^
+  13                      )))
+  14               ;
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:44:12,153 - INFO  - 
+SPECIFICATION FOR foo387
+2026-05-18 22:44:12,153 - INFO  - ==================================================
+
+2026-05-18 22:44:12,153 - INFO  - 
+QCP Specification for function foo387:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-18 22:44:12,275 - INFO  - 
+VERIFICATION FOR foo387
+2026-05-18 22:44:12,276 - INFO  - ==================================================
+
+2026-05-18 22:44:12,564 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c:12: 
+  syntax error:
+  Location: line 12, between columns 21 and 22, before or at token: 0
+  10                            More precisely, running the loop r_pre times yields that at exit r==0 and \result == floor( ( ( (\at(num,Pre) * pow10(\at(r,Pre))) mod (c * pow10(1)) ) ) / c) ).
+  11                         */
+  12                         0
+        ^^^^^^^^^^^^^^^^^^^^^^
+  13                      )))
+  14               ;
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:44:33,082 - INFO  - syntax Correct
+2026-05-18 22:44:43,840 - INFO  - Loop Invariant:
+2026-05-18 22:44:43,840 - INFO  - [True, True, True]
+2026-05-18 22:44:43,841 - INFO  - 
+2026-05-18 22:44:43,841 - INFO  - Assertion:
+2026-05-18 22:44:43,841 - INFO  - []
+2026-05-18 22:44:43,841 - INFO  - 
+2026-05-18 22:44:43,841 - INFO  - Assigns:
+2026-05-18 22:44:43,841 - INFO  - [True]
+2026-05-18 22:44:43,841 - INFO  - 
+2026-05-18 22:44:43,841 - INFO  - Post Condition:
+2026-05-18 22:44:43,841 - INFO  - [True, True, True, False, True, False]
+2026-05-18 22:44:43,841 - INFO  - Post Condition: failures:
+2026-05-18 22:44:43,841 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c, line 13) in 'foo387':
+2026-05-18 22:44:43,841 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c at line: 13
+2026-05-18 22:44:43,841 - INFO  - Error line content: ensures (\at(r,Pre) > 0) ==> r == 0;
+2026-05-18 22:44:43,841 - INFO  - 
+2026-05-18 22:44:43,841 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c, line 15) in 'foo387':
+2026-05-18 22:44:43,841 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c at line: 15
+2026-05-18 22:44:43,841 - INFO  - Error line content: ensures (\at(r,Pre) > 0) ==> \result == (\at(num,Pre) * pow10(\at(r,Pre))) / \at(c,Pre);
+2026-05-18 22:44:43,841 - INFO  - 
+2026-05-18 22:44:43,841 - INFO  - 
+2026-05-18 22:44:43,841 - INFO  - Instance:
+2026-05-18 22:44:43,842 - INFO  - []
+2026-05-18 22:44:43,842 - INFO  - 
+2026-05-18 22:44:43,842 - INFO  - [spec-gen] refine 1/3 score=(syntax=True, satisfy=0.00, valid=0.80) clauses=8
+2026-05-18 22:44:43,842 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer pow10(integer k) =
+    k <= 0 ? 1 : 10 * pow10(k-1);
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\at(r,Pre) <= 0) ==> \result == 0;
+  ensures (\at(r,Pre) <= 0) ==> r == \at(r,Pre);
+  ensures (\at(r,Pre) <= 0) ==> num == \at(num,Pre);
+  ensures (\at(r,Pre) > 0) ==> r == 0 [POSTCONDITION FAILED];
+  ensures (\at(r,Pre) > 0) ==> c == \at(c,Pre);
+  ensures (\at(r,Pre) > 0) ==> \result == (\at(num,Pre) * pow10(\at(r,Pre))) / \at(c,Pre) [POSTCONDITION FAILED];
+*/
+int foo387(int num, int c, int r) {
+
+		int ret = 0;
+		
+            
+        /*@
+          loop invariant (\at(r,Pre) > 0) ==> ( \at(r,Pre) - r >= 0 );
+          loop invariant (!(\at(r,Pre) > 0)) ==> ((ret == 0)&&(r == \at(r,Pre))&&(c == \at(c,Pre))&&(num == \at(num,Pre)));
+          loop invariant c == \at(c,Pre);
+          loop assigns r, num, ret;
+            */
+            while (r > 0) {
+			r -= 1;
+			num *= 10;
+			ret = num / c;
+			num %= c;
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:44:54,270 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer pow10(integer k) =
+    k <= 0 ? 1 : 10 * pow10(k-1);
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\at(r,Pre) <= 0) ==> \result == 0;
+  ensures (\at(r,Pre) <= 0) ==> r == \at(r,Pre);
+  ensures (\at(r,Pre) <= 0) ==> num == \at(num,Pre);
+  ensures (\at(r,Pre) > 0) ==> r == 0;
+  ensures (\at(r,Pre) > 0) ==> c == \at(c,Pre);
+*/
+int foo387(int num, int c, int r) {
+
+		int ret = 0;
+		
+            
+        /*@
+          loop invariant (\at(r,Pre) > 0) ==> ( \at(r,Pre) - r >= 0 );
+          loop invariant (!(\at(r,Pre) > 0)) ==> ((ret == 0)&&(r == \at(r,Pre))&&(c == \at(c,Pre))&&(num == \at(num,Pre)));
+          loop invariant c == \at(c,Pre);
+          loop assigns r, num, ret;
+            */
+            while (r > 0) {
+			r -= 1;
+			num *= 10;
+			ret = num / c;
+			num %= c;
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:45:04,937 - INFO  - syntax Correct
+2026-05-18 22:45:15,570 - INFO  - Loop Invariant:
+2026-05-18 22:45:15,570 - INFO  - [True, True, True]
+2026-05-18 22:45:15,570 - INFO  - 
+2026-05-18 22:45:15,570 - INFO  - Assertion:
+2026-05-18 22:45:15,570 - INFO  - []
+2026-05-18 22:45:15,570 - INFO  - 
+2026-05-18 22:45:15,570 - INFO  - Assigns:
+2026-05-18 22:45:15,570 - INFO  - [True]
+2026-05-18 22:45:15,570 - INFO  - 
+2026-05-18 22:45:15,570 - INFO  - Post Condition:
+2026-05-18 22:45:15,570 - INFO  - [True, True, True, False, True]
+2026-05-18 22:45:15,570 - INFO  - Post Condition: failures:
+2026-05-18 22:45:15,570 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c, line 13) in 'foo387':
+2026-05-18 22:45:15,571 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c at line: 13
+2026-05-18 22:45:15,571 - INFO  - Error line content: ensures (\at(r,Pre) > 0) ==> r == 0;
+2026-05-18 22:45:15,571 - INFO  - 
+2026-05-18 22:45:15,571 - INFO  - 
+2026-05-18 22:45:15,571 - INFO  - Instance:
+2026-05-18 22:45:15,571 - INFO  - []
+2026-05-18 22:45:15,571 - INFO  - 
+2026-05-18 22:45:15,571 - INFO  - [spec-gen] refine 2/3 score=(syntax=True, satisfy=0.00, valid=0.89) clauses=7
+2026-05-18 22:45:15,571 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer pow10(integer k) =
+    k <= 0 ? 1 : 10 * pow10(k-1);
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\at(r,Pre) <= 0) ==> \result == 0;
+  ensures (\at(r,Pre) <= 0) ==> r == \at(r,Pre);
+  ensures (\at(r,Pre) <= 0) ==> num == \at(num,Pre);
+  ensures (\at(r,Pre) > 0) ==> r == 0 [POSTCONDITION FAILED];
+  ensures (\at(r,Pre) > 0) ==> c == \at(c,Pre);
+*/
+int foo387(int num, int c, int r) {
+
+		int ret = 0;
+		
+            
+        /*@
+          loop invariant (\at(r,Pre) > 0) ==> ( \at(r,Pre) - r >= 0 );
+          loop invariant (!(\at(r,Pre) > 0)) ==> ((ret == 0)&&(r == \at(r,Pre))&&(c == \at(c,Pre))&&(num == \at(num,Pre)));
+          loop invariant c == \at(c,Pre);
+          loop assigns r, num, ret;
+            */
+            while (r > 0) {
+			r -= 1;
+			num *= 10;
+			ret = num / c;
+			num %= c;
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:45:23,945 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer pow10(integer k) =
+    k <= 0 ? 1 : 10 * pow10(k-1);
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\at(r,Pre) <= 0) ==> \result == 0;
+  ensures (\at(r,Pre) <= 0) ==> r == \at(r,Pre);
+  ensures (\at(r,Pre) <= 0) ==> num == \at(num,Pre);
+  ensures (\at(r,Pre) > 0) ==> c == \at(c,Pre);
+*/
+int foo387(int num, int c, int r) {
+
+		int ret = 0;
+		
+            
+        /*@
+          loop invariant (\at(r,Pre) > 0) ==> ( \at(r,Pre) - r >= 0 );
+          loop invariant (!(\at(r,Pre) > 0)) ==> ((ret == 0)&&(r == \at(r,Pre))&&(c == \at(c,Pre))&&(num == \at(num,Pre)));
+          loop invariant c == \at(c,Pre);
+          loop assigns r, num, ret;
+            */
+            while (r > 0) {
+			r -= 1;
+			num *= 10;
+			ret = num / c;
+			num %= c;
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:45:24,577 - INFO  - syntax Correct
+2026-05-18 22:45:25,256 - INFO  - Loop Invariant:
+2026-05-18 22:45:25,256 - INFO  - [True, True, True]
+2026-05-18 22:45:25,256 - INFO  - 
+2026-05-18 22:45:25,256 - INFO  - Assertion:
+2026-05-18 22:45:25,256 - INFO  - []
+2026-05-18 22:45:25,256 - INFO  - 
+2026-05-18 22:45:25,256 - INFO  - Assigns:
+2026-05-18 22:45:25,256 - INFO  - [True]
+2026-05-18 22:45:25,256 - INFO  - 
+2026-05-18 22:45:25,256 - INFO  - Post Condition:
+2026-05-18 22:45:25,256 - INFO  - [True, True, True, True]
+2026-05-18 22:45:25,256 - INFO  - 
+2026-05-18 22:45:25,256 - INFO  - Instance:
+2026-05-18 22:45:25,256 - INFO  - []
+2026-05-18 22:45:25,257 - INFO  - 
+2026-05-18 22:45:25,257 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=1.00) clauses=6
+2026-05-18 22:45:25,257 - INFO  - [spec-gen] converged at refine 3
+2026-05-18 22:45:25,893 - INFO  - syntax Correct
+2026-05-18 22:45:26,582 - INFO  - Loop Invariant:
+2026-05-18 22:45:26,582 - INFO  - [True, True, True]
+2026-05-18 22:45:26,582 - INFO  - 
+2026-05-18 22:45:26,582 - INFO  - Assertion:
+2026-05-18 22:45:26,582 - INFO  - []
+2026-05-18 22:45:26,582 - INFO  - 
+2026-05-18 22:45:26,582 - INFO  - Assigns:
+2026-05-18 22:45:26,582 - INFO  - [True]
+2026-05-18 22:45:26,582 - INFO  - 
+2026-05-18 22:45:26,582 - INFO  - Post Condition:
+2026-05-18 22:45:26,582 - INFO  - [True, True, True, True]
+2026-05-18 22:45:26,582 - INFO  - 
+2026-05-18 22:45:26,582 - INFO  - Instance:
+2026-05-18 22:45:26,583 - INFO  - []
+2026-05-18 22:45:26,583 - INFO  - 
+2026-05-18 22:45:26,583 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo387
+2026-05-18 22:45:26,583 - INFO  - ==================================================
+2026-05-18 22:45:26,583 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo387/20260518_224130_3067622_7d767f46/output/foo387.c
+2026-05-18 22:45:26,583 - INFO  - Output file content:
+
+/*@ 
+  logic integer pow10(integer k) =
+    k <= 0 ? 1 : 10 * pow10(k-1);
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\at(r,Pre) <= 0) ==> \result == 0;
+  ensures (\at(r,Pre) <= 0) ==> r == \at(r,Pre);
+  ensures (\at(r,Pre) <= 0) ==> num == \at(num,Pre);
+  ensures (\at(r,Pre) > 0) ==> c == \at(c,Pre);
+*/
+int foo387(int num, int c, int r) {
+
+		int ret = 0;
+		
+            
+        /*@
+          loop invariant (\at(r,Pre) > 0) ==> ( \at(r,Pre) - r >= 0 );
+          loop invariant (!(\at(r,Pre) > 0)) ==> ((ret == 0)&&(r == \at(r,Pre))&&(c == \at(c,Pre))&&(num == \at(num,Pre)));
+          loop invariant c == \at(c,Pre);
+          loop assigns r, num, ret;
+            */
+            while (r > 0) {
+			r -= 1;
+			num *= 10;
+			ret = num / c;
+			num %= c;
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:45:26,583 - INFO  - ==================================================
+2026-05-18 22:45:26,583 - INFO  - first_pass:
+2026-05-18 22:45:26,583 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-18 22:45:26,583 - INFO  - ==================================================
+2026-05-18 22:45:26,583 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 22:45:26,583 - INFO  - Total execution time: 236.29 seconds (3.94 minutes)
+2026-05-18 22:45:26,583 - INFO  - ==================================================
+2026-05-18 22:45:26,583 - INFO  - ==================================================
+2026-05-18 22:45:26,583 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 22:45:26,584 - INFO  - Total API calls: 9
+2026-05-18 22:45:26,584 - INFO  - Total prompt tokens (input): 42,316
+2026-05-18 22:45:26,584 - INFO  - Total completion tokens (output): 6,248
+2026-05-18 22:45:26,584 - INFO  - Total tokens: 48,564
+2026-05-18 22:45:26,584 - INFO  - Average prompt tokens per call: 4701.8
+2026-05-18 22:45:26,584 - INFO  - Average completion tokens per call: 694.2
+2026-05-18 22:45:26,584 - INFO  - Average total tokens per call: 5396.0
+2026-05-18 22:45:26,584 - INFO  - ==================================================

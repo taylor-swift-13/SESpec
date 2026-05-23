@@ -1,0 +1,18 @@
+#include <limits.h>
+
+/*@predicate all_equal_prefix(int *arr, integer n, integer i, int v) =
+    \forall integer k; 0 <= k < i ==> arr[k] == v;*/
+
+/*@ requires (1 <= i) && (firstElement == arr[0]) && (\forall integer k) && ((!(i < n)) ==> (\forall integer k) && (\forall integer k);
+    assigns \nothing;
+*/
+void check_A_implies_B(int *arr, int *firstElement, int *i, int k, int *n) {
+    /*@ assert (i == 0 || (\forall integer k) && (n > 0 ==> i >= 1) && (n > 0 ==> i == 1 || arr[i-1] == firstElement) && (n > 0 ==> i == 1 || (\forall integer k) && (n > 0 ==> i == 0 || i > 0) && (n > 0 ==> i <= n) && (n > 0 ==> i < n + 1) && (n > 0 ==> firstElement == arr[0]) && (n > 0 ==> arr[i-1] == firstElement || i == 1) && (n > 0 ==> arr[0] == firstElement) && (n > 0 ==> \forall integer k) && (n > 0 ==> \forall integer k) && (n > 0 ==> \forall integer k) && (n > 0 ==> \forall integer k) && (n > 0 ==> 1 <= i <= n) && (n > 0 ==> (i == 1 || arr[i-1] == firstElement)) && (n > 0 ==> (\forall integer k) && (i >= 1 ==> firstElement == arr[0]) && (i >= 1 ==> arr[i-1] == arr[0]) && (i >= 1 ==> \forall integer k) && (i > 0 ==> firstElement == arr[0]) && (i > 0 ==> arr[i-1] == firstElement) && (i > 0 ==> arr[0] == firstElement) && (i > 0 ==> \forall integer k) && (i > 0 ==> \forall integer k) && (i == 1 || i > 1) && (i == 1 || arr[i-1] == firstElement) && (i == 1 || arr[i-1] == arr[0]) && (i == 1 || \forall integer k) && (i == 1 || \forall integer k) && (i == 1 || (\forall integer k) && (i == 1 || (\forall integer k) && (i == 0 || i >= 1) && (i == 0 || i > 0) && (i == 0 || arr[i-1] == firstElement) && (firstElement == arr[0]) && (arr[0] == firstElement) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\exists integer k) && (1 <= i) && (0 <= i) && (0 < i); */
+}
+
+/*@ requires (i == 0 || (\forall integer k) && (n > 0 ==> i >= 1) && (n > 0 ==> i == 1 || arr[i-1] == firstElement) && (n > 0 ==> i == 1 || (\forall integer k) && (n > 0 ==> i == 0 || i > 0) && (n > 0 ==> i <= n) && (n > 0 ==> i < n + 1) && (n > 0 ==> firstElement == arr[0]) && (n > 0 ==> arr[i-1] == firstElement || i == 1) && (n > 0 ==> arr[0] == firstElement) && (n > 0 ==> \forall integer k) && (n > 0 ==> \forall integer k) && (n > 0 ==> \forall integer k) && (n > 0 ==> \forall integer k) && (n > 0 ==> 1 <= i <= n) && (n > 0 ==> (i == 1 || arr[i-1] == firstElement)) && (n > 0 ==> (\forall integer k) && (i >= 1 ==> firstElement == arr[0]) && (i >= 1 ==> arr[i-1] == arr[0]) && (i >= 1 ==> \forall integer k) && (i > 0 ==> firstElement == arr[0]) && (i > 0 ==> arr[i-1] == firstElement) && (i > 0 ==> arr[0] == firstElement) && (i > 0 ==> \forall integer k) && (i > 0 ==> \forall integer k) && (i == 1 || i > 1) && (i == 1 || arr[i-1] == firstElement) && (i == 1 || arr[i-1] == arr[0]) && (i == 1 || \forall integer k) && (i == 1 || \forall integer k) && (i == 1 || (\forall integer k) && (i == 1 || (\forall integer k) && (i == 0 || i >= 1) && (i == 0 || i > 0) && (i == 0 || arr[i-1] == firstElement) && (firstElement == arr[0]) && (arr[0] == firstElement) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\exists integer k) && (1 <= i) && (0 <= i) && (0 < i);
+    assigns \nothing;
+*/
+void check_B_implies_A(int *arr, int *firstElement, int *i, int k, int *n) {
+    /*@ assert (1 <= i) && (firstElement == arr[0]) && (\forall integer k) && ((!(i < n)) ==> (\forall integer k) && (\forall integer k); */
+}

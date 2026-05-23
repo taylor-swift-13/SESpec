@@ -1,0 +1,880 @@
+2026-05-18 22:13:47,716 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f
+2026-05-18 22:13:47,717 - INFO  - 
+🚀 Starting generation of function: foo254
+2026-05-18 22:13:47,717 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 22:13:47,717 - INFO  - TRY TIME: 0
+2026-05-18 22:13:47,717 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 22:13:47,717 - INFO  - ==================================================
+
+2026-05-18 22:13:48,649 - INFO  - [auto only_loop] False — foo254 returns 'int'
+2026-05-18 22:13:48,650 - INFO  - Initial pending functions: ['foo254']
+2026-05-18 22:13:48,650 - INFO  - 
+GENERATE ANNOTATION FOR foo254
+2026-05-18 22:13:48,650 - INFO  - ==================================================
+
+2026-05-18 22:13:48,650 - INFO  - Function foo254 has been initialized
+2026-05-18 22:13:48,650 - INFO  - Starting to generate annotation code for foo254
+2026-05-18 22:13:48,711 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo254
+2026-05-18 22:13:48,711 - INFO  - ==================================================
+
+2026-05-18 22:13:48,809 - INFO  - Variable Maps:[{'max': 'end@pre', 'min': 'start@pre', 'end': 'end@pre', 'start': 'start@pre', 'array_len': 'array_len@pre', 'array': 'array@pre'}]
+2026-05-18 22:13:48,809 - INFO  - Path conditions: ['array_len@pre > 0 && array_len@pre < 100']
+2026-05-18 22:13:48,809 - INFO  - Pre condition: array_len@pre > 0 && array_len@pre < 100 && undef_data_at(&mid) * (max == end@pre) * (min == start@pre) * (end == end@pre) * (start == start@pre) * (array_len == array_len@pre) * (array == array@pre) * store_int_array(array@pre, array_len@pre, array_l)
+2026-05-18 22:13:48,810 - INFO  - Loop Condition: min <= max
+2026-05-18 22:13:48,811 - INFO  - Array Names: ['array']
+2026-05-18 22:13:48,811 - INFO  - Updated Loop Conditions: ['start@pre <= end@pre']
+2026-05-18 22:13:48,812 - INFO  - Global Unchanged Variables: ['end', 'start', 'array_len', 'array']
+2026-05-18 22:13:48,813 - INFO  - Non Inductive Variables: ['min', 'min', 'max']
+2026-05-18 22:13:48,814 - INFO  - Unchanged Arrays (Read-only): ['array']
+2026-05-18 22:13:48,816 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 22:13:48,820 - INFO  - examples category: array
+2026-05-18 22:13:48,820 - INFO  - examples:
+2026-05-18 22:13:48,820 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 22:14:01,324 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-18 22:14:01,326 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:14:17,015 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-18 22:14:17,017 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'current' (assigns) on line 23
+2026-05-18 22:14:17,294 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:14:31,518 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-18 22:14:31,518 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-18 22:14:31,519 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=9)
+2026-05-18 22:14:32,014 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:14:41,845 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-18 22:14:41,847 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'current' (assigns) on line 40
+2026-05-18 22:14:42,065 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:14:52,953 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-18 22:14:52,955 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'current' (assigns) on line 40
+2026-05-18 22:14:53,259 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:15:06,270 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-18 22:15:06,271 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-18 22:15:06,272 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=9)
+2026-05-18 22:15:07,180 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:15:38,516 - INFO  - [inv-gen] refine 1/3 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=9
+2026-05-18 22:16:17,900 - INFO  - [inv-gen] refine 2/3 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=9
+2026-05-18 22:16:56,684 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=9
+2026-05-18 22:16:56,685 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-18 22:16:56,686 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.7777777777777778, 0.0), clauses=9)
+2026-05-18 22:17:23,332 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-18 22:17:25,324 - INFO  - ACSL format loop invariant
+2026-05-18 22:17:25,324 - INFO  - /*@
+          loop invariant (\at(start,Pre) <= \at(end,Pre)) ==> (min >= \at(start,Pre) && max <= \at(end,Pre));
+          loop invariant (!(\at(start,Pre) <= \at(end,Pre))) ==> ((max == \at(end,Pre)) && (min == \at(start,Pre)) && (end == \at(end,Pre)) && (start == \at(start,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre)));
+          loop invariant end == \at(end,Pre);
+          loop invariant start == \at(start,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant unchanged_array(array, array_len, \at(array,Pre));
+          loop assigns mid, min, max;
+            */
+            while (min <= max) {
+            mid = (min + max) / 2;
+            int current = array[mid];
+
+            if (current == mid) {
+                min = mid + 1;
+            } else if (current < mid) {
+                min = mid + 1;
+            } else {
+                max = mid - 1;
+            }
+        }
+2026-05-18 22:17:25,325 - INFO  - QCP format loop invariant
+2026-05-18 22:17:25,325 - INFO  - /*@ Inv
+    exists  array_l,    
+    store_int_array(array, array_len, array_l) && array_len > 0 && array_len < 100 &&
+    ((start@pre <= end@pre) => (min >= start@pre && max <= end@pre)) &&
+((!(start@pre <= end@pre)) => ((max == end@pre) && (min == start@pre) && (end == end@pre) && (start == start@pre) && (array_len == array_len@pre) && (array == array@pre))) &&
+(end == end@pre) &&
+(start == start@pre) &&
+(array_len == array_len@pre) &&
+(array == array@pre) &&
+(unchanged_array(array, array_len, array@pre)
+          loop assigns mid, min, max)
+    */
+    
+            while (min <= max) {
+            mid = (min + max) / 2;
+            int current = array[mid];
+
+            if (current == mid) {
+                min = mid + 1;
+            } else if (current < mid) {
+                min = mid + 1;
+            } else {
+                max = mid - 1;
+            }
+        }
+2026-05-18 22:17:27,405 - INFO  - CORRECT INVARIANT
+2026-05-18 22:17:27,405 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo254
+2026-05-18 22:17:27,405 - INFO  - ==================================================
+
+2026-05-18 22:17:27,423 - INFO  - Starting to generate ACSL specification for foo254
+2026-05-18 22:17:43,902 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c:30: Warning: 
+  lexical error, illegal character \
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:17:43,903 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=12
+2026-05-18 22:17:43,905 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:18:18,245 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c:21: 
+  Invalid symbol:
+  Location: line 21, between columns 4 and 6, before or at token: \
+  19         then result is such an index and is the first one; otherwise result == end_pre + 1. */
+  20      ensures (
+  21        (\exists integer k;
+        ^^^^^^^^^^^^^^^^^^^^^^^
+  22           \at(start,Pre) <= k <= \at(end,Pre) &&
+  23           (\forall integer j; \at(start,Pre) <= j < k ==> \at(array,Pre)[j] <= j) &&
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:18:18,245 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=2
+2026-05-18 22:18:18,247 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:18:58,355 - INFO  - syntax Correct
+2026-05-18 22:19:19,890 - INFO  - Loop Invariant:
+2026-05-18 22:19:19,891 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:19:19,891 - INFO  - 
+2026-05-18 22:19:19,891 - INFO  - Assertion:
+2026-05-18 22:19:19,891 - INFO  - []
+2026-05-18 22:19:19,891 - INFO  - 
+2026-05-18 22:19:19,891 - INFO  - Assigns:
+2026-05-18 22:19:19,891 - INFO  - [True]
+2026-05-18 22:19:19,891 - INFO  - 
+2026-05-18 22:19:19,891 - INFO  - Post Condition:
+2026-05-18 22:19:19,891 - INFO  - [True, True, True, True, True, False, True, False, False, False, False]
+2026-05-18 22:19:19,892 - INFO  - Post Condition: failures:
+2026-05-18 22:19:19,892 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 25) in 'foo254':
+2026-05-18 22:19:19,892 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 25
+2026-05-18 22:19:19,892 - INFO  - Error line content: ensures (\at(start,Pre) <= \at(end,Pre)) ==> (\result >= \at(start,Pre) && \result <= \at(end,Pre) + 1);
+2026-05-18 22:19:19,892 - INFO  - 
+2026-05-18 22:19:19,892 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 27) in 'foo254':
+2026-05-18 22:19:19,892 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 27
+2026-05-18 22:19:19,892 - INFO  - Error line content: ensures (\forall integer i; \at(start,Pre) <= i <= \result - 1 ==> array[i] <= i);
+2026-05-18 22:19:19,892 - INFO  - 
+2026-05-18 22:19:19,892 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 28) in 'foo254':
+2026-05-18 22:19:19,892 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 28
+2026-05-18 22:19:19,892 - INFO  - Error line content: ensures (\forall integer i; \result <= i <= \at(end,Pre) ==> array[i] > i);
+2026-05-18 22:19:19,892 - INFO  - 
+2026-05-18 22:19:19,892 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 29) in 'foo254':
+2026-05-18 22:19:19,892 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 29
+2026-05-18 22:19:19,892 - INFO  - Error line content: ensures (
+2026-05-18 22:19:19,892 - INFO  - 
+2026-05-18 22:19:19,892 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 41) in 'foo254':
+2026-05-18 22:19:19,892 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 41
+2026-05-18 22:19:19,892 - INFO  - Error line content: ensures (
+2026-05-18 22:19:19,892 - INFO  - 
+2026-05-18 22:19:19,892 - INFO  - 
+2026-05-18 22:19:19,892 - INFO  - Instance:
+2026-05-18 22:19:19,892 - INFO  - []
+2026-05-18 22:19:19,892 - INFO  - 
+2026-05-18 22:19:19,893 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.74) clauses=13
+2026-05-18 22:19:19,893 - INFO  - postconditon before refine: 
+
+/*@
+  predicate unchanged_array(int *a, integer len, int *a_pre) =
+    \forall integer i; 0 <= i < len ==> a[i] == a_pre[i];
+*/
+
+/*@
+  predicate left_prop(int *a, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] <= i;
+*/
+
+/*@
+  predicate right_prop(int *a, integer lo, integer hi) =
+    \forall integer i; lo < i <= hi ==> a[i] >= i;
+*/
+
+/*@
+  requires \at(array_len,Pre) > 0 && \at(array_len,Pre) < 100;
+  assigns \nothing;
+  ensures array == \at(array,Pre);
+  ensures array_len == \at(array_len,Pre);
+  ensures start == \at(start,Pre);
+  ensures end == \at(end,Pre);
+  ensures unchanged_array(array, array_len, \at(array,Pre));
+  ensures (\at(start,Pre) <= \at(end,Pre)) ==> (\result >= \at(start,Pre) && \result <= \at(end,Pre) + 1) [POSTCONDITION FAILED];
+  ensures (!(\at(start,Pre) <= \at(end,Pre))) ==> (\result == \at(start,Pre));
+  ensures (\forall integer i [POSTCONDITION FAILED]; \at(start,Pre) <= i <= \result - 1 ==> array[i] <= i);
+  ensures (\forall integer i [POSTCONDITION FAILED]; \result <= i <= \at(end,Pre) ==> array[i] > i);
+  ensures (
+    (\exists integer k [POSTCONDITION FAILED];
+       \at(start,Pre) <= k <= \at(end,Pre) &&
+       (\forall integer j; \at(start,Pre) <= j < k ==> \at(array,Pre)[j] <= j) &&
+       \at(array,Pre)[k] > k)
+    ==>
+    (
+      \at(start,Pre) <= \result && \result <= \at(end,Pre) &&
+      \at(array,Pre)[\result] > \result &&
+      (\forall integer j; \at(start,Pre) <= j < \result ==> \at(array,Pre)[j] <= j)
+    )
+  );
+  ensures (
+    !(\exists integer k [POSTCONDITION FAILED];
+       \at(start,Pre) <= k <= \at(end,Pre) &&
+       (\forall integer j; \at(start,Pre) <= j < k ==> \at(array,Pre)[j] <= j) &&
+       \at(array,Pre)[k] > k)
+    ==>
+    (\result == \at(end,Pre) + 1)
+  );
+*/
+int foo254(int * array, int array_len, int start, int end) {
+
+        int min = start;
+        int max = end;
+        int mid;
+
+        /*@
+          loop invariant (\at(start,Pre) <= \at(end,Pre)) ==> (min >= \at(start,Pre) && max <= \at(end,Pre));
+          loop invariant (!(\at(start,Pre) <= \at(end,Pre))) ==> ((max == \at(end,Pre)) && (min == \at(start,Pre)) && (end == \at(end,Pre)) && (start == \at(start,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre)));
+          loop invariant end == \at(end,Pre);
+          loop invariant start == \at(start,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant unchanged_array(array, array_len, \at(array,Pre));
+          loop assigns mid, min, max;
+        */
+            while (min <= max) {
+            mid = (min + max) / 2;
+            int current = array[mid];
+
+            if (current == mid) {
+                min = mid + 1;
+            } else if (current < mid) {
+                min = mid + 1;
+            } else {
+                max = mid - 1;
+            }
+        }
+            
+        return min;
+}
+
+2026-05-18 22:19:50,243 - INFO  - postconditon after refine: 
+
+/*@
+  predicate unchanged_array(int *a, integer len, int *a_pre) =
+    \forall integer i; 0 <= i < len ==> a[i] == a_pre[i];
+*/
+
+/*@
+  predicate left_prop(int *a, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] <= i;
+*/
+
+/*@
+  predicate right_prop(int *a, integer lo, integer hi) =
+    \forall integer i; lo < i <= hi ==> a[i] >= i;
+*/
+
+/* If there exists an index k in the pre-state range that is the first index with array[k] > k,
+     then result equals that index; otherwise result == end_pre + 1. */
+  ensures (
+    (\exists integer k;
+       \at(start,Pre) <= k <= \at(end,Pre) &&
+       (\forall integer j; \at(start,Pre) <= j < k ==> \at(array,Pre)[j] <= j) &&
+       \at(array,Pre)[k] > k)
+    ==>
+    (
+      \result >= \at(start,Pre) && \result <= \at(end,Pre) &&
+      \at(array,Pre)[\result] > \result &&
+      (\forall integer j; \at(start,Pre) <= j < \result ==> \at(array,Pre)[j] <= j)
+    )
+  );
+  ensures (
+    !(\exists integer k;
+       \at(start,Pre) <= k <= \at(end,Pre) &&
+       (\forall integer j; \at(start,Pre) <= j < k ==> \at(array,Pre)[j] <= j) &&
+       \at(array,Pre)[k] > k)
+    ==>
+    (\result == \at(end,Pre) + 1)
+  );
+*/
+int foo254(int * array, int array_len, int start, int end) {
+
+        int min = start;
+        int max = end;
+        int mid;
+
+        /*@
+          loop invariant (\at(start,Pre) <= \at(end,Pre)) ==> (min >= \at(start,Pre) && max <= \at(end,Pre));
+          loop invariant (!(\at(start,Pre) <= \at(end,Pre))) ==> ((max == \at(end,Pre)) && (min == \at(start,Pre)) && (end == \at(end,Pre)) && (start == \at(start,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre)));
+          loop invariant end == \at(end,Pre);
+          loop invariant start == \at(start,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant unchanged_array(array, array_len, \at(array,Pre));
+          loop assigns mid, min, max;
+        */
+            while (min <= max) {
+            mid = (min + max) / 2;
+            int current = array[mid];
+
+            if (current == mid) {
+                min = mid + 1;
+            } else if (current < mid) {
+                min = mid + 1;
+            } else {
+                max = mid - 1;
+            }
+        }
+            
+        return min;
+}
+
+2026-05-18 22:19:50,246 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.7368421052631579), clauses=13)
+2026-05-18 22:20:11,742 - INFO  - syntax Correct
+2026-05-18 22:20:32,949 - INFO  - Loop Invariant:
+2026-05-18 22:20:32,950 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:20:32,950 - INFO  - 
+2026-05-18 22:20:32,950 - INFO  - Assertion:
+2026-05-18 22:20:32,950 - INFO  - []
+2026-05-18 22:20:32,950 - INFO  - 
+2026-05-18 22:20:32,950 - INFO  - Assigns:
+2026-05-18 22:20:32,950 - INFO  - [True]
+2026-05-18 22:20:32,950 - INFO  - 
+2026-05-18 22:20:32,951 - INFO  - Post Condition:
+2026-05-18 22:20:32,951 - INFO  - [True, True, True, True, True, False, True, False, False, False, False]
+2026-05-18 22:20:32,951 - INFO  - Post Condition: failures:
+2026-05-18 22:20:32,951 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 25) in 'foo254':
+2026-05-18 22:20:32,951 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 25
+2026-05-18 22:20:32,951 - INFO  - Error line content: ensures (\at(start,Pre) <= \at(end,Pre)) ==> (\result >= \at(start,Pre) && \result <= \at(end,Pre) + 1);
+2026-05-18 22:20:32,951 - INFO  - 
+2026-05-18 22:20:32,951 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 27) in 'foo254':
+2026-05-18 22:20:32,951 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 27
+2026-05-18 22:20:32,951 - INFO  - Error line content: ensures (\forall integer i; \at(start,Pre) <= i <= \result - 1 ==> array[i] <= i);
+2026-05-18 22:20:32,951 - INFO  - 
+2026-05-18 22:20:32,951 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 28) in 'foo254':
+2026-05-18 22:20:32,951 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 28
+2026-05-18 22:20:32,952 - INFO  - Error line content: ensures (\forall integer i; \result <= i <= \at(end,Pre) ==> array[i] > i);
+2026-05-18 22:20:32,952 - INFO  - 
+2026-05-18 22:20:32,952 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 29) in 'foo254':
+2026-05-18 22:20:32,952 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 29
+2026-05-18 22:20:32,952 - INFO  - Error line content: ensures (
+2026-05-18 22:20:32,952 - INFO  - 
+2026-05-18 22:20:32,952 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 41) in 'foo254':
+2026-05-18 22:20:32,952 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 41
+2026-05-18 22:20:32,952 - INFO  - Error line content: ensures (
+2026-05-18 22:20:32,952 - INFO  - 
+2026-05-18 22:20:32,952 - INFO  - 
+2026-05-18 22:20:32,952 - INFO  - Instance:
+2026-05-18 22:20:32,952 - INFO  - []
+2026-05-18 22:20:32,952 - INFO  - 
+2026-05-18 22:20:33,462 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c:26: Warning: 
+  unexpected token '\at'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:20:33,464 - INFO  - 
+SPECIFICATION FOR foo254
+2026-05-18 22:20:33,464 - INFO  - ==================================================
+
+2026-05-18 22:20:33,465 - INFO  - 
+QCP Specification for function foo254:
+/*@
+With array_l
+Require store_int_array(array, array_len, array_l) && array_len > 0 && array_len < 100
+Ensure Results(__return)
+*/
+2026-05-18 22:20:33,661 - INFO  - 
+VERIFICATION FOR foo254
+2026-05-18 22:20:33,662 - INFO  - ==================================================
+
+2026-05-18 22:20:34,190 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c:26: Warning: 
+  unexpected token '\at'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:21:00,493 - INFO  - syntax Correct
+2026-05-18 22:21:11,803 - INFO  - Loop Invariant:
+2026-05-18 22:21:11,803 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:21:11,803 - INFO  - 
+2026-05-18 22:21:11,803 - INFO  - Assertion:
+2026-05-18 22:21:11,803 - INFO  - []
+2026-05-18 22:21:11,803 - INFO  - 
+2026-05-18 22:21:11,803 - INFO  - Assigns:
+2026-05-18 22:21:11,803 - INFO  - [True]
+2026-05-18 22:21:11,803 - INFO  - 
+2026-05-18 22:21:11,804 - INFO  - Post Condition:
+2026-05-18 22:21:11,808 - INFO  - [True, True, True, True, True, False, False]
+2026-05-18 22:21:11,808 - INFO  - Post Condition: failures:
+2026-05-18 22:21:11,808 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 25) in 'foo254':
+2026-05-18 22:21:11,808 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 25
+2026-05-18 22:21:11,808 - INFO  - Error line content: ensures \result >= \at(start,Pre) && \result <= \at(end,Pre) + 1;
+2026-05-18 22:21:11,808 - INFO  - 
+2026-05-18 22:21:11,808 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 26) in 'foo254':
+2026-05-18 22:21:11,808 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 26
+2026-05-18 22:21:11,808 - INFO  - Error line content: ensures (\forall integer i; \at(start,Pre) <= i < \result ==> array[i] <= i) || (\forall integer i; \result <= i <= \at(end,Pre) ==> array[i] > i);
+2026-05-18 22:21:11,808 - INFO  - 
+2026-05-18 22:21:11,808 - INFO  - 
+2026-05-18 22:21:11,808 - INFO  - Instance:
+2026-05-18 22:21:11,808 - INFO  - []
+2026-05-18 22:21:11,808 - INFO  - 
+2026-05-18 22:21:11,809 - INFO  - [spec-gen] refine 1/3 score=(syntax=True, satisfy=0.00, valid=0.87) clauses=9
+2026-05-18 22:21:11,809 - INFO  - postconditon before refine: 
+
+/*@
+  predicate unchanged_array(int *a, integer len, int *a_pre) =
+    \forall integer i; 0 <= i < len ==> a[i] == a_pre[i];
+*/
+
+/*@
+  predicate left_prop(int *a, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] <= i;
+*/
+
+/*@
+  predicate right_prop(int *a, integer lo, integer hi) =
+    \forall integer i; lo < i <= hi ==> a[i] >= i;
+*/
+
+/*@
+  requires \at(array_len,Pre) > 0 && \at(array_len,Pre) < 100;
+  assigns \nothing;
+  ensures array == \at(array,Pre);
+  ensures array_len == \at(array_len,Pre);
+  ensures start == \at(start,Pre);
+  ensures end == \at(end,Pre);
+  ensures unchanged_array(array, array_len, \at(array,Pre));
+  ensures \result >= \at(start,Pre) && \result <= \at(end,Pre) + 1 [POSTCONDITION FAILED];
+  ensures (\forall integer i [POSTCONDITION FAILED]; \at(start,Pre) <= i < \result ==> array[i] <= i) || (\forall integer i; \result <= i <= \at(end,Pre) ==> array[i] > i);
+*/
+int foo254(int * array, int array_len, int start, int end) {
+
+        int min = start;
+        int max = end;
+        int mid;
+
+        /*@
+          loop invariant (\at(start,Pre) <= \at(end,Pre)) ==> (min >= \at(start,Pre) && max <= \at(end,Pre));
+          loop invariant (!(\at(start,Pre) <= \at(end,Pre))) ==> ((max == \at(end,Pre)) && (min == \at(start,Pre)) && (end == \at(end,Pre)) && (start == \at(start,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre)));
+          loop invariant end == \at(end,Pre);
+          loop invariant start == \at(start,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant unchanged_array(array, array_len, \at(array,Pre));
+          loop assigns mid, min, max;
+        */
+            while (min <= max) {
+            mid = (min + max) / 2;
+            int current = array[mid];
+
+            if (current == mid) {
+                min = mid + 1;
+            } else if (current < mid) {
+                min = mid + 1;
+            } else {
+                max = mid - 1;
+            }
+        }
+            
+        return min;
+}
+
+2026-05-18 22:21:23,276 - INFO  - postconditon after refine: 
+
+/*@
+  predicate unchanged_array(int *a, integer len, int *a_pre) =
+    \forall integer i; 0 <= i < len ==> a[i] == a_pre[i];
+*/
+
+/*@
+  predicate left_prop(int *a, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] <= i;
+*/
+
+/*@
+  predicate right_prop(int *a, integer lo, integer hi) =
+    \forall integer i; lo < i <= hi ==> a[i] >= i;
+*/
+
+/* When the initial interval is non-empty, either left property holds up to result, or right property holds from result to end */
+  ensures (\at(start,Pre) <= \at(end,Pre)) ==>
+            ((\forall integer i; \at(start,Pre) <= i < \result ==> array[i] <= i) ||
+             (\forall integer i; \result <= i <= \at(end,Pre) ==> array[i] > i));
+*/
+int foo254(int * array, int array_len, int start, int end) {
+
+        int min = start;
+        int max = end;
+        int mid;
+
+        /*@
+          loop invariant (\at(start,Pre) <= \at(end,Pre)) ==> (min >= \at(start,Pre) && max <= \at(end,Pre));
+          loop invariant (!(\at(start,Pre) <= \at(end,Pre))) ==> ((max == \at(end,Pre)) && (min == \at(start,Pre)) && (end == \at(end,Pre)) && (start == \at(start,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre)));
+          loop invariant end == \at(end,Pre);
+          loop invariant start == \at(start,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant unchanged_array(array, array_len, \at(array,Pre));
+          loop assigns mid, min, max;
+        */
+            while (min <= max) {
+            mid = (min + max) / 2;
+            int current = array[mid];
+
+            if (current == mid) {
+                min = mid + 1;
+            } else if (current < mid) {
+                min = mid + 1;
+            } else {
+                max = mid - 1;
+            }
+        }
+            
+        return min;
+}
+
+2026-05-18 22:21:23,844 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c:18: 
+  Invalid symbol:
+  Location: line 18, between columns 10 and 12, before or at token: \
+  16    
+  17    /* When the initial interval is non-empty, either left property holds up to result, or right property holds from result to end */
+  18      ensures (\at(start,Pre) <= \at(end,Pre)) ==>
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  19                ((\forall integer i; \at(start,Pre) <= i < \result ==> array[i] <= i) ||
+  20                 (\forall integer i; \result <= i <= \at(end,Pre) ==> array[i] > i));
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:21:23,845 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=1
+2026-05-18 22:21:23,847 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:21:49,705 - INFO  - syntax Correct
+2026-05-18 22:22:01,144 - INFO  - Loop Invariant:
+2026-05-18 22:22:01,144 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:22:01,144 - INFO  - 
+2026-05-18 22:22:01,144 - INFO  - Assertion:
+2026-05-18 22:22:01,144 - INFO  - []
+2026-05-18 22:22:01,144 - INFO  - 
+2026-05-18 22:22:01,144 - INFO  - Assigns:
+2026-05-18 22:22:01,145 - INFO  - [True]
+2026-05-18 22:22:01,145 - INFO  - 
+2026-05-18 22:22:01,145 - INFO  - Post Condition:
+2026-05-18 22:22:01,145 - INFO  - [True, True, True, True, True, False, False]
+2026-05-18 22:22:01,145 - INFO  - Post Condition: failures:
+2026-05-18 22:22:01,145 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 25) in 'foo254':
+2026-05-18 22:22:01,145 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 25
+2026-05-18 22:22:01,145 - INFO  - Error line content: ensures (\at(start,Pre) <= \at(end,Pre)) ==> (\result >= \at(start,Pre) && \result <= \at(end,Pre) + 1);
+2026-05-18 22:22:01,145 - INFO  - 
+2026-05-18 22:22:01,145 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 26) in 'foo254':
+2026-05-18 22:22:01,145 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 26
+2026-05-18 22:22:01,145 - INFO  - Error line content: ensures (\at(start,Pre) <= \at(end,Pre)) ==>
+2026-05-18 22:22:01,145 - INFO  - 
+2026-05-18 22:22:01,145 - INFO  - 
+2026-05-18 22:22:01,145 - INFO  - Instance:
+2026-05-18 22:22:01,145 - INFO  - []
+2026-05-18 22:22:01,145 - INFO  - 
+2026-05-18 22:22:01,146 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.87) clauses=9
+2026-05-18 22:22:01,146 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 22:22:01,152 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.8666666666666667), clauses=9)
+2026-05-18 22:22:15,160 - INFO  - syntax Correct
+2026-05-18 22:22:26,624 - INFO  - Loop Invariant:
+2026-05-18 22:22:26,624 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:22:26,624 - INFO  - 
+2026-05-18 22:22:26,625 - INFO  - Assertion:
+2026-05-18 22:22:26,625 - INFO  - []
+2026-05-18 22:22:26,625 - INFO  - 
+2026-05-18 22:22:26,625 - INFO  - Assigns:
+2026-05-18 22:22:26,625 - INFO  - [True]
+2026-05-18 22:22:26,625 - INFO  - 
+2026-05-18 22:22:26,625 - INFO  - Post Condition:
+2026-05-18 22:22:26,625 - INFO  - [True, True, True, True, True, False, False]
+2026-05-18 22:22:26,625 - INFO  - Post Condition: failures:
+2026-05-18 22:22:26,625 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 25) in 'foo254':
+2026-05-18 22:22:26,625 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 25
+2026-05-18 22:22:26,625 - INFO  - Error line content: ensures \result >= \at(start,Pre) && \result <= \at(end,Pre) + 1;
+2026-05-18 22:22:26,625 - INFO  - 
+2026-05-18 22:22:26,625 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c, line 26) in 'foo254':
+2026-05-18 22:22:26,625 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c at line: 26
+2026-05-18 22:22:26,625 - INFO  - Error line content: ensures (\forall integer i; \at(start,Pre) <= i < \result ==> array[i] <= i) || (\forall integer i; \result <= i <= \at(end,Pre) ==> array[i] > i);
+2026-05-18 22:22:26,625 - INFO  - 
+2026-05-18 22:22:26,625 - INFO  - 
+2026-05-18 22:22:26,625 - INFO  - Instance:
+2026-05-18 22:22:26,625 - INFO  - []
+2026-05-18 22:22:26,626 - INFO  - 
+2026-05-18 22:22:28,930 - INFO  - syntax Correct
+2026-05-18 22:22:31,764 - INFO  - Loop Invariant:
+2026-05-18 22:22:31,764 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:22:31,764 - INFO  - 
+2026-05-18 22:22:31,764 - INFO  - Assertion:
+2026-05-18 22:22:31,764 - INFO  - []
+2026-05-18 22:22:31,765 - INFO  - 
+2026-05-18 22:22:31,765 - INFO  - Assigns:
+2026-05-18 22:22:31,765 - INFO  - [True]
+2026-05-18 22:22:31,765 - INFO  - 
+2026-05-18 22:22:31,765 - INFO  - Post Condition:
+2026-05-18 22:22:31,765 - INFO  - [True, True, True, True, True]
+2026-05-18 22:22:31,765 - INFO  - 
+2026-05-18 22:22:31,765 - INFO  - Instance:
+2026-05-18 22:22:31,765 - INFO  - []
+2026-05-18 22:22:31,765 - INFO  - 
+2026-05-18 22:22:34,152 - INFO  - syntax Correct
+2026-05-18 22:22:36,860 - INFO  - Loop Invariant:
+2026-05-18 22:22:36,860 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:22:36,860 - INFO  - 
+2026-05-18 22:22:36,861 - INFO  - Assertion:
+2026-05-18 22:22:36,861 - INFO  - []
+2026-05-18 22:22:36,861 - INFO  - 
+2026-05-18 22:22:36,861 - INFO  - Assigns:
+2026-05-18 22:22:36,861 - INFO  - [True]
+2026-05-18 22:22:36,861 - INFO  - 
+2026-05-18 22:22:36,861 - INFO  - Post Condition:
+2026-05-18 22:22:36,861 - INFO  - [True, True, True, True, True]
+2026-05-18 22:22:36,861 - INFO  - 
+2026-05-18 22:22:36,861 - INFO  - Instance:
+2026-05-18 22:22:36,861 - INFO  - []
+2026-05-18 22:22:36,861 - INFO  - 
+2026-05-18 22:22:36,861 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo254
+2026-05-18 22:22:36,861 - INFO  - ==================================================
+2026-05-18 22:22:36,861 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo254/20260518_221347_2969057_fe5f044f/output/foo254.c
+2026-05-18 22:22:36,861 - INFO  - Output file content:
+
+/*@
+  predicate unchanged_array(int *a, integer len, int *a_pre) =
+    \forall integer i; 0 <= i < len ==> a[i] == a_pre[i];
+*/
+
+/*@
+  predicate left_prop(int *a, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] <= i;
+*/
+
+/*@
+  predicate right_prop(int *a, integer lo, integer hi) =
+    \forall integer i; lo < i <= hi ==> a[i] >= i;
+*/
+
+/*@
+  requires \at(array_len,Pre) > 0 && \at(array_len,Pre) < 100;
+  assigns \nothing;
+  ensures array == \at(array,Pre);
+  ensures array_len == \at(array_len,Pre);
+  ensures start == \at(start,Pre);
+  ensures end == \at(end,Pre);
+  ensures unchanged_array(array, array_len, \at(array,Pre));
+*/
+int foo254(int * array, int array_len, int start, int end) {
+
+        int min = start;
+        int max = end;
+        int mid;
+
+        /*@
+          loop invariant (\at(start,Pre) <= \at(end,Pre)) ==> (min >= \at(start,Pre) && max <= \at(end,Pre));
+          loop invariant (!(\at(start,Pre) <= \at(end,Pre))) ==> ((max == \at(end,Pre)) && (min == \at(start,Pre)) && (end == \at(end,Pre)) && (start == \at(start,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre)));
+          loop invariant end == \at(end,Pre);
+          loop invariant start == \at(start,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant unchanged_array(array, array_len, \at(array,Pre));
+          loop assigns mid, min, max;
+        */
+            while (min <= max) {
+            mid = (min + max) / 2;
+            int current = array[mid];
+
+            if (current == mid) {
+                min = mid + 1;
+            } else if (current < mid) {
+                min = mid + 1;
+            } else {
+                max = mid - 1;
+            }
+        }
+            
+        return min;
+}
+
+2026-05-18 22:22:36,861 - INFO  - ==================================================
+2026-05-18 22:22:36,862 - INFO  - first_pass:
+2026-05-18 22:22:36,862 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-18 22:22:36,862 - INFO  - ==================================================
+2026-05-18 22:22:36,862 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 22:22:36,862 - INFO  - Total execution time: 529.15 seconds (8.82 minutes)
+2026-05-18 22:22:36,862 - INFO  - ==================================================
+2026-05-18 22:22:36,862 - INFO  - ==================================================
+2026-05-18 22:22:36,862 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 22:22:36,862 - INFO  - Total API calls: 16
+2026-05-18 22:22:36,862 - INFO  - Total prompt tokens (input): 131,168
+2026-05-18 22:22:36,862 - INFO  - Total completion tokens (output): 16,364
+2026-05-18 22:22:36,862 - INFO  - Total tokens: 147,532
+2026-05-18 22:22:36,862 - INFO  - Average prompt tokens per call: 8198.0
+2026-05-18 22:22:36,862 - INFO  - Average completion tokens per call: 1022.8
+2026-05-18 22:22:36,862 - INFO  - Average total tokens per call: 9220.8
+2026-05-18 22:22:36,862 - INFO  - ==================================================

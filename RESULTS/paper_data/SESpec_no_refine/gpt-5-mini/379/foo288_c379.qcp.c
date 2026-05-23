@@ -1,0 +1,27 @@
+#include "../verification_stdlib.h"
+    #include "../verification_list.h"
+    #include "../int_array_def.h"
+
+    /*@ Extern Coq (Result: Assertion) */
+    /*@ Extern Coq (Results: Z -> Assertion) */
+
+int foo288_c379(int l, int r);
+
+int foo288_c379(int l, int r) 
+/*@
+
+Require emp
+Ensure Results(__return)
+*/{
+
+        int sum = 0;
+       
+  /*@ Print user assertion at number LoopEntry_0*/ 
+/*@ Inv emp */ /*0*/ 
+ for (int i = l; i <= r; i++) {
+            if (i % 2 == 0) {
+                sum += i;
+            }
+        }
+        return sum;
+}

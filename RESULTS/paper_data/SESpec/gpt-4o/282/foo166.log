@@ -1,0 +1,1156 @@
+2026-05-15 01:22:39,493 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo166/20260515_012239_705046_d06c028a
+2026-05-15 01:22:39,493 - INFO  - 
+🚀 Starting generation of function: foo166
+2026-05-15 01:22:39,493 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 01:22:39,493 - INFO  - ==================================================
+
+2026-05-15 01:22:40,537 - INFO  - [auto only_loop] False — foo166 returns 'const char *'
+2026-05-15 01:22:40,538 - INFO  - Initial pending functions: ['foo166']
+2026-05-15 01:22:40,538 - INFO  - 
+GENERATE ANNOTATION FOR foo166
+2026-05-15 01:22:40,538 - INFO  - ==================================================
+
+2026-05-15 01:22:40,538 - INFO  - Function foo166 has been initialized
+2026-05-15 01:22:40,538 - INFO  - Starting to generate annotation code for foo166
+2026-05-15 01:22:40,589 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo166
+2026-05-15 01:22:40,589 - INFO  - ==================================================
+
+2026-05-15 01:22:40,665 - INFO  - Variable Maps:[{'result': '0', 'num': 'num@pre'}]
+2026-05-15 01:22:40,665 - INFO  - Path conditions: [None]
+2026-05-15 01:22:40,665 - INFO  - Pre condition: (result == 0) * (num == num@pre)
+2026-05-15 01:22:40,665 - INFO  - Loop Condition: c <= num
+2026-05-15 01:22:40,666 - INFO  - Array Names: []
+2026-05-15 01:22:40,666 - INFO  - Updated Loop Conditions: ['c <= num@pre']
+2026-05-15 01:22:40,667 - INFO  - Global Unchanged Variables: ['num']
+2026-05-15 01:22:40,667 - INFO  - Non Inductive Variables: []
+2026-05-15 01:22:40,667 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 01:22:40,668 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 01:22:40,669 - INFO  - examples category: array
+2026-05-15 01:22:40,669 - INFO  - examples:
+2026-05-15 01:22:40,669 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-15 01:23:14,859 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=3
+2026-05-15 01:23:14,860 - INFO  - [inv-gen] converged at refine 1
+2026-05-15 01:23:37,179 - INFO  - ACSL format loop invariant
+2026-05-15 01:23:37,179 - INFO  - /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+2026-05-15 01:23:37,180 - INFO  - QCP format loop invariant
+2026-05-15 01:23:37,180 - INFO  - /*@ Inv
+    (1 <= c && c <= num + 1) &&
+(result == count_divisors(num, c - 1)) &&
+(num == num@pre
+      loop assigns c, result)
+    */
+    
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+2026-05-15 01:23:58,893 - INFO  - CORRECT INVARIANT
+2026-05-15 01:23:58,894 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo166
+2026-05-15 01:23:58,894 - INFO  - ==================================================
+
+2026-05-15 01:23:58,921 - INFO  - Starting to generate ACSL specification for foo166
+2026-05-15 01:24:15,434 - INFO  - syntax Correct
+2026-05-15 01:24:26,449 - INFO  - Loop Invariant:
+2026-05-15 01:24:26,450 - INFO  - [True, True, True]
+2026-05-15 01:24:26,450 - INFO  - 
+2026-05-15 01:24:26,450 - INFO  - Assertion:
+2026-05-15 01:24:26,450 - INFO  - [True, True, True]
+2026-05-15 01:24:26,450 - INFO  - 
+2026-05-15 01:24:26,450 - INFO  - Assigns:
+2026-05-15 01:24:26,450 - INFO  - [True, True, True]
+2026-05-15 01:24:26,450 - INFO  - 
+2026-05-15 01:24:26,451 - INFO  - Post Condition:
+2026-05-15 01:24:26,451 - INFO  - [False, False, False]
+2026-05-15 01:24:26,452 - INFO  - 
+2026-05-15 01:24:26,452 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.67, satisfy=1.00) clauses=5
+2026-05-15 01:24:26,453 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd" [POSTCONDITION FAILED];
+  ensures \result == "Even" <==> count_divisors(num, num) % 2 == 0 [POSTCONDITION FAILED];
+  ensures \result == "Odd" <==> count_divisors(num, num) % 2 != 0 [POSTCONDITION FAILED];
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:31:19,207 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd"; // Result must be one of these strings
+  ensures \result == "Even" <==> count_divisors(num, num) % 2 == 0; // Matches even parity
+  ensures \result == "Odd" <==> count_divisors(num, num) % 2 != 0; // Matches odd parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:31:30,158 - INFO  - syntax Correct
+2026-05-15 01:31:40,955 - INFO  - Loop Invariant:
+2026-05-15 01:31:40,955 - INFO  - [True, True, True]
+2026-05-15 01:31:40,955 - INFO  - 
+2026-05-15 01:31:40,955 - INFO  - Assertion:
+2026-05-15 01:31:40,955 - INFO  - [True, True, True]
+2026-05-15 01:31:40,955 - INFO  - 
+2026-05-15 01:31:40,955 - INFO  - Assigns:
+2026-05-15 01:31:40,955 - INFO  - [True, True, True]
+2026-05-15 01:31:40,956 - INFO  - 
+2026-05-15 01:31:40,956 - INFO  - Post Condition:
+2026-05-15 01:31:40,956 - INFO  - [False, False, False]
+2026-05-15 01:31:40,956 - INFO  - 
+2026-05-15 01:31:40,956 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.67, satisfy=1.00) clauses=5
+2026-05-15 01:31:40,956 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd" [POSTCONDITION FAILED]; // Result must be one of these strings
+  ensures \result == "Even" <==> count_divisors(num, num) % 2 == 0 [POSTCONDITION FAILED]; // Matches even parity
+  ensures \result == "Odd" <==> count_divisors(num, num) % 2 != 0 [POSTCONDITION FAILED]; // Matches odd parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:33:21,748 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd"; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0); // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:33:32,660 - INFO  - syntax Correct
+2026-05-15 01:33:43,574 - INFO  - Loop Invariant:
+2026-05-15 01:33:43,574 - INFO  - [True, True, True]
+2026-05-15 01:33:43,574 - INFO  - 
+2026-05-15 01:33:43,574 - INFO  - Assertion:
+2026-05-15 01:33:43,575 - INFO  - [True, True, True]
+2026-05-15 01:33:43,575 - INFO  - 
+2026-05-15 01:33:43,575 - INFO  - Assigns:
+2026-05-15 01:33:43,575 - INFO  - [True, True, True]
+2026-05-15 01:33:43,575 - INFO  - 
+2026-05-15 01:33:43,575 - INFO  - Post Condition:
+2026-05-15 01:33:43,576 - INFO  - [False, False]
+2026-05-15 01:33:43,576 - INFO  - 
+2026-05-15 01:33:43,576 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.75, satisfy=1.00) clauses=4
+2026-05-15 01:33:43,577 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd" [POSTCONDITION FAILED]; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0) [POSTCONDITION FAILED]; // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:35:33,008 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd"; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0); // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:35:43,820 - INFO  - syntax Correct
+2026-05-15 01:35:54,918 - INFO  - Loop Invariant:
+2026-05-15 01:35:54,918 - INFO  - [True, True, True]
+2026-05-15 01:35:54,918 - INFO  - 
+2026-05-15 01:35:54,918 - INFO  - Assertion:
+2026-05-15 01:35:54,918 - INFO  - [True, True, True]
+2026-05-15 01:35:54,918 - INFO  - 
+2026-05-15 01:35:54,918 - INFO  - Assigns:
+2026-05-15 01:35:54,919 - INFO  - [True, True, True]
+2026-05-15 01:35:54,919 - INFO  - 
+2026-05-15 01:35:54,919 - INFO  - Post Condition:
+2026-05-15 01:35:54,919 - INFO  - [False, False]
+2026-05-15 01:35:54,919 - INFO  - 
+2026-05-15 01:35:54,920 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.75, satisfy=1.00) clauses=4
+2026-05-15 01:35:54,920 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd" [POSTCONDITION FAILED]; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0) [POSTCONDITION FAILED]; // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:37:19,579 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd"; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0); // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:37:30,269 - INFO  - syntax Correct
+2026-05-15 01:37:41,001 - INFO  - Loop Invariant:
+2026-05-15 01:37:41,001 - INFO  - [True, True, True]
+2026-05-15 01:37:41,002 - INFO  - 
+2026-05-15 01:37:41,002 - INFO  - Assertion:
+2026-05-15 01:37:41,002 - INFO  - [True, True, True]
+2026-05-15 01:37:41,002 - INFO  - 
+2026-05-15 01:37:41,002 - INFO  - Assigns:
+2026-05-15 01:37:41,002 - INFO  - [True, True, True]
+2026-05-15 01:37:41,002 - INFO  - 
+2026-05-15 01:37:41,003 - INFO  - Post Condition:
+2026-05-15 01:37:41,003 - INFO  - [False, False]
+2026-05-15 01:37:41,003 - INFO  - 
+2026-05-15 01:37:41,003 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.75, satisfy=1.00) clauses=4
+2026-05-15 01:37:41,003 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 01:37:51,928 - INFO  - syntax Correct
+2026-05-15 01:38:02,870 - INFO  - Loop Invariant:
+2026-05-15 01:38:02,870 - INFO  - [True, True, True]
+2026-05-15 01:38:02,870 - INFO  - 
+2026-05-15 01:38:02,870 - INFO  - Assertion:
+2026-05-15 01:38:02,870 - INFO  - [True, True, True]
+2026-05-15 01:38:02,871 - INFO  - 
+2026-05-15 01:38:02,871 - INFO  - Assigns:
+2026-05-15 01:38:02,871 - INFO  - [True, True, True]
+2026-05-15 01:38:02,871 - INFO  - 
+2026-05-15 01:38:02,871 - INFO  - Post Condition:
+2026-05-15 01:38:02,871 - INFO  - [False, False]
+2026-05-15 01:38:02,872 - INFO  - 
+2026-05-15 01:38:02,872 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.75, satisfy=1.00) clauses=4
+2026-05-15 01:38:02,872 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd" [POSTCONDITION FAILED]; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0) [POSTCONDITION FAILED]; // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:38:49,968 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd"; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0); // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:39:01,167 - INFO  - syntax Correct
+2026-05-15 01:39:12,349 - INFO  - Loop Invariant:
+2026-05-15 01:39:12,350 - INFO  - [True, True, True]
+2026-05-15 01:39:12,351 - INFO  - 
+2026-05-15 01:39:12,351 - INFO  - Assertion:
+2026-05-15 01:39:12,351 - INFO  - [True, True, True]
+2026-05-15 01:39:12,351 - INFO  - 
+2026-05-15 01:39:12,351 - INFO  - Assigns:
+2026-05-15 01:39:12,351 - INFO  - [True, True, True]
+2026-05-15 01:39:12,351 - INFO  - 
+2026-05-15 01:39:12,352 - INFO  - Post Condition:
+2026-05-15 01:39:12,352 - INFO  - [False, False]
+2026-05-15 01:39:12,352 - INFO  - 
+2026-05-15 01:39:12,353 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.75, satisfy=1.00) clauses=4
+2026-05-15 01:39:12,353 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 01:39:23,655 - INFO  - syntax Correct
+2026-05-15 01:39:34,881 - INFO  - Loop Invariant:
+2026-05-15 01:39:34,882 - INFO  - [True, True, True]
+2026-05-15 01:39:34,882 - INFO  - 
+2026-05-15 01:39:34,882 - INFO  - Assertion:
+2026-05-15 01:39:34,882 - INFO  - [True, True, True]
+2026-05-15 01:39:34,882 - INFO  - 
+2026-05-15 01:39:34,882 - INFO  - Assigns:
+2026-05-15 01:39:34,883 - INFO  - [True, True, True]
+2026-05-15 01:39:34,883 - INFO  - 
+2026-05-15 01:39:34,883 - INFO  - Post Condition:
+2026-05-15 01:39:34,883 - INFO  - [False, False]
+2026-05-15 01:39:34,883 - INFO  - 
+2026-05-15 01:39:34,884 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.75, satisfy=1.00) clauses=4
+2026-05-15 01:39:34,884 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd" [POSTCONDITION FAILED]; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0) [POSTCONDITION FAILED]; // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:40:56,415 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd"; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0); // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:41:07,470 - INFO  - syntax Correct
+2026-05-15 01:41:18,460 - INFO  - Loop Invariant:
+2026-05-15 01:41:18,461 - INFO  - [True, True, True]
+2026-05-15 01:41:18,461 - INFO  - 
+2026-05-15 01:41:18,461 - INFO  - Assertion:
+2026-05-15 01:41:18,461 - INFO  - [True, True, True]
+2026-05-15 01:41:18,461 - INFO  - 
+2026-05-15 01:41:18,461 - INFO  - Assigns:
+2026-05-15 01:41:18,461 - INFO  - [True, True, True]
+2026-05-15 01:41:18,461 - INFO  - 
+2026-05-15 01:41:18,461 - INFO  - Post Condition:
+2026-05-15 01:41:18,461 - INFO  - [False, False]
+2026-05-15 01:41:18,462 - INFO  - 
+2026-05-15 01:41:18,462 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.75, satisfy=1.00) clauses=4
+2026-05-15 01:41:18,462 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 01:41:29,119 - INFO  - syntax Correct
+2026-05-15 01:41:39,809 - INFO  - Loop Invariant:
+2026-05-15 01:41:39,809 - INFO  - [True, True, True]
+2026-05-15 01:41:39,809 - INFO  - 
+2026-05-15 01:41:39,809 - INFO  - Assertion:
+2026-05-15 01:41:39,809 - INFO  - [True, True, True]
+2026-05-15 01:41:39,809 - INFO  - 
+2026-05-15 01:41:39,809 - INFO  - Assigns:
+2026-05-15 01:41:39,809 - INFO  - [True, True, True]
+2026-05-15 01:41:39,809 - INFO  - 
+2026-05-15 01:41:39,810 - INFO  - Post Condition:
+2026-05-15 01:41:39,810 - INFO  - [False, False]
+2026-05-15 01:41:39,810 - INFO  - 
+2026-05-15 01:41:39,810 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.75, satisfy=1.00) clauses=4
+2026-05-15 01:41:39,810 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == "Even" || \result == "Odd" [POSTCONDITION FAILED]; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0) [POSTCONDITION FAILED]; // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:41:53,398 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+  ensures \result == \null || \result == "Even" || \result == "Odd"; // Result must be one of these strings
+  ensures (\result == "Even" && count_divisors(num, num) % 2 == 0) || 
+          (\result == "Odd" && count_divisors(num, num) % 2 != 0); // Matches parity
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:41:53,400 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.75, 1.0), clauses=4)
+2026-05-15 01:42:04,252 - INFO  - syntax Correct
+2026-05-15 01:42:15,048 - INFO  - Loop Invariant:
+2026-05-15 01:42:15,048 - INFO  - [True, True, True]
+2026-05-15 01:42:15,048 - INFO  - 
+2026-05-15 01:42:15,048 - INFO  - Assertion:
+2026-05-15 01:42:15,048 - INFO  - [True, True, True]
+2026-05-15 01:42:15,048 - INFO  - 
+2026-05-15 01:42:15,048 - INFO  - Assigns:
+2026-05-15 01:42:15,048 - INFO  - [True, True, True]
+2026-05-15 01:42:15,048 - INFO  - 
+2026-05-15 01:42:15,049 - INFO  - Post Condition:
+2026-05-15 01:42:15,049 - INFO  - [False, False]
+2026-05-15 01:42:15,049 - INFO  - 
+2026-05-15 01:42:15,756 - INFO  - syntax Correct
+2026-05-15 01:42:16,544 - INFO  - Loop Invariant:
+2026-05-15 01:42:16,544 - INFO  - [True, True, True]
+2026-05-15 01:42:16,544 - INFO  - 
+2026-05-15 01:42:16,544 - INFO  - Assertion:
+2026-05-15 01:42:16,544 - INFO  - [True, True, True]
+2026-05-15 01:42:16,544 - INFO  - 
+2026-05-15 01:42:16,545 - INFO  - Assigns:
+2026-05-15 01:42:16,545 - INFO  - [True, True, True]
+2026-05-15 01:42:16,545 - INFO  - 
+2026-05-15 01:42:16,545 - INFO  - Post Condition:
+2026-05-15 01:42:16,545 - INFO  - []
+2026-05-15 01:42:16,545 - INFO  - 
+2026-05-15 01:42:16,546 - INFO  - 
+SPECIFICATION FOR foo166
+2026-05-15 01:42:16,546 - INFO  - ==================================================
+
+2026-05-15 01:42:16,546 - INFO  - 
+QCP Specification for function foo166:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-15 01:42:16,630 - INFO  - 
+VERIFICATION FOR foo166
+2026-05-15 01:42:16,631 - INFO  - ==================================================
+
+2026-05-15 01:42:16,631 - INFO  - TRY TIME: 0
+2026-05-15 01:42:17,320 - INFO  - syntax Correct
+2026-05-15 01:42:18,079 - INFO  - Loop Invariant:
+2026-05-15 01:42:18,080 - INFO  - [True, True, True]
+2026-05-15 01:42:18,080 - INFO  - 
+2026-05-15 01:42:18,080 - INFO  - Assertion:
+2026-05-15 01:42:18,080 - INFO  - [True, True, True]
+2026-05-15 01:42:18,080 - INFO  - 
+2026-05-15 01:42:18,080 - INFO  - Assigns:
+2026-05-15 01:42:18,080 - INFO  - [True, True, True]
+2026-05-15 01:42:18,080 - INFO  - 
+2026-05-15 01:42:18,080 - INFO  - Post Condition:
+2026-05-15 01:42:18,080 - INFO  - []
+2026-05-15 01:42:18,081 - INFO  - 
+2026-05-15 01:42:18,081 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo166
+2026-05-15 01:42:18,081 - INFO  - ==================================================
+2026-05-15 01:42:18,081 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo166/20260515_012239_705046_d06c028a/output/foo166.c
+2026-05-15 01:42:18,081 - INFO  - Output file content:
+
+/*@
+  logic integer count_divisors(integer n, integer limit) =
+    limit <= 0 ? 0
+               : count_divisors(n, limit - 1) + (n % limit == 0 ? 1 : 0);
+*/
+
+/*@
+  requires num >= 0; // Ensure num is non-negative
+  assigns \nothing;
+*/
+const char * foo166(int num) {
+
+    int result = 0;
+
+    /*@
+      loop invariant 1 <= c <= num + 1;
+      loop invariant result == count_divisors(num, c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, result;
+    */
+    for (int c = 1; c <= num; c++) {
+        if (num % c == 0) {
+            result++;
+        }
+    }
+
+    /*@
+      assert result == count_divisors(num, num);
+    */
+
+    if (result % 2 == 0) {
+        /*@
+          assert count_divisors(num, num) % 2 == 0;
+        */
+        return "Even";
+    } else {
+        /*@
+          assert count_divisors(num, num) % 2 != 0;
+        */
+        return "Odd";
+    }
+}
+
+2026-05-15 01:42:18,081 - INFO  - ==================================================
+2026-05-15 01:42:18,081 - INFO  - first_pass:
+2026-05-15 01:42:18,081 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 01:42:18,081 - INFO  - ==================================================
+2026-05-15 01:42:18,081 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 01:42:18,081 - INFO  - Total execution time: 1178.59 seconds (19.64 minutes)
+2026-05-15 01:42:18,081 - INFO  - ==================================================
+2026-05-15 01:42:18,081 - INFO  - ==================================================
+2026-05-15 01:42:18,082 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 01:42:18,082 - INFO  - Total API calls: 9
+2026-05-15 01:42:18,082 - INFO  - Total prompt tokens (input): 91,233
+2026-05-15 01:42:18,082 - INFO  - Total completion tokens (output): 6,547
+2026-05-15 01:42:18,082 - INFO  - Total tokens: 97,780
+2026-05-15 01:42:18,082 - INFO  - Average prompt tokens per call: 10137.0
+2026-05-15 01:42:18,082 - INFO  - Average completion tokens per call: 727.4
+2026-05-15 01:42:18,082 - INFO  - Average total tokens per call: 10864.4
+2026-05-15 01:42:18,082 - INFO  - ==================================================

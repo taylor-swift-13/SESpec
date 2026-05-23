@@ -1,0 +1,520 @@
+2026-05-17 23:02:41,810 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo159/20260517_230241_1514295_03703838
+2026-05-17 23:02:41,811 - INFO  - 
+🚀 Starting generation of function: foo159
+2026-05-17 23:02:41,811 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 23:02:41,811 - INFO  - TRY TIME: 0
+2026-05-17 23:02:41,811 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 23:02:41,811 - INFO  - ==================================================
+
+2026-05-17 23:02:43,040 - INFO  - [auto only_loop] False — foo159 returns 'int'
+2026-05-17 23:02:43,041 - INFO  - Initial pending functions: ['foo159']
+2026-05-17 23:02:43,041 - INFO  - 
+GENERATE ANNOTATION FOR foo159
+2026-05-17 23:02:43,041 - INFO  - ==================================================
+
+2026-05-17 23:02:43,041 - INFO  - Function foo159 has been initialized
+2026-05-17 23:02:43,041 - INFO  - Starting to generate annotation code for foo159
+2026-05-17 23:02:43,076 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo159
+2026-05-17 23:02:43,076 - INFO  - ==================================================
+
+2026-05-17 23:02:43,138 - INFO  - Variable Maps:[{'ret': '0', 'array': 'array@pre', 'args_len': 'args_len@pre', 'args': 'args@pre'}]
+2026-05-17 23:02:43,138 - INFO  - Path conditions: ['args_len@pre > 0 && args_len@pre < 100']
+2026-05-17 23:02:43,138 - INFO  - Pre condition: args_len@pre > 0 && args_len@pre < 100 && (ret == 0) * (array == array@pre) * (args_len == args_len@pre) * (args == args@pre) * store_int_array(args@pre, args_len@pre, args_l)
+2026-05-17 23:02:43,138 - INFO  - Loop Condition: ret < array
+2026-05-17 23:02:43,139 - INFO  - Array Names: ['args']
+2026-05-17 23:02:43,139 - INFO  - Updated Loop Conditions: ['0 < array@pre']
+2026-05-17 23:02:43,139 - INFO  - Global Unchanged Variables: ['array', 'args_len', 'args']
+2026-05-17 23:02:43,140 - INFO  - Non Inductive Variables: []
+2026-05-17 23:02:43,140 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 23:02:43,141 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 23:02:43,142 - INFO  - examples category: array
+2026-05-17 23:02:43,142 - INFO  - examples:
+2026-05-17 23:02:43,142 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 23:03:10,006 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:03:10,559 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:03:10,561 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:03:11,070 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:03:11,071 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:03:11,616 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:03:11,938 - INFO  - ACSL format loop invariant
+2026-05-17 23:03:11,938 - INFO  - /*@
+          loop invariant 0 <= ret <= array;
+          loop invariant \forall integer k; 0 <= k < array ==> 1 <= args[k] <= array || args[k] <= 0 || args[k] > array;
+          loop invariant \forall integer v; 1 <= v <= array ==> count_eq(args, 0, array, v) == \at(count_eq(args, 0, array, v), Pre);
+          loop assigns ret, args[..];
+            */
+            while (ret < array) {
+			if (args[ret] <= 0 || args[ret] > array
+					|| args[ret] == ret + 1) {
+				ret++;
+			} else {
+				int j = args[ret];
+				args[ret] = args[j - 1];
+				args[j - 1] = j;
+			}
+		}
+2026-05-17 23:03:11,940 - INFO  - QCP format loop invariant
+2026-05-17 23:03:11,940 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (0 <= ret && ret <= array) &&
+(forall (k:Z), 0 <= k && k < array => 1 <= args_l[k] <= array || args_l[k] <= 0 || args_l[k] > array) &&
+(forall (v:Z), 1 <= v && v <= array => count_eq(args, 0, array, v) == \at(count_eq(args, 0, array, v), Pre)
+          loop assigns ret, args_l[..])
+    */
+    
+            while (ret < array) {
+			if (args[ret] <= 0 || args[ret] > array
+					|| args[ret] == ret + 1) {
+				ret++;
+			} else {
+				int j = args[ret];
+				args[ret] = args[j - 1];
+				args[j - 1] = j;
+			}
+		}
+2026-05-17 23:03:11,941 - INFO  - Variable Maps:[{}]
+2026-05-17 23:03:11,941 - INFO  - Path conditions: [None]
+2026-05-17 23:03:11,942 - INFO  - Pre condition: 
+2026-05-17 23:03:11,942 - INFO  - Loop Condition: ret < array
+2026-05-17 23:03:11,942 - INFO  - Array Names: ['args']
+2026-05-17 23:03:11,942 - INFO  - Updated Loop Conditions: ['ret < array']
+2026-05-17 23:03:11,942 - INFO  - Global Unchanged Variables: []
+2026-05-17 23:03:11,942 - INFO  - Non Inductive Variables: []
+2026-05-17 23:03:11,943 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-17 23:03:11,943 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 23:03:11,945 - INFO  - examples category: array
+2026-05-17 23:03:11,945 - INFO  - examples:
+2026-05-17 23:03:11,945 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 23:03:56,203 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:03:56,646 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:03:56,647 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:03:57,072 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:03:57,074 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:03:57,484 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:03:57,727 - INFO  - ACSL format loop invariant
+2026-05-17 23:03:57,727 - INFO  - /*@
+          loop invariant 0 <= ret <= array;
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] == k + 1;
+          loop assigns ret;
+            */
+            for (ret = 0; ret < array; ret++) {
+			if (args[ret] != ret + 1) {
+				return ret + 1;
+			}
+		}
+2026-05-17 23:03:57,727 - INFO  - QCP format loop invariant
+2026-05-17 23:03:57,727 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (0 <= ret && ret <= array) &&
+(forall (k:Z), 0 <= k && k < ret => args_l[k] == k + 1
+          loop assigns ret)
+    */
+    
+            for (ret = 0; ret < array; ret++) {
+			if (args[ret] != ret + 1) {
+				return ret + 1;
+			}
+		}
+2026-05-17 23:03:57,960 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo159
+2026-05-17 23:03:57,961 - INFO  - ==================================================
+
+2026-05-17 23:03:57,983 - INFO  - Starting to generate ACSL specification for foo159
+2026-05-17 23:04:19,211 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:04:19,499 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo159/20260517_230241_1514295_03703838/output/foo159.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo159/20260517_230241_1514295_03703838/output/foo159.c:29: 
+  syntax error:
+  Location: line 29, column 97
+  27      ensures (array < 0 || array > args_len) ==> (\result == array + 1 || (1 <= \result && \result <= array));
+  28      ensures \result == ((0 <= array && array <= args_len && (\exists integer k; 0 <= k < array && args[k] != k + 1)) ? 
+  29                          (1 + (\min \integer k; 0 <= k < array && args[k] != k + 1)) : (array + 1));
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  30    */
+  31
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 23:04:19,503 - INFO  - 
+SPECIFICATION FOR foo159
+2026-05-17 23:04:19,504 - INFO  - ==================================================
+
+2026-05-17 23:04:19,505 - INFO  - 
+QCP Specification for function foo159:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+2026-05-17 23:04:19,675 - INFO  - 
+VERIFICATION FOR foo159
+2026-05-17 23:04:19,675 - INFO  - ==================================================
+
+2026-05-17 23:04:19,940 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo159/20260517_230241_1514295_03703838/output/foo159.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo159/20260517_230241_1514295_03703838/output/foo159.c:29: 
+  syntax error:
+  Location: line 29, column 97
+  27      ensures (array < 0 || array > args_len) ==> (\result == array + 1 || (1 <= \result && \result <= array));
+  28      ensures \result == ((0 <= array && array <= args_len && (\exists integer k; 0 <= k < array && args[k] != k + 1)) ? 
+  29                          (1 + (\min \integer k; 0 <= k < array && args[k] != k + 1)) : (array + 1));
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  30    */
+  31
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 23:04:38,347 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:04:38,620 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo159/20260517_230241_1514295_03703838/output/foo159.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo159/20260517_230241_1514295_03703838/output/foo159.c:19: 
+  syntax error:
+  Location: line 19, column 19
+  17               args[\result - 1] != \result &&
+  18               (\forall integer k; 0 <= k < \result - 1 ==> args[k] == k + 1));
+  19      assigns args[..];
+        ^^^^^^^^^^^^^^^^^^^
+  20    */
+  21    int foo159(int * args, int args_len, int array) {
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 23:04:38,885 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo159/20260517_230241_1514295_03703838/output/foo159.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo159/20260517_230241_1514295_03703838/output/foo159.c:19: 
+  syntax error:
+  Location: line 19, column 19
+  17               args[\result - 1] != \result &&
+  18               (\forall integer k; 0 <= k < \result - 1 ==> args[k] == k + 1));
+  19      assigns args[..];
+        ^^^^^^^^^^^^^^^^^^^
+  20    */
+  21    int foo159(int * args, int args_len, int array) {
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 23:04:38,889 - INFO  - first_pass:
+2026-05-17 23:04:38,890 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-17 23:04:38,890 - INFO  - ==================================================
+2026-05-17 23:04:38,890 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 23:04:38,890 - INFO  - Total execution time: 117.08 seconds (1.95 minutes)
+2026-05-17 23:04:38,890 - INFO  - ==================================================
+2026-05-17 23:04:38,890 - INFO  - ==================================================
+2026-05-17 23:04:38,890 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 23:04:38,890 - INFO  - Total API calls: 8
+2026-05-17 23:04:38,890 - INFO  - Total prompt tokens (input): 57,677
+2026-05-17 23:04:38,890 - INFO  - Total completion tokens (output): 5,594
+2026-05-17 23:04:38,890 - INFO  - Total tokens: 63,271
+2026-05-17 23:04:38,890 - INFO  - Average prompt tokens per call: 7209.6
+2026-05-17 23:04:38,890 - INFO  - Average completion tokens per call: 699.2
+2026-05-17 23:04:38,890 - INFO  - Average total tokens per call: 7908.9
+2026-05-17 23:04:38,890 - INFO  - ==================================================

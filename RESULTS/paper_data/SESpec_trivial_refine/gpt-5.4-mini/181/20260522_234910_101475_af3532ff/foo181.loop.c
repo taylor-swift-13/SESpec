@@ -1,0 +1,32 @@
+
+/*@
+predicate foo181_dummy = \true;
+*/
+
+int foo181(int * array, int array_len, int count) {
+
+		if (count == 0) {
+			return 0;
+		}
+		int r = 0, top = count - 1;
+		
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant count <= 0 || (0 <= r <= top && top < count);
+          loop assigns r, top;
+            */
+            while (r < top) {
+			if (array[r] < array[top]) {
+				return r + 1;
+			}
+			int i = (r + top) / 2;
+			if (array[i] > array[r]) {
+				r = i;
+			} else {
+				top = i;
+			}
+		}
+            
+		return r + 1;
+}

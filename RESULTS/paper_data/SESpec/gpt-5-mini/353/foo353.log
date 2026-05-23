@@ -1,0 +1,623 @@
+2026-05-18 22:37:03,981 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo353/20260518_223703_3047028_ded2cd23
+2026-05-18 22:37:03,981 - INFO  - 
+🚀 Starting generation of function: foo353
+2026-05-18 22:37:03,982 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 22:37:03,982 - INFO  - TRY TIME: 0
+2026-05-18 22:37:03,982 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 22:37:03,982 - INFO  - ==================================================
+
+2026-05-18 22:37:06,957 - INFO  - [auto only_loop] False — foo353 returns 'int'
+2026-05-18 22:37:06,958 - INFO  - Initial pending functions: ['foo353']
+2026-05-18 22:37:06,958 - INFO  - 
+GENERATE ANNOTATION FOR foo353
+2026-05-18 22:37:06,958 - INFO  - ==================================================
+
+2026-05-18 22:37:06,958 - INFO  - Function foo353 has been initialized
+2026-05-18 22:37:06,958 - INFO  - Starting to generate annotation code for foo353
+2026-05-18 22:37:07,090 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo353
+2026-05-18 22:37:07,095 - INFO  - ==================================================
+
+2026-05-18 22:37:07,323 - INFO  - Variable Maps:[{'sum': 'num@pre', 'max': '0', 'result': '0', 'num': 'num@pre'}]
+2026-05-18 22:37:07,328 - INFO  - Path conditions: [None]
+2026-05-18 22:37:07,328 - INFO  - Pre condition: (sum == num@pre) * (max == 0) * (result == 0) * (num == num@pre)
+2026-05-18 22:37:07,328 - INFO  - Loop Condition: sum > 0
+2026-05-18 22:37:07,329 - INFO  - Array Names: []
+2026-05-18 22:37:07,329 - INFO  - Updated Loop Conditions: ['num@pre > 0']
+2026-05-18 22:37:07,330 - INFO  - Global Unchanged Variables: ['sum', 'max', 'num']
+2026-05-18 22:37:07,331 - INFO  - Non Inductive Variables: []
+2026-05-18 22:37:07,331 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-18 22:37:07,336 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 22:37:07,339 - INFO  - examples category: numeric
+2026-05-18 22:37:07,343 - INFO  - examples:
+2026-05-18 22:37:07,344 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-18 22:37:46,087 - INFO  - [inv-gen] refine 1/3 score=(syntax=True, valid=0.56, satisfy=0.00) clauses=9
+2026-05-18 22:38:03,922 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-18 22:38:03,929 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:38:36,849 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-18 22:38:36,850 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-18 22:38:36,856 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.5555555555555556, 0.0), clauses=9)
+2026-05-18 22:39:28,882 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-18 22:39:30,232 - INFO  - ACSL format loop invariant
+2026-05-18 22:39:30,233 - INFO  - /*@
+          loop invariant 0 <= result;
+          loop invariant (\at(num,Pre) > 0) ==> (result >= 0);
+          loop invariant (!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(max == 0)&&(result == 0)&&(num == \at(num,Pre)));
+          loop invariant num == \at(num,Pre);
+          loop assigns max, sum, result;
+        */
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				max |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+2026-05-18 22:39:30,234 - INFO  - QCP format loop invariant
+2026-05-18 22:39:30,234 - INFO  - /*@ Inv
+    (0 <= result) &&
+((num@pre > 0) => (result >= 0)) &&
+((!(num@pre > 0)) => ((sum == num@pre)&&(max == 0)&&(result == 0)&&(num == num@pre))) &&
+(num == num@pre
+          loop assigns max, sum, result)
+    */
+    
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				max |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+2026-05-18 22:39:31,780 - INFO  - CORRECT INVARIANT
+2026-05-18 22:39:31,781 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo353
+2026-05-18 22:39:31,781 - INFO  - ==================================================
+
+2026-05-18 22:39:31,824 - INFO  - Starting to generate ACSL specification for foo353
+2026-05-18 22:39:50,961 - INFO  - syntax Correct
+2026-05-18 22:40:02,127 - INFO  - Loop Invariant:
+2026-05-18 22:40:02,127 - INFO  - [True, True, True, True]
+2026-05-18 22:40:02,127 - INFO  - 
+2026-05-18 22:40:02,127 - INFO  - Assertion:
+2026-05-18 22:40:02,128 - INFO  - []
+2026-05-18 22:40:02,128 - INFO  - 
+2026-05-18 22:40:02,128 - INFO  - Assigns:
+2026-05-18 22:40:02,128 - INFO  - [True, True]
+2026-05-18 22:40:02,128 - INFO  - 
+2026-05-18 22:40:02,128 - INFO  - Post Condition:
+2026-05-18 22:40:02,128 - INFO  - [False]
+2026-05-18 22:40:02,128 - INFO  - Post Condition: failures:
+2026-05-18 22:40:02,128 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo353/20260518_223703_3047028_ded2cd23/output/foo353.c, line 14) in 'foo353':
+2026-05-18 22:40:02,129 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo353/20260518_223703_3047028_ded2cd23/output/foo353.c at line: 14
+2026-05-18 22:40:02,129 - INFO  - Error line content: ensures \result == num;
+2026-05-18 22:40:02,129 - INFO  - 
+2026-05-18 22:40:02,129 - INFO  - 
+2026-05-18 22:40:02,129 - INFO  - Instance:
+2026-05-18 22:40:02,129 - INFO  - []
+2026-05-18 22:40:02,129 - INFO  - 
+2026-05-18 22:40:02,130 - INFO  - [spec-gen] refine 1/3 score=(syntax=True, satisfy=0.00, valid=0.86) clauses=3
+2026-05-18 22:40:02,130 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer shr(integer x, integer k) =
+    k <= 0 ? x : shr(x / 2, k - 1);
+
+  logic integer odd_bits_prefix(integer orig, integer e) =
+    e <= 0 ? 0
+    : (odd_bits_prefix(orig, e-1) | (( ( (orig >> (e-1)) & 1) && ((e-1) % 2 == 1) ) ? (1 << (e-1)) : 0));
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \result == num [POSTCONDITION FAILED];
+*/
+int foo353(int num) {
+
+		int result = 0;
+		int max = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= result;
+          loop invariant (\at(num,Pre) > 0) ==> (result >= 0);
+          loop invariant (!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(max == 0)&&(result == 0)&&(num == \at(num,Pre)));
+          loop invariant num == \at(num,Pre);
+          loop assigns max, sum, result;
+        */
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				max |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+            
+		return (num | max);
+}
+
+2026-05-18 22:40:09,382 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer shr(integer x, integer k) =
+    k <= 0 ? x : shr(x / 2, k - 1);
+
+  logic integer odd_bits_prefix(integer orig, integer e) =
+    e <= 0 ? 0
+    : (odd_bits_prefix(orig, e-1) | (( ( (orig >> (e-1)) & 1) && ((e-1) % 2 == 1) ) ? (1 << (e-1)) : 0));
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\result & num) == num;
+*/
+int foo353(int num) {
+
+		int result = 0;
+		int max = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= result;
+          loop invariant (\at(num,Pre) > 0) ==> (result >= 0);
+          loop invariant (!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(max == 0)&&(result == 0)&&(num == \at(num,Pre)));
+          loop invariant num == \at(num,Pre);
+          loop assigns max, sum, result;
+        */
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				max |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+            
+		return (num | max);
+}
+
+2026-05-18 22:40:20,597 - INFO  - syntax Correct
+2026-05-18 22:40:31,736 - INFO  - Loop Invariant:
+2026-05-18 22:40:31,736 - INFO  - [True, True, True, True]
+2026-05-18 22:40:31,736 - INFO  - 
+2026-05-18 22:40:31,737 - INFO  - Assertion:
+2026-05-18 22:40:31,737 - INFO  - []
+2026-05-18 22:40:31,737 - INFO  - 
+2026-05-18 22:40:31,737 - INFO  - Assigns:
+2026-05-18 22:40:31,737 - INFO  - [True, True]
+2026-05-18 22:40:31,737 - INFO  - 
+2026-05-18 22:40:31,737 - INFO  - Post Condition:
+2026-05-18 22:40:31,737 - INFO  - [False]
+2026-05-18 22:40:31,737 - INFO  - Post Condition: failures:
+2026-05-18 22:40:31,737 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo353/20260518_223703_3047028_ded2cd23/output/foo353.c, line 14) in 'foo353':
+2026-05-18 22:40:31,737 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo353/20260518_223703_3047028_ded2cd23/output/foo353.c at line: 14
+2026-05-18 22:40:31,737 - INFO  - Error line content: ensures (\result & num) == num;
+2026-05-18 22:40:31,738 - INFO  - 
+2026-05-18 22:40:31,738 - INFO  - 
+2026-05-18 22:40:31,738 - INFO  - Instance:
+2026-05-18 22:40:31,738 - INFO  - []
+2026-05-18 22:40:31,738 - INFO  - 
+2026-05-18 22:40:31,738 - INFO  - [spec-gen] refine 2/3 score=(syntax=True, satisfy=0.00, valid=0.86) clauses=3
+2026-05-18 22:40:31,738 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer shr(integer x, integer k) =
+    k <= 0 ? x : shr(x / 2, k - 1);
+
+  logic integer odd_bits_prefix(integer orig, integer e) =
+    e <= 0 ? 0
+    : (odd_bits_prefix(orig, e-1) | (( ( (orig >> (e-1)) & 1) && ((e-1) % 2 == 1) ) ? (1 << (e-1)) : 0));
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\result & num) == num [POSTCONDITION FAILED];
+*/
+int foo353(int num) {
+
+		int result = 0;
+		int max = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= result;
+          loop invariant (\at(num,Pre) > 0) ==> (result >= 0);
+          loop invariant (!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(max == 0)&&(result == 0)&&(num == \at(num,Pre)));
+          loop invariant num == \at(num,Pre);
+          loop assigns max, sum, result;
+        */
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				max |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+            
+		return (num | max);
+}
+
+2026-05-18 22:40:37,256 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer shr(integer x, integer k) =
+    k <= 0 ? x : shr(x / 2, k - 1);
+
+  logic integer odd_bits_prefix(integer orig, integer e) =
+    e <= 0 ? 0
+    : (odd_bits_prefix(orig, e-1) | (( ( (orig >> (e-1)) & 1) && ((e-1) % 2 == 1) ) ? (1 << (e-1)) : 0));
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\result | num) == \result;
+*/
+int foo353(int num) {
+
+		int result = 0;
+		int max = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= result;
+          loop invariant (\at(num,Pre) > 0) ==> (result >= 0);
+          loop invariant (!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(max == 0)&&(result == 0)&&(num == \at(num,Pre)));
+          loop invariant num == \at(num,Pre);
+          loop assigns max, sum, result;
+        */
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				max |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+            
+		return (num | max);
+}
+
+2026-05-18 22:40:37,883 - INFO  - syntax Correct
+2026-05-18 22:40:38,641 - INFO  - Loop Invariant:
+2026-05-18 22:40:38,642 - INFO  - [True, True, True, True]
+2026-05-18 22:40:38,642 - INFO  - 
+2026-05-18 22:40:38,642 - INFO  - Assertion:
+2026-05-18 22:40:38,642 - INFO  - []
+2026-05-18 22:40:38,642 - INFO  - 
+2026-05-18 22:40:38,642 - INFO  - Assigns:
+2026-05-18 22:40:38,642 - INFO  - [True, True]
+2026-05-18 22:40:38,642 - INFO  - 
+2026-05-18 22:40:38,642 - INFO  - Post Condition:
+2026-05-18 22:40:38,642 - INFO  - [True]
+2026-05-18 22:40:38,642 - INFO  - 
+2026-05-18 22:40:38,642 - INFO  - Instance:
+2026-05-18 22:40:38,642 - INFO  - []
+2026-05-18 22:40:38,642 - INFO  - 
+2026-05-18 22:40:38,643 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=1.00) clauses=3
+2026-05-18 22:40:38,643 - INFO  - [spec-gen] converged at refine 3
+2026-05-18 22:40:38,643 - INFO  - 
+SPECIFICATION FOR foo353
+2026-05-18 22:40:38,644 - INFO  - ==================================================
+
+2026-05-18 22:40:38,644 - INFO  - 
+QCP Specification for function foo353:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-18 22:40:38,848 - INFO  - 
+VERIFICATION FOR foo353
+2026-05-18 22:40:38,849 - INFO  - ==================================================
+
+2026-05-18 22:40:39,624 - INFO  - syntax Correct
+2026-05-18 22:40:40,440 - INFO  - Loop Invariant:
+2026-05-18 22:40:40,440 - INFO  - [True, True, True, True]
+2026-05-18 22:40:40,441 - INFO  - 
+2026-05-18 22:40:40,441 - INFO  - Assertion:
+2026-05-18 22:40:40,441 - INFO  - []
+2026-05-18 22:40:40,441 - INFO  - 
+2026-05-18 22:40:40,441 - INFO  - Assigns:
+2026-05-18 22:40:40,441 - INFO  - [True, True]
+2026-05-18 22:40:40,441 - INFO  - 
+2026-05-18 22:40:40,441 - INFO  - Post Condition:
+2026-05-18 22:40:40,441 - INFO  - [True]
+2026-05-18 22:40:40,441 - INFO  - 
+2026-05-18 22:40:40,441 - INFO  - Instance:
+2026-05-18 22:40:40,441 - INFO  - []
+2026-05-18 22:40:40,441 - INFO  - 
+2026-05-18 22:40:40,441 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo353
+2026-05-18 22:40:40,441 - INFO  - ==================================================
+2026-05-18 22:40:40,441 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo353/20260518_223703_3047028_ded2cd23/output/foo353.c
+2026-05-18 22:40:40,441 - INFO  - Output file content:
+
+/*@ 
+  logic integer shr(integer x, integer k) =
+    k <= 0 ? x : shr(x / 2, k - 1);
+
+  logic integer odd_bits_prefix(integer orig, integer e) =
+    e <= 0 ? 0
+    : (odd_bits_prefix(orig, e-1) | (( ( (orig >> (e-1)) & 1) && ((e-1) % 2 == 1) ) ? (1 << (e-1)) : 0));
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\result | num) == \result;
+*/
+int foo353(int num) {
+
+		int result = 0;
+		int max = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= result;
+          loop invariant (\at(num,Pre) > 0) ==> (result >= 0);
+          loop invariant (!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(max == 0)&&(result == 0)&&(num == \at(num,Pre)));
+          loop invariant num == \at(num,Pre);
+          loop assigns max, sum, result;
+        */
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				max |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+            
+		return (num | max);
+}
+
+2026-05-18 22:40:40,442 - INFO  - ==================================================
+2026-05-18 22:40:40,442 - INFO  - first_pass:
+2026-05-18 22:40:40,442 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-18 22:40:40,442 - INFO  - ==================================================
+2026-05-18 22:40:40,442 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 22:40:40,442 - INFO  - Total execution time: 216.46 seconds (3.61 minutes)
+2026-05-18 22:40:40,442 - INFO  - ==================================================
+2026-05-18 22:40:40,442 - INFO  - ==================================================
+2026-05-18 22:40:40,442 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 22:40:40,443 - INFO  - Total API calls: 6
+2026-05-18 22:40:40,443 - INFO  - Total prompt tokens (input): 31,164
+2026-05-18 22:40:40,443 - INFO  - Total completion tokens (output): 3,228
+2026-05-18 22:40:40,443 - INFO  - Total tokens: 34,392
+2026-05-18 22:40:40,443 - INFO  - Average prompt tokens per call: 5194.0
+2026-05-18 22:40:40,443 - INFO  - Average completion tokens per call: 538.0
+2026-05-18 22:40:40,443 - INFO  - Average total tokens per call: 5732.0
+2026-05-18 22:40:40,443 - INFO  - ==================================================

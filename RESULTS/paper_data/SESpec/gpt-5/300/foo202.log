@@ -1,0 +1,501 @@
+2026-05-16 14:15:54,546 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154
+2026-05-16 14:15:54,547 - INFO  - 
+🚀 Starting generation of function: foo202
+2026-05-16 14:15:54,547 - INFO  - 
+OUTER PASS: 1/1
+2026-05-16 14:15:54,547 - INFO  - TRY TIME: 0
+2026-05-16 14:15:54,547 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-16 14:15:54,547 - INFO  - ==================================================
+
+2026-05-16 14:15:55,209 - INFO  - [auto only_loop] False — foo202 returns 'int'
+2026-05-16 14:15:55,215 - INFO  - Initial pending functions: ['foo202']
+2026-05-16 14:15:55,215 - INFO  - 
+GENERATE ANNOTATION FOR foo202
+2026-05-16 14:15:55,215 - INFO  - ==================================================
+
+2026-05-16 14:15:55,215 - INFO  - Function foo202 has been initialized
+2026-05-16 14:15:55,216 - INFO  - Starting to generate annotation code for foo202
+2026-05-16 14:15:55,444 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo202
+2026-05-16 14:15:55,444 - INFO  - ==================================================
+
+2026-05-16 14:15:55,800 - INFO  - Variable Maps:[{'top': 'Array@pre - 1', 'found': '0', 'Array': 'Array@pre', 'array_len': 'array_len@pre', 'array': 'array@pre'}]
+2026-05-16 14:15:55,800 - INFO  - Path conditions: ['array_len@pre > 0 && array_len@pre < 100']
+2026-05-16 14:15:55,801 - INFO  - Pre condition: array_len@pre > 0 && array_len@pre < 100 && (top == Array@pre - 1) * (found == 0) * (Array == Array@pre) * (array_len == array_len@pre) * (array == array@pre) * store_int_array(array@pre, array_len@pre, array_l)
+2026-05-16 14:15:55,801 - INFO  - Loop Condition: found < top
+2026-05-16 14:15:55,802 - INFO  - Array Names: ['array']
+2026-05-16 14:15:55,802 - INFO  - Updated Loop Conditions: ['0 < Array@pre - 1']
+2026-05-16 14:15:55,804 - INFO  - Global Unchanged Variables: ['Array', 'array_len', 'array']
+2026-05-16 14:15:55,805 - INFO  - Non Inductive Variables: ['found', 'top']
+2026-05-16 14:15:55,806 - INFO  - Unchanged Arrays (Read-only): ['array']
+2026-05-16 14:15:55,810 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-16 14:15:55,820 - INFO  - examples category: array
+2026-05-16 14:15:55,820 - INFO  - examples:
+2026-05-16 14:15:55,820 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-16 14:16:17,763 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-16 14:16:25,963 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-16 14:17:02,371 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=8
+2026-05-16 14:17:35,763 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=10
+2026-05-16 14:24:48,896 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=9
+2026-05-16 14:24:48,896 - INFO  - [inv-gen] converged at refine 5
+2026-05-16 14:24:51,999 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-16 14:24:55,299 - INFO  - ACSL format loop invariant
+2026-05-16 14:24:55,300 - INFO  - /*@
+          loop invariant 0 <= found;
+          loop invariant top <= \at(Array,Pre) - 1;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k],Pre);
+          loop invariant (0 < \at(Array,Pre) - 1) ==> (((top == \at(Array,Pre) - 1) && (found == 0) && (Array == \at(Array,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre))) || (0 <= found && top <= \at(Array,Pre) - 1));
+          loop invariant (0 < \at(Array,Pre) - 1) ==> (((top == \at(Array,Pre) - 1) && (found == 0) && (Array == \at(Array,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre))) || (top <= \at(Array,Pre) - 1));
+          loop invariant (!(0 < \at(Array,Pre) - 1)) ==> ((top == \at(Array,Pre) - 1) && (found == 0) && (Array == \at(Array,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre)));
+          loop assigns found, top;
+            */
+            while (found < top) {
+			int i = found + (top - found) / 2;
+			if (array[i] < array[i + 1]) {
+				found = i + 1;
+			} else {
+				top = i;
+			}
+		}
+2026-05-16 14:24:55,312 - INFO  - QCP format loop invariant
+2026-05-16 14:24:55,313 - INFO  - /*@ Inv
+    exists  array_l,    
+    store_int_array(array, array_len, array_l) && array_len > 0 && array_len < 100 &&
+    (0 <= found) &&
+(top <= Array@pre - 1) &&
+(Array == Array@pre) &&
+(array_len == array_len@pre) &&
+(array == array@pre) &&
+(forall (k:Z), 0 <= k && k < array_len => array_l[k] == array_l[k]@pre) &&
+((0 < Array@pre - 1) => (((top == Array@pre - 1) && (found == 0) && (Array == Array@pre) && (array_len == array_len@pre) && (array == array@pre)) || (0 <= found && top <= Array@pre - 1))) &&
+((0 < Array@pre - 1) => (((top == Array@pre - 1) && (found == 0) && (Array == Array@pre) && (array_len == array_len@pre) && (array == array@pre)) || (top <= Array@pre - 1))) &&
+((!(0 < Array@pre - 1)) => ((top == Array@pre - 1) && (found == 0) && (Array == Array@pre) && (array_len == array_len@pre) && (array == array@pre))
+          loop assigns found, top)
+    */
+    
+            while (found < top) {
+			int i = found + (top - found) / 2;
+			if (array[i] < array[i + 1]) {
+				found = i + 1;
+			} else {
+				top = i;
+			}
+		}
+2026-05-16 14:24:58,653 - INFO  - CORRECT INVARIANT
+2026-05-16 14:24:58,660 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo202
+2026-05-16 14:24:58,660 - INFO  - ==================================================
+
+2026-05-16 14:24:58,684 - INFO  - Starting to generate ACSL specification for foo202
+2026-05-16 14:25:21,190 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:7: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:25:21,194 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 14:25:30,140 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:7: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:25:30,141 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 14:25:30,141 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 14:25:30,584 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:7: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:25:30,584 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 14:25:37,785 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:7: Warning: 
+  logic function min_int is already declared with the same profile. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:25:37,788 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 14:25:37,788 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 14:25:38,260 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:7: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:25:38,261 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 14:25:54,500 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:9: 
+  syntax error:
+  Location: line 9, between columns 11 and 14, before or at token: ...
+  7     /*@ logic integer min_int(integer a, integer b) = a < b ? a : b; */
+  8     
+  9     int foo202(...) { ... }
+        ^^^^^^^^^^^^^^^^^^^^^^^
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:25:54,501 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 14:25:54,501 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 14:25:55,147 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:7: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:25:55,148 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 14:26:00,674 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:9: 
+  syntax error:
+  Location: line 9, between columns 11 and 14, before or at token: ...
+  7     /*@ logic integer min_int(integer a, integer b) = a < b ? a : b; */
+  8     
+  9     int foo202(...) { return 0; }
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:26:00,675 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 14:26:00,675 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 14:26:01,282 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:7: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:26:01,283 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 14:26:06,332 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:9: 
+  syntax error:
+  Location: line 9, between columns 11 and 14, before or at token: ...
+  7     /*@ logic integer min_int(integer a, integer b) = a < b ? a : b; */
+  8     
+  9     int foo202(...) { ... }
+        ^^^^^^^^^^^^^^^^^^^^^^^
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:26:06,338 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-16 14:26:06,338 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 14:26:06,346 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-16 14:26:06,868 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:7: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:26:06,871 - INFO  - 
+SPECIFICATION FOR foo202
+2026-05-16 14:26:06,872 - INFO  - ==================================================
+
+2026-05-16 14:26:06,872 - INFO  - 
+QCP Specification for function foo202:
+/*@
+With array_l
+Require store_int_array(array, array_len, array_l) && array_len > 0 && array_len < 100
+Ensure Results(__return)
+*/
+2026-05-16 14:26:08,061 - INFO  - 
+VERIFICATION FOR foo202
+2026-05-16 14:26:08,069 - INFO  - ==================================================
+
+2026-05-16 14:26:08,540 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c:7: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:26:32,206 - INFO  - syntax Correct
+2026-05-16 14:26:34,832 - INFO  - Loop Invariant:
+2026-05-16 14:26:34,832 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 14:26:34,832 - INFO  - 
+2026-05-16 14:26:34,833 - INFO  - Assertion:
+2026-05-16 14:26:34,833 - INFO  - []
+2026-05-16 14:26:34,833 - INFO  - 
+2026-05-16 14:26:34,833 - INFO  - Assigns:
+2026-05-16 14:26:34,833 - INFO  - [True]
+2026-05-16 14:26:34,833 - INFO  - 
+2026-05-16 14:26:34,833 - INFO  - Post Condition:
+2026-05-16 14:26:34,833 - INFO  - [True, True, True, True, True, True]
+2026-05-16 14:26:34,833 - INFO  - 
+2026-05-16 14:26:34,834 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=11
+2026-05-16 14:26:34,838 - INFO  - [spec-gen] converged at refine 1
+2026-05-16 14:26:37,054 - INFO  - syntax Correct
+2026-05-16 14:26:39,353 - INFO  - Loop Invariant:
+2026-05-16 14:26:39,353 - INFO  - [True, True, True, True, True, True, True, True, True]
+2026-05-16 14:26:39,353 - INFO  - 
+2026-05-16 14:26:39,354 - INFO  - Assertion:
+2026-05-16 14:26:39,356 - INFO  - []
+2026-05-16 14:26:39,356 - INFO  - 
+2026-05-16 14:26:39,356 - INFO  - Assigns:
+2026-05-16 14:26:39,356 - INFO  - [True]
+2026-05-16 14:26:39,356 - INFO  - 
+2026-05-16 14:26:39,356 - INFO  - Post Condition:
+2026-05-16 14:26:39,356 - INFO  - [True, True, True, True, True, True]
+2026-05-16 14:26:39,356 - INFO  - 
+2026-05-16 14:26:39,357 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo202
+2026-05-16 14:26:39,357 - INFO  - ==================================================
+2026-05-16 14:26:39,360 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo202/20260516_141554_3329681_d5e26154/output/foo202.c
+2026-05-16 14:26:39,360 - INFO  - Output file content:
+
+/*@ predicate in_bounds(int array_len, integer lo, integer hi) =
+      0 <= lo <= hi < array_len; */
+
+/*@ logic integer min_int(integer a, integer b) = a < b ? a : b; */
+
+/*@
+  requires \valid(&array[0] + (0..array_len-1));
+  requires \forall integer i; 0 <= i < array_len ==> 0 <= array[i] <= 100;
+  requires array_len > 0;
+  requires array_len < 100;
+  assigns \nothing;
+  ensures array == \old(array);
+  ensures array_len == \old(array_len);
+  ensures Array == \old(Array);
+  ensures \forall integer k; 0 <= k < array_len ==> array[k] == \old(array[k]);
+  ensures 0 <= \result;
+  ensures \result == \result;
+*/
+int foo202(int * array, int array_len, int Array) {
+
+		int found = 0, top = Array - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= found;
+          loop invariant top <= \at(Array,Pre) - 1;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k],Pre);
+          loop invariant (0 < \at(Array,Pre) - 1) ==> (((top == \at(Array,Pre) - 1) && (found == 0) && (Array == \at(Array,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre))) || (0 <= found && top <= \at(Array,Pre) - 1));
+          loop invariant (0 < \at(Array,Pre) - 1) ==> (((top == \at(Array,Pre) - 1) && (found == 0) && (Array == \at(Array,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre))) || (top <= \at(Array,Pre) - 1));
+          loop invariant (!(0 < \at(Array,Pre) - 1)) ==> ((top == \at(Array,Pre) - 1) && (found == 0) && (Array == \at(Array,Pre)) && (array_len == \at(array_len,Pre)) && (array == \at(array,Pre)));
+          loop assigns found, top;
+            */
+            while (found < top) {
+			int i = found + (top - found) / 2;
+			if (array[i] < array[i + 1]) {
+				found = i + 1;
+			} else {
+				top = i;
+			}
+		}
+            
+		return found;
+}
+
+2026-05-16 14:26:39,361 - INFO  - ==================================================
+2026-05-16 14:26:39,383 - INFO  - first_pass:
+2026-05-16 14:26:39,388 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-16 14:26:39,389 - INFO  - ==================================================
+2026-05-16 14:26:39,389 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-16 14:26:39,389 - INFO  - Total execution time: 644.84 seconds (10.75 minutes)
+2026-05-16 14:26:39,389 - INFO  - ==================================================
+2026-05-16 14:26:39,389 - INFO  - ==================================================
+2026-05-16 14:26:39,390 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-16 14:26:39,390 - INFO  - Total API calls: 14
+2026-05-16 14:26:39,390 - INFO  - Total prompt tokens (input): 102,021
+2026-05-16 14:26:39,390 - INFO  - Total completion tokens (output): 9,755
+2026-05-16 14:26:39,390 - INFO  - Total tokens: 111,776
+2026-05-16 14:26:39,390 - INFO  - Average prompt tokens per call: 7287.2
+2026-05-16 14:26:39,390 - INFO  - Average completion tokens per call: 696.8
+2026-05-16 14:26:39,390 - INFO  - Average total tokens per call: 7984.0
+2026-05-16 14:26:39,390 - INFO  - ==================================================

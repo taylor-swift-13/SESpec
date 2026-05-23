@@ -45,6 +45,17 @@ PRESETS: Dict[str, Dict] = {
         "use_se": True,
         "debug": False,
     },
+    "sespec_trivial_refine": {
+        "auto_annotation": True,
+        "refine_count": 10,
+        "rollback_patience": 9999,
+        "pass_count": 1,
+        "think": False,
+        "use_se": False,
+        "use_examples": False,
+        "trivial_refine": True,
+        "debug": False,
+    },
 }
 
 C_KEYWORDS = {

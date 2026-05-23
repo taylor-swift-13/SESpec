@@ -1,0 +1,873 @@
+2026-05-17 16:54:17,651 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo395/20260517_165417_959204_a5271521
+2026-05-17 16:54:17,651 - INFO  - 
+🚀 Starting generation of function: foo395
+2026-05-17 16:54:17,651 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 16:54:17,651 - INFO  - TRY TIME: 0
+2026-05-17 16:54:17,651 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 16:54:17,651 - INFO  - ==================================================
+
+2026-05-17 16:54:17,975 - INFO  - [auto only_loop] False — foo395 returns 'int'
+2026-05-17 16:54:17,975 - INFO  - Initial pending functions: ['foo395']
+2026-05-17 16:54:17,975 - INFO  - 
+GENERATE ANNOTATION FOR foo395
+2026-05-17 16:54:17,975 - INFO  - ==================================================
+
+2026-05-17 16:54:17,975 - INFO  - Function foo395 has been initialized
+2026-05-17 16:54:17,975 - INFO  - Starting to generate annotation code for foo395
+2026-05-17 16:54:18,021 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo395
+2026-05-17 16:54:18,022 - INFO  - ==================================================
+
+2026-05-17 16:54:18,076 - INFO  - Variable Maps:[{'odd': '0', 'p': 'p@pre'}]
+2026-05-17 16:54:18,076 - INFO  - Path conditions: [None]
+2026-05-17 16:54:18,076 - INFO  - Pre condition: (odd == 0) * (p == p@pre)
+2026-05-17 16:54:18,076 - INFO  - Loop Condition: c <= p
+2026-05-17 16:54:18,077 - INFO  - Array Names: []
+2026-05-17 16:54:18,077 - INFO  - Updated Loop Conditions: ['c <= p@pre']
+2026-05-17 16:54:18,077 - INFO  - Global Unchanged Variables: ['p']
+2026-05-17 16:54:18,078 - INFO  - Non Inductive Variables: []
+2026-05-17 16:54:18,078 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 16:54:18,079 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 16:54:18,081 - INFO  - examples category: numeric
+2026-05-17 16:54:18,081 - INFO  - examples:
+2026-05-17 16:54:18,081 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-17 16:54:32,239 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 16:54:32,244 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'odd' (requires) on line 8
+2026-05-17 16:54:32,580 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 16:55:04,242 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 16:55:44,272 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-17 16:56:15,827 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-17 16:56:30,633 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 16:56:30,634 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 16:56:52,746 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-17 16:57:04,091 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 16:57:04,091 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 16:57:25,995 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-17 16:57:34,696 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 16:57:34,696 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 16:57:56,511 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-17 16:58:07,044 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.75, 0.0), clauses=4)
+2026-05-17 16:58:51,704 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 16:58:52,443 - INFO  - ACSL format loop invariant
+2026-05-17 16:58:52,443 - INFO  - /*@
+      loop invariant p == \at(p,Pre);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+2026-05-17 16:58:52,444 - INFO  - QCP format loop invariant
+2026-05-17 16:58:52,444 - INFO  - /*@ Inv
+    (p == p@pre
+      loop assigns c, odd)
+    */
+    
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+2026-05-17 16:58:53,217 - INFO  - CORRECT INVARIANT
+2026-05-17 16:58:53,218 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo395
+2026-05-17 16:58:53,218 - INFO  - ==================================================
+
+2026-05-17 16:58:53,229 - INFO  - Starting to generate ACSL specification for foo395
+2026-05-17 16:59:08,462 - INFO  - syntax Correct
+2026-05-17 16:59:19,315 - INFO  - Loop Invariant:
+2026-05-17 16:59:19,315 - INFO  - [True, False]
+2026-05-17 16:59:19,315 - INFO  - 
+2026-05-17 16:59:19,315 - INFO  - Assertion:
+2026-05-17 16:59:19,315 - INFO  - []
+2026-05-17 16:59:19,315 - INFO  - 
+2026-05-17 16:59:19,315 - INFO  - Assigns:
+2026-05-17 16:59:19,315 - INFO  - [True]
+2026-05-17 16:59:19,315 - INFO  - 
+2026-05-17 16:59:19,315 - INFO  - Post Condition:
+2026-05-17 16:59:19,315 - INFO  - [True, False]
+2026-05-17 16:59:19,315 - INFO  - 
+2026-05-17 16:59:19,316 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=4
+2026-05-17 16:59:19,316 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/*@
+  requires p == \at(p,Pre);
+  assigns \nothing;
+  ensures p == \at(p,Pre);
+  ensures \result == sum_pow4_even(p) [POSTCONDITION FAILED];
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@
+      loop invariant p == \at(p,Pre);
+      loop invariant odd == sum_pow4_even(c-1);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+            
+    return odd;
+}
+
+2026-05-17 16:59:29,778 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/* The implementation computes the sum for the initial p value */
+  ensures \result == sum_pow4_even(\at(p,Pre));
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@
+      loop invariant p == \at(p,Pre);
+      /* We relate 'odd' to the current loop counter 'c' in a way that is
+         preserved by one iteration: at the start of each iteration with
+         counter 'c' (1-based), 'odd' equals the sum for the processed
+         indices up to c-1. When the loop finishes (c = p+1), odd equals
+         sum_pow4_even(p). */
+      loop invariant 1 <= c + 1 <= p + 1 + 1 || c == 0; /* keep c in scope semantics */
+      loop invariant odd == sum_pow4_even(c-1);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+            
+    return odd;
+}
+
+2026-05-17 16:59:30,047 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo395/20260517_165417_959204_a5271521/output/foo395.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo395/20260517_165417_959204_a5271521/output/foo395.c":32: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel] log/sespec/gpt-5-mini/foo395/20260517_165417_959204_a5271521/output/foo395.c:8: 
+  Invalid symbol:
+  Location: line 8, between columns 2 and 11, before or at token: \
+  6     
+  7     /* The implementation computes the sum for the initial p value */
+  8       ensures \result == sum_pow4_even(\at(p,Pre));
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  9     */
+  10    int foo395(int p) {
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 16:59:30,048 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=1
+2026-05-17 16:59:51,764 - INFO  - syntax Correct
+2026-05-17 17:00:02,536 - INFO  - Loop Invariant:
+2026-05-17 17:00:02,537 - INFO  - [True, False]
+2026-05-17 17:00:02,537 - INFO  - 
+2026-05-17 17:00:02,537 - INFO  - Assertion:
+2026-05-17 17:00:02,537 - INFO  - []
+2026-05-17 17:00:02,537 - INFO  - 
+2026-05-17 17:00:02,537 - INFO  - Assigns:
+2026-05-17 17:00:02,537 - INFO  - [True]
+2026-05-17 17:00:02,537 - INFO  - 
+2026-05-17 17:00:02,537 - INFO  - Post Condition:
+2026-05-17 17:00:02,537 - INFO  - [True, False]
+2026-05-17 17:00:02,537 - INFO  - 
+2026-05-17 17:00:02,537 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=4
+2026-05-17 17:00:02,537 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 17:00:13,260 - INFO  - syntax Correct
+2026-05-17 17:00:24,180 - INFO  - Loop Invariant:
+2026-05-17 17:00:24,180 - INFO  - [True, False]
+2026-05-17 17:00:24,180 - INFO  - 
+2026-05-17 17:00:24,180 - INFO  - Assertion:
+2026-05-17 17:00:24,180 - INFO  - []
+2026-05-17 17:00:24,180 - INFO  - 
+2026-05-17 17:00:24,180 - INFO  - Assigns:
+2026-05-17 17:00:24,180 - INFO  - [True]
+2026-05-17 17:00:24,180 - INFO  - 
+2026-05-17 17:00:24,181 - INFO  - Post Condition:
+2026-05-17 17:00:24,181 - INFO  - [True, False]
+2026-05-17 17:00:24,181 - INFO  - 
+2026-05-17 17:00:24,181 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=4
+2026-05-17 17:00:24,181 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/*@
+  requires p == \at(p,Pre);
+  assigns \nothing;
+  ensures p == \at(p,Pre);
+  ensures \result == sum_pow4_even(p) [POSTCONDITION FAILED];
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@
+      loop invariant p == \at(p,Pre);
+      loop invariant odd == sum_pow4_even(c-1);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+            
+    return odd;
+}
+
+2026-05-17 17:00:38,441 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/*@
+  requires p == \at(p,Pre);
+  assigns \nothing;
+  ensures p == \at(p,Pre);
+  ensures \result == sum_pow4_even(p) [POSTCONDITION FAILED];
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@
+      loop invariant p == \at(p,Pre);
+      loop invariant odd == sum_pow4_even(c-1);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+            
+    return odd;
+}
+
+2026-05-17 17:00:38,642 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo395/20260517_165417_959204_a5271521/output/foo395.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo395/20260517_165417_959204_a5271521/output/foo395.c:11: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo395/20260517_165417_959204_a5271521/output/foo395.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 17:00:38,642 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 17:00:38,642 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 17:00:49,332 - INFO  - syntax Correct
+2026-05-17 17:01:00,026 - INFO  - Loop Invariant:
+2026-05-17 17:01:00,026 - INFO  - [True, False]
+2026-05-17 17:01:00,026 - INFO  - 
+2026-05-17 17:01:00,026 - INFO  - Assertion:
+2026-05-17 17:01:00,026 - INFO  - []
+2026-05-17 17:01:00,026 - INFO  - 
+2026-05-17 17:01:00,026 - INFO  - Assigns:
+2026-05-17 17:01:00,026 - INFO  - [True]
+2026-05-17 17:01:00,027 - INFO  - 
+2026-05-17 17:01:00,027 - INFO  - Post Condition:
+2026-05-17 17:01:00,027 - INFO  - [True, False]
+2026-05-17 17:01:00,027 - INFO  - 
+2026-05-17 17:01:00,027 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=4
+2026-05-17 17:01:00,027 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/*@
+  requires p == \at(p,Pre);
+  assigns \nothing;
+  ensures p == \at(p,Pre);
+  ensures \result == sum_pow4_even(p) [POSTCONDITION FAILED];
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@
+      loop invariant p == \at(p,Pre);
+      loop invariant odd == sum_pow4_even(c-1);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+            
+    return odd;
+}
+
+2026-05-17 17:01:14,057 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/*@
+  requires p == \at(p,Pre);
+  assigns \nothing;
+  ensures p == \at(p,Pre);
+  ensures \result == sum_pow4_even(p);
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@
+      loop invariant p == \at(p,Pre);
+      loop invariant 1 <= c && c <= p + 1;
+      loop invariant odd == sum_pow4_even(c-1);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+            
+    return odd;
+}
+
+2026-05-17 17:01:24,757 - INFO  - syntax Correct
+2026-05-17 17:01:35,570 - INFO  - Loop Invariant:
+2026-05-17 17:01:35,570 - INFO  - [True, False, True]
+2026-05-17 17:01:35,570 - INFO  - 
+2026-05-17 17:01:35,570 - INFO  - Assertion:
+2026-05-17 17:01:35,570 - INFO  - []
+2026-05-17 17:01:35,570 - INFO  - 
+2026-05-17 17:01:35,571 - INFO  - Assigns:
+2026-05-17 17:01:35,571 - INFO  - [True]
+2026-05-17 17:01:35,571 - INFO  - 
+2026-05-17 17:01:35,571 - INFO  - Post Condition:
+2026-05-17 17:01:35,571 - INFO  - [True, True]
+2026-05-17 17:01:35,571 - INFO  - 
+2026-05-17 17:01:35,571 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=4
+2026-05-17 17:01:35,571 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/*@
+  requires p == \at(p,Pre);
+  assigns \nothing;
+  ensures p == \at(p,Pre);
+  ensures \result == sum_pow4_even(p);
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@
+      loop invariant p == \at(p,Pre);
+      loop invariant 1 <= c && c <= p + 1;
+      loop invariant odd == sum_pow4_even(c-1);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+            
+    return odd;
+}
+
+2026-05-17 17:01:42,919 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/*@
+  requires p == \at(p,Pre);
+  assigns \nothing;
+  ensures p == \at(p,Pre);
+  ensures \result == sum_pow4_even(p);
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@ 
+      loop invariant p == \at(p,Pre);
+      loop invariant 1 <= c && c <= p + 1;
+      loop invariant odd == sum_pow4_even(c-1);
+      loop assigns c, odd;
+    */
+    int c = 1;
+    while (c <= p) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+        c = c + 1;
+    }
+            
+    return odd;
+}
+
+2026-05-17 17:01:43,101 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo395/20260517_165417_959204_a5271521/output/foo395.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo395/20260517_165417_959204_a5271521/output/foo395.c:23: 
+  syntax error:
+  Location: line 23, between columns 4 and 7, before or at token: int
+  21          loop assigns c, odd;
+  22        */
+  23        int c = 1;
+        ^^^^^^^^^^^^^^
+  24        while (c <= p) {
+  25            int tmp = 2 * c;
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 17:01:43,102 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 17:02:03,759 - INFO  - syntax Correct
+2026-05-17 17:02:14,596 - INFO  - Loop Invariant:
+2026-05-17 17:02:14,596 - INFO  - [True, False, True]
+2026-05-17 17:02:14,596 - INFO  - 
+2026-05-17 17:02:14,596 - INFO  - Assertion:
+2026-05-17 17:02:14,596 - INFO  - []
+2026-05-17 17:02:14,596 - INFO  - 
+2026-05-17 17:02:14,596 - INFO  - Assigns:
+2026-05-17 17:02:14,596 - INFO  - [True]
+2026-05-17 17:02:14,596 - INFO  - 
+2026-05-17 17:02:14,596 - INFO  - Post Condition:
+2026-05-17 17:02:14,596 - INFO  - [True, True]
+2026-05-17 17:02:14,596 - INFO  - 
+2026-05-17 17:02:14,597 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=4
+2026-05-17 17:02:14,597 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 17:02:25,751 - INFO  - syntax Correct
+2026-05-17 17:02:36,665 - INFO  - Loop Invariant:
+2026-05-17 17:02:36,665 - INFO  - [True, False, True]
+2026-05-17 17:02:36,666 - INFO  - 
+2026-05-17 17:02:36,666 - INFO  - Assertion:
+2026-05-17 17:02:36,666 - INFO  - []
+2026-05-17 17:02:36,666 - INFO  - 
+2026-05-17 17:02:36,666 - INFO  - Assigns:
+2026-05-17 17:02:36,666 - INFO  - [True]
+2026-05-17 17:02:36,666 - INFO  - 
+2026-05-17 17:02:36,666 - INFO  - Post Condition:
+2026-05-17 17:02:36,667 - INFO  - [True, True]
+2026-05-17 17:02:36,667 - INFO  - 
+2026-05-17 17:02:36,667 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=4
+2026-05-17 17:02:36,667 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/*@
+  requires p == \at(p,Pre);
+  assigns \nothing;
+  ensures p == \at(p,Pre);
+  ensures \result == sum_pow4_even(p);
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@
+      loop invariant p == \at(p,Pre);
+      loop invariant 1 <= c && c <= p + 1;
+      loop invariant odd == sum_pow4_even(c-1);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+            
+    return odd;
+}
+
+2026-05-17 17:02:42,613 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/*@
+  requires p == \at(p,Pre);
+  requires p >= 0;
+  assigns \nothing;
+  ensures p == \at(p,Pre);
+  ensures \result == sum_pow4_even(p);
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@
+      loop invariant p == \at(p,Pre);
+      loop invariant 1 <= c && c <= p + 1;
+      loop invariant odd == sum_pow4_even(c-1);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+            
+    return odd;
+}
+
+2026-05-17 17:02:42,614 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8333333333333334, 0.0), clauses=4)
+2026-05-17 17:02:53,420 - INFO  - syntax Correct
+2026-05-17 17:03:04,262 - INFO  - Loop Invariant:
+2026-05-17 17:03:04,262 - INFO  - [True, False, True]
+2026-05-17 17:03:04,262 - INFO  - 
+2026-05-17 17:03:04,262 - INFO  - Assertion:
+2026-05-17 17:03:04,262 - INFO  - []
+2026-05-17 17:03:04,262 - INFO  - 
+2026-05-17 17:03:04,263 - INFO  - Assigns:
+2026-05-17 17:03:04,263 - INFO  - [True]
+2026-05-17 17:03:04,263 - INFO  - 
+2026-05-17 17:03:04,263 - INFO  - Post Condition:
+2026-05-17 17:03:04,263 - INFO  - [True, True]
+2026-05-17 17:03:04,263 - INFO  - 
+2026-05-17 17:03:14,981 - INFO  - syntax Correct
+2026-05-17 17:03:25,719 - INFO  - Loop Invariant:
+2026-05-17 17:03:25,719 - INFO  - [True, False]
+2026-05-17 17:03:25,719 - INFO  - 
+2026-05-17 17:03:25,719 - INFO  - Assertion:
+2026-05-17 17:03:25,719 - INFO  - []
+2026-05-17 17:03:25,719 - INFO  - 
+2026-05-17 17:03:25,719 - INFO  - Assigns:
+2026-05-17 17:03:25,719 - INFO  - [True]
+2026-05-17 17:03:25,719 - INFO  - 
+2026-05-17 17:03:25,720 - INFO  - Post Condition:
+2026-05-17 17:03:25,720 - INFO  - [True, False]
+2026-05-17 17:03:25,720 - INFO  - 
+2026-05-17 17:03:26,044 - INFO  - syntax Correct
+2026-05-17 17:03:26,354 - INFO  - Loop Invariant:
+2026-05-17 17:03:26,354 - INFO  - [True]
+2026-05-17 17:03:26,354 - INFO  - 
+2026-05-17 17:03:26,354 - INFO  - Assertion:
+2026-05-17 17:03:26,354 - INFO  - []
+2026-05-17 17:03:26,354 - INFO  - 
+2026-05-17 17:03:26,354 - INFO  - Assigns:
+2026-05-17 17:03:26,354 - INFO  - [True]
+2026-05-17 17:03:26,354 - INFO  - 
+2026-05-17 17:03:26,354 - INFO  - Post Condition:
+2026-05-17 17:03:26,354 - INFO  - [True]
+2026-05-17 17:03:26,354 - INFO  - 
+2026-05-17 17:03:26,356 - INFO  - 
+SPECIFICATION FOR foo395
+2026-05-17 17:03:26,356 - INFO  - ==================================================
+
+2026-05-17 17:03:26,356 - INFO  - 
+QCP Specification for function foo395:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 17:03:26,432 - INFO  - 
+VERIFICATION FOR foo395
+2026-05-17 17:03:26,432 - INFO  - ==================================================
+
+2026-05-17 17:03:26,730 - INFO  - syntax Correct
+2026-05-17 17:03:27,033 - INFO  - Loop Invariant:
+2026-05-17 17:03:27,034 - INFO  - [True]
+2026-05-17 17:03:27,034 - INFO  - 
+2026-05-17 17:03:27,034 - INFO  - Assertion:
+2026-05-17 17:03:27,034 - INFO  - []
+2026-05-17 17:03:27,034 - INFO  - 
+2026-05-17 17:03:27,034 - INFO  - Assigns:
+2026-05-17 17:03:27,034 - INFO  - [True]
+2026-05-17 17:03:27,034 - INFO  - 
+2026-05-17 17:03:27,034 - INFO  - Post Condition:
+2026-05-17 17:03:27,034 - INFO  - [True]
+2026-05-17 17:03:27,035 - INFO  - 
+2026-05-17 17:03:27,035 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo395
+2026-05-17 17:03:27,035 - INFO  - ==================================================
+2026-05-17 17:03:27,035 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo395/20260517_165417_959204_a5271521/output/foo395.c
+2026-05-17 17:03:27,035 - INFO  - Output file content:
+
+/*@ 
+  logic integer sum_pow4_even(integer c) =
+    c <= 0 ? 0 : sum_pow4_even(c-1) + (2*c) * (2*c) * (2*c) * (2*c);
+*/
+
+/*@
+  requires p == \at(p,Pre);
+  assigns \nothing;
+  ensures p == \at(p,Pre);
+*/
+int foo395(int p) {
+
+    int odd = 0;
+        
+    /*@
+      loop invariant p == \at(p,Pre);
+      loop assigns c, odd;
+    */
+    for (int c = 1; c <= p; c++) {
+        int tmp = 2 * c;
+        odd = odd + (tmp * tmp * tmp * tmp);
+    }
+            
+    return odd;
+}
+
+2026-05-17 17:03:27,035 - INFO  - ==================================================
+2026-05-17 17:03:27,035 - INFO  - first_pass:
+2026-05-17 17:03:27,035 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 17:03:27,035 - INFO  - ==================================================
+2026-05-17 17:03:27,035 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 17:03:27,035 - INFO  - Total execution time: 549.38 seconds (9.16 minutes)
+2026-05-17 17:03:27,035 - INFO  - ==================================================
+2026-05-17 17:03:27,036 - INFO  - ==================================================
+2026-05-17 17:03:27,036 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 17:03:27,036 - INFO  - Total API calls: 17
+2026-05-17 17:03:27,036 - INFO  - Total prompt tokens (input): 152,619
+2026-05-17 17:03:27,036 - INFO  - Total completion tokens (output): 10,446
+2026-05-17 17:03:27,036 - INFO  - Total tokens: 163,065
+2026-05-17 17:03:27,036 - INFO  - Average prompt tokens per call: 8977.6
+2026-05-17 17:03:27,036 - INFO  - Average completion tokens per call: 614.5
+2026-05-17 17:03:27,036 - INFO  - Average total tokens per call: 9592.1
+2026-05-17 17:03:27,036 - INFO  - ==================================================

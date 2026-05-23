@@ -50,6 +50,7 @@ class ConfigLoader:
         config.think = main_config.get('think', config.think)
         config.use_se = main_config.get('use_se', config.use_se)
         config.use_examples = main_config.get('use_examples', config.use_examples)
+        config.trivial_refine = main_config.get('trivial_refine', config.trivial_refine)
 
         return config
     

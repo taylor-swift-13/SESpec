@@ -1,0 +1,920 @@
+2026-05-15 02:32:59,920 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7
+2026-05-15 02:32:59,920 - INFO  - 
+🚀 Starting generation of function: foo286
+2026-05-15 02:32:59,920 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 02:32:59,920 - INFO  - ==================================================
+
+2026-05-15 02:33:02,092 - INFO  - [auto only_loop] False — foo286 returns 'int'
+2026-05-15 02:33:02,093 - INFO  - Initial pending functions: ['foo286']
+2026-05-15 02:33:02,094 - INFO  - 
+GENERATE ANNOTATION FOR foo286
+2026-05-15 02:33:02,094 - INFO  - ==================================================
+
+2026-05-15 02:33:02,095 - INFO  - Function foo286 has been initialized
+2026-05-15 02:33:02,095 - INFO  - Starting to generate annotation code for foo286
+2026-05-15 02:33:02,228 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo286
+2026-05-15 02:33:02,229 - INFO  - ==================================================
+
+2026-05-15 02:33:02,342 - INFO  - Variable Maps:[{'b': '1', 'p': 'p@pre', 'seed': 'seed@pre'}, {'b': '1', 'p': 'seed@pre - p@pre', 'seed': 'seed@pre'}]
+2026-05-15 02:33:02,342 - INFO  - Path conditions: ['p@pre <= seed@pre - p@pre', 'p@pre > seed@pre - p@pre']
+2026-05-15 02:33:02,343 - INFO  - Pre condition: p@pre <= seed@pre - p@pre && (b == 1) * (p == p@pre) * (seed == seed@pre) || p@pre > seed@pre - p@pre && (b == 1) * (p == seed@pre - p@pre) * (seed == seed@pre)
+2026-05-15 02:33:02,343 - INFO  - Loop Condition: r <= p
+2026-05-15 02:33:02,344 - INFO  - Array Names: []
+2026-05-15 02:33:02,344 - INFO  - Updated Loop Conditions: ['r <= p@pre', 'r <= seed@pre - p@pre']
+2026-05-15 02:33:02,345 - INFO  - Global Unchanged Variables: ['p', 'seed']
+2026-05-15 02:33:02,346 - INFO  - Non Inductive Variables: []
+2026-05-15 02:33:02,346 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 02:33:02,348 - INFO  - [inv-gen] single-slot mode: selected slot 2/3 (SE only); discarded 2 alternative slots
+2026-05-15 02:33:02,350 - INFO  - examples category: numeric
+2026-05-15 02:33:02,350 - INFO  - examples:
+2026-05-15 02:33:02,350 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 02:33:59,047 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.20, satisfy=0.00) clauses=5
+2026-05-15 02:34:12,707 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:34:26,232 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:34:26,232 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:35:08,662 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.20, satisfy=0.00) clauses=5
+2026-05-15 02:35:47,333 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:36:03,273 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:36:32,460 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:36:32,461 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:37:01,364 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:37:18,614 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:37:18,615 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:37:40,847 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:37:56,354 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.3333333333333333, 0.0), clauses=3)
+2026-05-15 02:38:19,650 - INFO  - ACSL format loop invariant
+2026-05-15 02:38:19,650 - INFO  - /*@
+          loop invariant seed == \at(seed,Pre);
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+2026-05-15 02:38:19,651 - INFO  - QCP format loop invariant
+2026-05-15 02:38:19,651 - INFO  - /*@ Inv
+    (seed == seed@pre
+          loop assigns r, b)
+    */
+    
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+2026-05-15 02:38:20,322 - INFO  - CORRECT INVARIANT
+2026-05-15 02:38:20,323 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo286
+2026-05-15 02:38:20,323 - INFO  - ==================================================
+
+2026-05-15 02:38:20,341 - INFO  - Starting to generate ACSL specification for foo286
+2026-05-15 02:38:50,946 - INFO  - syntax Correct
+2026-05-15 02:39:01,832 - INFO  - Loop Invariant:
+2026-05-15 02:39:01,832 - INFO  - [True, False, False]
+2026-05-15 02:39:01,832 - INFO  - 
+2026-05-15 02:39:01,832 - INFO  - Assertion:
+2026-05-15 02:39:01,832 - INFO  - []
+2026-05-15 02:39:01,832 - INFO  - 
+2026-05-15 02:39:01,832 - INFO  - Assigns:
+2026-05-15 02:39:01,832 - INFO  - [True, True]
+2026-05-15 02:39:01,832 - INFO  - 
+2026-05-15 02:39:01,832 - INFO  - Post Condition:
+2026-05-15 02:39:01,833 - INFO  - [False, True]
+2026-05-15 02:39:01,833 - INFO  - 
+2026-05-15 02:39:01,833 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=4
+2026-05-15 02:39:01,833 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/*@
+  requires 0 <= seed && 0 <= p;
+  assigns \nothing;
+  ensures \result == binom(seed, \old(p)) [POSTCONDITION FAILED];
+  ensures \result >= 0;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          loop invariant 1 <= r <= p + 1 || r == 0;
+          loop invariant 1 <= b || b == 1;
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:39:18,146 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/* Ensure p is already the smaller of p and seed-p so the function
+     does not modify p and postcondition referring to \old(p) is valid */
+  requires p <= seed - p;
+  assigns \nothing;
+  ensures \result == binom(seed, \old(p)) ;
+  ensures \result >= 0;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          /* r ranges from 1..p+1; when loop starts r==1 and after iteration r increases */
+          loop invariant 1 <= r <= p + 1;
+          /* b is always positive (starts 1 and multiplied by positive rationals producing integer binomial) */
+          loop invariant b >= 1;
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:39:18,396 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c":38: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel] log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c:12: 
+  syntax error:
+  Location: line 12, between columns 11 and 12, before or at token: p
+  10    /* Ensure p is already the smaller of p and seed-p so the function
+  11         does not modify p and postcondition referring to \old(p) is valid */
+  12      requires p <= seed - p;
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+  13      assigns \nothing;
+  14      ensures \result == binom(seed, \old(p)) ;
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:39:18,396 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-15 02:39:33,100 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c":38: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel] log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c:12: 
+  syntax error:
+  Location: line 12, between columns 11 and 12, before or at token: p
+  10    /* Ensure p is already the smaller of p and seed-p so the function
+  11         does not modify p and postcondition referring to \old(p) is valid */
+  12      requires p <= seed - p;
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+  13      assigns \nothing;
+  14      ensures \result == binom(seed, \old(p)) ;
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:39:33,100 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-15 02:39:33,100 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:39:44,415 - INFO  - syntax Correct
+2026-05-15 02:39:55,801 - INFO  - Loop Invariant:
+2026-05-15 02:39:55,801 - INFO  - [True, False, False]
+2026-05-15 02:39:55,801 - INFO  - 
+2026-05-15 02:39:55,801 - INFO  - Assertion:
+2026-05-15 02:39:55,801 - INFO  - []
+2026-05-15 02:39:55,801 - INFO  - 
+2026-05-15 02:39:55,801 - INFO  - Assigns:
+2026-05-15 02:39:55,801 - INFO  - [True, True]
+2026-05-15 02:39:55,802 - INFO  - 
+2026-05-15 02:39:55,802 - INFO  - Post Condition:
+2026-05-15 02:39:55,802 - INFO  - [False, True]
+2026-05-15 02:39:55,802 - INFO  - 
+2026-05-15 02:39:55,802 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=4
+2026-05-15 02:39:55,802 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/*@
+  requires 0 <= seed && 0 <= p;
+  assigns \nothing;
+  ensures \result == binom(seed, \old(p)) [POSTCONDITION FAILED];
+  ensures \result >= 0;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          loop invariant 1 <= r <= p + 1 || r == 0;
+          loop invariant 1 <= b || b == 1;
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:40:07,476 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/*@
+  requires 0 <= seed && 0 <= p;
+  assigns \nothing;
+  ensures \result == binom(seed, \old(p)) [POSTCONDITION FAILED];
+  ensures \result >= 0;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          loop invariant 1 <= r <= p + 1 || r == 0;
+          loop invariant 1 <= b || b == 1;
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:40:07,721 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c:13: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:40:07,722 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-15 02:40:07,722 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:40:18,904 - INFO  - syntax Correct
+2026-05-15 02:40:30,039 - INFO  - Loop Invariant:
+2026-05-15 02:40:30,039 - INFO  - [True, False, False]
+2026-05-15 02:40:30,039 - INFO  - 
+2026-05-15 02:40:30,039 - INFO  - Assertion:
+2026-05-15 02:40:30,040 - INFO  - []
+2026-05-15 02:40:30,040 - INFO  - 
+2026-05-15 02:40:30,040 - INFO  - Assigns:
+2026-05-15 02:40:30,040 - INFO  - [True, True]
+2026-05-15 02:40:30,040 - INFO  - 
+2026-05-15 02:40:30,040 - INFO  - Post Condition:
+2026-05-15 02:40:30,040 - INFO  - [False, True]
+2026-05-15 02:40:30,040 - INFO  - 
+2026-05-15 02:40:30,040 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=4
+2026-05-15 02:40:30,041 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/*@
+  requires 0 <= seed && 0 <= p;
+  assigns \nothing;
+  ensures \result == binom(seed, \old(p)) [POSTCONDITION FAILED];
+  ensures \result >= 0;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          loop invariant 1 <= r <= p + 1 || r == 0;
+          loop invariant 1 <= b || b == 1;
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:40:43,236 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/*@
+  requires 0 <= seed && 0 <= p;
+  assigns \nothing;
+  ensures \result == binom(seed, \old(p)) [POSTCONDITION FAILED];
+  ensures \result >= 0;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          loop invariant 1 <= r <= p + 1 || r == 0;
+          loop invariant 1 <= b || b == 1;
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:40:43,497 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c:13: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:40:43,498 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-15 02:40:43,498 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:40:54,692 - INFO  - syntax Correct
+2026-05-15 02:41:06,378 - INFO  - Loop Invariant:
+2026-05-15 02:41:06,378 - INFO  - [True, False, False]
+2026-05-15 02:41:06,378 - INFO  - 
+2026-05-15 02:41:06,378 - INFO  - Assertion:
+2026-05-15 02:41:06,378 - INFO  - []
+2026-05-15 02:41:06,379 - INFO  - 
+2026-05-15 02:41:06,379 - INFO  - Assigns:
+2026-05-15 02:41:06,379 - INFO  - [True, True]
+2026-05-15 02:41:06,379 - INFO  - 
+2026-05-15 02:41:06,379 - INFO  - Post Condition:
+2026-05-15 02:41:06,379 - INFO  - [False, True]
+2026-05-15 02:41:06,379 - INFO  - 
+2026-05-15 02:41:06,379 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=4
+2026-05-15 02:41:06,379 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/*@
+  requires 0 <= seed && 0 <= p;
+  assigns \nothing;
+  ensures \result == binom(seed, \old(p)) [POSTCONDITION FAILED];
+  ensures \result >= 0;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          loop invariant 1 <= r <= p + 1 || r == 0;
+          loop invariant 1 <= b || b == 1;
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:41:18,928 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/*@
+  requires 0 <= seed && 0 <= p;
+  assigns \nothing;
+  ensures \result == binom(seed, \old(p)) [POSTCONDITION FAILED];
+  ensures \result >= 0;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          loop invariant 1 <= r <= p + 1 || r == 0;
+          loop invariant 1 <= b || b == 1;
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:41:19,234 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c:13: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:41:19,234 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-15 02:41:19,234 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:41:30,304 - INFO  - syntax Correct
+2026-05-15 02:41:41,413 - INFO  - Loop Invariant:
+2026-05-15 02:41:41,413 - INFO  - [True, False, False]
+2026-05-15 02:41:41,413 - INFO  - 
+2026-05-15 02:41:41,413 - INFO  - Assertion:
+2026-05-15 02:41:41,413 - INFO  - []
+2026-05-15 02:41:41,414 - INFO  - 
+2026-05-15 02:41:41,414 - INFO  - Assigns:
+2026-05-15 02:41:41,414 - INFO  - [True, True]
+2026-05-15 02:41:41,414 - INFO  - 
+2026-05-15 02:41:41,414 - INFO  - Post Condition:
+2026-05-15 02:41:41,414 - INFO  - [False, True]
+2026-05-15 02:41:41,414 - INFO  - 
+2026-05-15 02:41:41,414 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=4
+2026-05-15 02:41:41,414 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/*@
+  requires 0 <= seed && 0 <= p;
+  assigns \nothing;
+  ensures \result == binom(seed, \old(p)) [POSTCONDITION FAILED];
+  ensures \result >= 0;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          loop invariant 1 <= r <= p + 1 || r == 0;
+          loop invariant 1 <= b || b == 1;
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:41:53,801 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/*@
+  requires 0 <= seed && 0 <= p;
+  assigns \nothing;
+  ensures \result == binom(seed, \old(p)) [POSTCONDITION FAILED];
+  ensures \result >= 0;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          loop invariant 1 <= r <= p + 1 || r == 0;
+          loop invariant 1 <= b || b == 1;
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:41:53,804 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.5714285714285714, 0.0), clauses=4)
+2026-05-15 02:42:04,912 - INFO  - syntax Correct
+2026-05-15 02:42:16,285 - INFO  - Loop Invariant:
+2026-05-15 02:42:16,285 - INFO  - [True, False, False]
+2026-05-15 02:42:16,285 - INFO  - 
+2026-05-15 02:42:16,285 - INFO  - Assertion:
+2026-05-15 02:42:16,285 - INFO  - []
+2026-05-15 02:42:16,285 - INFO  - 
+2026-05-15 02:42:16,285 - INFO  - Assigns:
+2026-05-15 02:42:16,285 - INFO  - [True, True]
+2026-05-15 02:42:16,286 - INFO  - 
+2026-05-15 02:42:16,286 - INFO  - Post Condition:
+2026-05-15 02:42:16,286 - INFO  - [False, True]
+2026-05-15 02:42:16,286 - INFO  - 
+2026-05-15 02:42:27,263 - INFO  - syntax Correct
+2026-05-15 02:42:38,148 - INFO  - Loop Invariant:
+2026-05-15 02:42:38,148 - INFO  - [True]
+2026-05-15 02:42:38,148 - INFO  - 
+2026-05-15 02:42:38,148 - INFO  - Assertion:
+2026-05-15 02:42:38,148 - INFO  - []
+2026-05-15 02:42:38,148 - INFO  - 
+2026-05-15 02:42:38,148 - INFO  - Assigns:
+2026-05-15 02:42:38,148 - INFO  - [True, True]
+2026-05-15 02:42:38,148 - INFO  - 
+2026-05-15 02:42:38,149 - INFO  - Post Condition:
+2026-05-15 02:42:38,149 - INFO  - [False]
+2026-05-15 02:42:38,149 - INFO  - 
+2026-05-15 02:42:38,655 - INFO  - syntax Correct
+2026-05-15 02:42:39,109 - INFO  - Loop Invariant:
+2026-05-15 02:42:39,109 - INFO  - [True]
+2026-05-15 02:42:39,109 - INFO  - 
+2026-05-15 02:42:39,109 - INFO  - Assertion:
+2026-05-15 02:42:39,109 - INFO  - []
+2026-05-15 02:42:39,109 - INFO  - 
+2026-05-15 02:42:39,109 - INFO  - Assigns:
+2026-05-15 02:42:39,109 - INFO  - [True, True]
+2026-05-15 02:42:39,109 - INFO  - 
+2026-05-15 02:42:39,109 - INFO  - Post Condition:
+2026-05-15 02:42:39,109 - INFO  - []
+2026-05-15 02:42:39,109 - INFO  - 
+2026-05-15 02:42:39,111 - INFO  - 
+SPECIFICATION FOR foo286
+2026-05-15 02:42:39,112 - INFO  - ==================================================
+
+2026-05-15 02:42:39,112 - INFO  - 
+QCP Specification for function foo286:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-15 02:42:39,286 - INFO  - 
+VERIFICATION FOR foo286
+2026-05-15 02:42:39,295 - INFO  - ==================================================
+
+2026-05-15 02:42:39,295 - INFO  - TRY TIME: 0
+2026-05-15 02:42:39,737 - INFO  - syntax Correct
+2026-05-15 02:42:40,156 - INFO  - Loop Invariant:
+2026-05-15 02:42:40,156 - INFO  - [True]
+2026-05-15 02:42:40,156 - INFO  - 
+2026-05-15 02:42:40,156 - INFO  - Assertion:
+2026-05-15 02:42:40,156 - INFO  - []
+2026-05-15 02:42:40,156 - INFO  - 
+2026-05-15 02:42:40,156 - INFO  - Assigns:
+2026-05-15 02:42:40,157 - INFO  - [True, True]
+2026-05-15 02:42:40,157 - INFO  - 
+2026-05-15 02:42:40,157 - INFO  - Post Condition:
+2026-05-15 02:42:40,157 - INFO  - []
+2026-05-15 02:42:40,157 - INFO  - 
+2026-05-15 02:42:40,157 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo286
+2026-05-15 02:42:40,157 - INFO  - ==================================================
+2026-05-15 02:42:40,157 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo286/20260515_023259_889759_f305a8c7/output/foo286.c
+2026-05-15 02:42:40,157 - INFO  - Output file content:
+
+/*@ 
+  logic integer binom(integer n, integer k) =
+    k < 0 || k > n ? 0 :
+    k == 0 ? 1 :
+    k == n ? 1 :
+    binom(n-1,k-1) + binom(n-1,k);
+*/
+
+/*@
+  requires 0 <= seed && 0 <= p;
+  assigns \nothing;
+*/
+int foo286(int seed, int p) {
+
+		if (p > seed - p)
+			p = seed - p;
+		int b = 1;
+		
+            
+        /*@
+          loop invariant seed == \at(seed,Pre);
+          loop assigns r, b;
+        */
+            for (int r = 1; r <= p; r++) {
+			b = b * (seed - r + 1) / r;
+		}
+            
+		return b;
+}
+
+2026-05-15 02:42:40,157 - INFO  - ==================================================
+2026-05-15 02:42:40,157 - INFO  - first_pass:
+2026-05-15 02:42:40,157 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 02:42:40,158 - INFO  - ==================================================
+2026-05-15 02:42:40,158 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 02:42:40,158 - INFO  - Total execution time: 580.24 seconds (9.67 minutes)
+2026-05-15 02:42:40,158 - INFO  - ==================================================
+2026-05-15 02:42:40,158 - INFO  - ==================================================
+2026-05-15 02:42:40,158 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 02:42:40,158 - INFO  - Total API calls: 5
+2026-05-15 02:42:40,158 - INFO  - Total prompt tokens (input): 24,241
+2026-05-15 02:42:40,158 - INFO  - Total completion tokens (output): 3,424
+2026-05-15 02:42:40,158 - INFO  - Total tokens: 27,665
+2026-05-15 02:42:40,158 - INFO  - Average prompt tokens per call: 4848.2
+2026-05-15 02:42:40,158 - INFO  - Average completion tokens per call: 684.8
+2026-05-15 02:42:40,158 - INFO  - Average total tokens per call: 5533.0
+2026-05-15 02:42:40,158 - INFO  - ==================================================

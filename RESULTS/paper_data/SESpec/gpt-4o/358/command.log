@@ -1,0 +1,1001 @@
+$ /home/yangfp/miniconda3/envs/SpecAutoGen/bin/python main.py --config /home/yangfp/SESpec/src/results/tmp/sespec_default_sespec_358_gpt-4o_20260515_021925_294061_30812c6d.json
+
+[stdout]
+🚀 Starting specification generation for function: foo250
+📁 Project directory: sespec
+📄 Configuration file: /home/yangfp/SESpec/src/results/tmp/sespec_default_sespec_358_gpt-4o_20260515_021925_294061_30812c6d.json
+🤖 Using model: gpt-4o
+workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c
+
+🚀 Starting generation of function: foo250
+
+FUNCTION INITIALIZATION
+==================================================
+
+[auto only_loop] False — foo250 returns 'int'
+Initial pending functions: ['foo250']
+
+GENERATE ANNOTATION FOR foo250
+==================================================
+
+Function foo250 has been initialized
+Starting to generate annotation code for foo250
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/3_output/foo250.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/1_output/foo250.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/2_output/foo250.c created and written successfully.
+
+GENERATE LOOP INVARIANT FOR foo250
+==================================================
+
+Loop 0 : Outer
+Sorted indices: [0]
+LoopEntry_0:
+(total == 0) * (average == 0) * (size == size@pre)
+[1;31mfatal error: [0mbison: syntax error, unexpected PT_INT in /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/2_output/foo250.c:22:9
+Successfully generated /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/loop/foo250.json
+(total == 0) * (average == 0) * (size == size@pre)
+Variable Maps:[{'total': '0', 'average': '0', 'size': 'size@pre'}]
+Path conditions: [None]
+Pre condition: (total == 0) * (average == 0) * (size == size@pre)
+Loop Condition: index <= size
+Array Names: []
+Updated Loop Conditions: ['index <= size@pre']
+Global Unchanged Variables: ['size']
+Non Inductive Variables: []
+Unchanged Arrays (Read-only): []
+[inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+examples category: numeric
+examples:
+
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+[inv-gen] refine 1/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+[inv-gen] refine 2/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+[inv-gen] refine 3/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+[inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+[inv-gen] refine 4/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+[inv-gen] refine 5/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+[inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+[inv-gen] refine 6/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+[inv-gen] refine 7/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+[inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+[inv-gen] refine 8/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+[inv-gen] refine 9/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+[inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+[inv-gen] refine 10/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+[inv-gen] refine exhausted → final Houdini on best (score=(True, 0.75, 0.0), clauses=4)
+ACSL format loop invariant
+/*@
+      loop invariant size == \at(size,Pre);
+      loop assigns index, average, total;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+QCP format loop invariant
+/*@ Inv
+    (size == size@pre
+      loop assigns index, average, total)
+    */
+    
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+LoopEntry_0:
+(total == 0) * (average == 0) * (size == size@pre)
+[1;31mfatal error: [0mbison: syntax error, unexpected PT_IDENT, expecting PT_RPAREN or PT_COLON in /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/2_output/foo250.c:23:10
+Successfully generated /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/loop/foo250.json
+CORRECT INVARIANT
+
+GENERATE FUNCTION SPECIFICATION FOR foo250
+==================================================
+
+Starting to generate ACSL specification for foo250
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c:10: Warning: 
+  unbound logic function count_odds. Ignoring logic specification of function foo250
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[False]
+
+[spec-gen] refine 2/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=3
+postconditon before refine: 
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  assigns \nothing;
+  ensures \result == (size > 0 ? sum_of_odds(size) / count_odds(size) : 0) [POSTCONDITION FAILED];
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+postconditon after refine: 
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  requires size == 0 || count_odds(size) > 0;
+  assigns \nothing;
+  ensures \result == (size > 0 ? sum_of_odds(size) / count_odds(size) : 0);
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[False]
+
+[spec-gen] refine 3/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+postconditon before refine: 
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  requires size == 0 || count_odds(size) > 0;
+  assigns \nothing;
+  ensures \result == (size > 0 ? sum_of_odds(size) / count_odds(size) : 0) [POSTCONDITION FAILED];
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+postconditon after refine: 
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  requires size == 0 || count_odds(size) > 0;
+  assigns \nothing;
+  ensures \result == (size > 0 ? sum_of_odds(size) / count_odds(size) : 0) [POSTCONDITION FAILED];
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c:16: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c:16: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[False]
+
+[spec-gen] refine 6/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+postconditon before refine: 
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  requires size == 0 || count_odds(size) > 0;
+  assigns \nothing;
+  ensures \result == (size > 0 ? sum_of_odds(size) / count_odds(size) : 0) [POSTCONDITION FAILED];
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+postconditon after refine: 
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  requires size == 0 || count_odds(size) > 0;
+  assigns \nothing;
+  ensures size == 0 ==> \result == 0;
+  ensures size > 0 ==> count_odds(size) > 0 && \result == sum_of_odds(size) / count_odds(size);
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[False, True]
+
+[spec-gen] refine 7/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+postconditon before refine: 
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  requires size == 0 || count_odds(size) > 0;
+  assigns \nothing;
+  ensures size == 0 ==> \result == 0 [POSTCONDITION FAILED];
+  ensures size > 0 ==> count_odds(size) > 0 && \result == sum_of_odds(size) / count_odds(size);
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+postconditon after refine: 
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  requires size == 0 || count_odds(size) > 0;
+  assigns \nothing;
+  ensures size == 0 ==> \result == 0 [POSTCONDITION FAILED];
+  ensures size > 0 ==> count_odds(size) > 0 && \result == sum_of_odds(size) / count_odds(size);
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c:16: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c:16: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[False, True]
+
+[spec-gen] refine 10/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+postconditon before refine: 
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  requires size == 0 || count_odds(size) > 0;
+  assigns \nothing;
+  ensures size == 0 ==> \result == 0 [POSTCONDITION FAILED];
+  ensures size > 0 ==> count_odds(size) > 0 && \result == sum_of_odds(size) / count_odds(size);
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+postconditon after refine: 
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  requires size == 0 || count_odds(size) > 0;
+  assigns \nothing;
+  ensures size == 0 ==> \result == 0 [POSTCONDITION FAILED];
+  ensures size > 0 ==> count_odds(size) > 0 && \result == sum_of_odds(size) / count_odds(size);
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+[spec-gen] refine exhausted → final Houdini on best (score=(True, 0.875, 0.0), clauses=5)
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[False, True]
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[True]
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c created and written successfully.
+
+SPECIFICATION FOR foo250
+==================================================
+
+
+QCP Specification for function foo250:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+
+VERIFICATION FOR foo250
+==================================================
+
+TRY TIME: 0
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[True]
+
+
+🎯 FINAL SPECIFICATION FOR foo250
+==================================================
+Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo250/20260515_021926_854027_cb7bf69c/output/foo250.c
+Output file content:
+
+/*@
+  logic integer sum_of_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? n : 0) + sum_of_odds(n - 1);
+*/
+
+/*@
+  logic integer count_odds(integer n) =
+    n <= 0 ? 0 : (n % 2 != 0 ? 1 : 0) + count_odds(n - 1);
+*/
+
+/*@
+  requires size >= 0;
+  requires size == 0 || count_odds(size) > 0;
+  assigns \nothing;
+  ensures size > 0 ==> count_odds(size) > 0 && \result == sum_of_odds(size) / count_odds(size);
+*/
+int foo250(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= index <= size + 1;
+      loop invariant average == sum_of_odds(index - 1);
+      loop invariant total == count_odds(index - 1);
+      loop invariant size == \at(size, Pre);
+      loop assigns index, average, total;
+      loop variant size - index;
+    */
+    for (int index = 1; index <= size; index++) {
+        if (index % 2 != 0) {
+            average += index;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+==================================================
+first_pass:
+syntax=1, valid=1,satisfy=1
+==================================================
+⏰ OVERALL EXECUTION TIME STATISTICS
+Total execution time: 793.33 seconds (13.22 minutes)
+==================================================
+==================================================
+📊 TOKEN USAGE STATISTICS
+Total API calls: 16
+Total prompt tokens (input): 131,306
+Total completion tokens (output): 9,203
+Total tokens: 140,509
+Average prompt tokens per call: 8206.6
+Average completion tokens per call: 575.2
+Average total tokens per call: 8781.8
+==================================================
+✅ Generation completed!
+
+[stderr]
+

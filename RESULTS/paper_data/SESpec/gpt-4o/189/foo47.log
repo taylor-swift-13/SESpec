@@ -1,0 +1,1272 @@
+2026-05-14 22:34:02,074 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo47/20260514_223402_302047_4d8580a8
+2026-05-14 22:34:02,074 - INFO  - 
+🚀 Starting generation of function: foo47
+2026-05-14 22:34:02,074 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-14 22:34:02,074 - INFO  - ==================================================
+
+2026-05-14 22:34:02,431 - INFO  - [auto only_loop] False — foo47 returns 'int'
+2026-05-14 22:34:02,432 - INFO  - Initial pending functions: ['foo47']
+2026-05-14 22:34:02,432 - INFO  - 
+GENERATE ANNOTATION FOR foo47
+2026-05-14 22:34:02,432 - INFO  - ==================================================
+
+2026-05-14 22:34:02,432 - INFO  - Function foo47 has been initialized
+2026-05-14 22:34:02,432 - INFO  - Starting to generate annotation code for foo47
+2026-05-14 22:34:02,486 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo47
+2026-05-14 22:34:02,487 - INFO  - ==================================================
+
+2026-05-14 22:34:02,559 - INFO  - Variable Maps:[{'count': '1', 'min': 'arr[0]', 'arr_len': 'arr_len@pre', 'arr': 'arr@pre', 'n': 'n@pre'}]
+2026-05-14 22:34:02,560 - INFO  - Path conditions: ['n@pre != 0 && arr_len@pre > 0 && arr_len@pre < 100']
+2026-05-14 22:34:02,560 - INFO  - Pre condition: n@pre != 0 && arr_len@pre > 0 && arr_len@pre < 100 && (count == 1) * store_int_array(arr@pre, arr_len@pre, arr_l) * (min == arr_l[0]) * (arr_len == arr_len@pre) * (arr == arr@pre) * (n == n@pre)
+2026-05-14 22:34:02,560 - INFO  - Loop Condition: i < n
+2026-05-14 22:34:02,561 - INFO  - Array Names: ['arr']
+2026-05-14 22:34:02,561 - INFO  - Updated Loop Conditions: ['i < n@pre']
+2026-05-14 22:34:02,562 - INFO  - Global Unchanged Variables: ['arr_len', 'arr', 'n']
+2026-05-14 22:34:02,563 - INFO  - Non Inductive Variables: ['min', 'count']
+2026-05-14 22:34:02,563 - INFO  - Unchanged Arrays (Read-only): ['arr']
+2026-05-14 22:34:02,565 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-14 22:34:02,567 - INFO  - examples category: array
+2026-05-14 22:34:02,567 - INFO  - examples:
+2026-05-14 22:34:02,567 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-14 22:34:12,696 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-14 22:34:21,747 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-14 22:34:52,369 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:35:25,803 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:35:58,870 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:35:58,870 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 22:36:20,605 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:36:51,186 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:36:51,186 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 22:37:13,072 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:37:56,772 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:37:56,773 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 22:38:18,953 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-14 22:38:45,741 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6666666666666666, 0.0), clauses=6)
+2026-05-14 22:40:12,423 - INFO  - ACSL format loop invariant
+2026-05-14 22:40:12,423 - INFO  - /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop assigns i, min, count;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+2026-05-14 22:40:12,425 - INFO  - QCP format loop invariant
+2026-05-14 22:40:12,425 - INFO  - /*@ Inv
+    exists  arr_l,    
+    store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (arr_len == arr_len@pre) &&
+(arr == arr@pre) &&
+(n == n@pre
+      loop assigns i, min, count)
+    */
+    
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+2026-05-14 22:40:33,973 - INFO  - CORRECT INVARIANT
+2026-05-14 22:40:33,973 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo47
+2026-05-14 22:40:33,974 - INFO  - ==================================================
+
+2026-05-14 22:40:33,984 - INFO  - Starting to generate ACSL specification for foo47
+2026-05-14 22:42:38,447 - INFO  - syntax Correct
+2026-05-14 22:42:49,392 - INFO  - Loop Invariant:
+2026-05-14 22:42:49,392 - INFO  - [True, True, True, False, True, False]
+2026-05-14 22:42:49,392 - INFO  - 
+2026-05-14 22:42:49,392 - INFO  - Assertion:
+2026-05-14 22:42:49,393 - INFO  - []
+2026-05-14 22:42:49,393 - INFO  - 
+2026-05-14 22:42:49,393 - INFO  - Assigns:
+2026-05-14 22:42:49,393 - INFO  - [True, True, True]
+2026-05-14 22:42:49,393 - INFO  - 
+2026-05-14 22:42:49,393 - INFO  - Post Condition:
+2026-05-14 22:42:49,393 - INFO  - [True]
+2026-05-14 22:42:49,394 - INFO  - 
+2026-05-14 22:42:49,395 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+2026-05-14 22:42:49,395 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) != 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:43:19,163 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) != 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant 0 <= i <= n; // Ensure i is within bounds
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:43:30,410 - INFO  - syntax Correct
+2026-05-14 22:43:41,352 - INFO  - Loop Invariant:
+2026-05-14 22:43:41,352 - INFO  - [True, True, True, False, True, True, False, True]
+2026-05-14 22:43:41,352 - INFO  - 
+2026-05-14 22:43:41,352 - INFO  - Assertion:
+2026-05-14 22:43:41,352 - INFO  - []
+2026-05-14 22:43:41,352 - INFO  - 
+2026-05-14 22:43:41,353 - INFO  - Assigns:
+2026-05-14 22:43:41,353 - INFO  - [True, True, True]
+2026-05-14 22:43:41,353 - INFO  - 
+2026-05-14 22:43:41,353 - INFO  - Post Condition:
+2026-05-14 22:43:41,353 - INFO  - [True]
+2026-05-14 22:43:41,353 - INFO  - 
+2026-05-14 22:43:41,354 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=5
+2026-05-14 22:43:41,354 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) != 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant 0 <= i <= n; // Ensure i is within bounds
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:44:02,598 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) != 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:44:13,653 - INFO  - syntax Correct
+2026-05-14 22:44:24,709 - INFO  - Loop Invariant:
+2026-05-14 22:44:24,709 - INFO  - [True, True, True, False, True, False, True]
+2026-05-14 22:44:24,709 - INFO  - 
+2026-05-14 22:44:24,709 - INFO  - Assertion:
+2026-05-14 22:44:24,709 - INFO  - []
+2026-05-14 22:44:24,709 - INFO  - 
+2026-05-14 22:44:24,709 - INFO  - Assigns:
+2026-05-14 22:44:24,709 - INFO  - [True, True, True]
+2026-05-14 22:44:24,709 - INFO  - 
+2026-05-14 22:44:24,709 - INFO  - Post Condition:
+2026-05-14 22:44:24,709 - INFO  - [True]
+2026-05-14 22:44:24,709 - INFO  - 
+2026-05-14 22:44:24,709 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=5
+2026-05-14 22:44:24,710 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) != 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:44:41,455 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) > 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:44:52,463 - INFO  - syntax Correct
+2026-05-14 22:45:03,385 - INFO  - Loop Invariant:
+2026-05-14 22:45:03,386 - INFO  - [True, True, True, True, True, False, True]
+2026-05-14 22:45:03,386 - INFO  - 
+2026-05-14 22:45:03,386 - INFO  - Assertion:
+2026-05-14 22:45:03,386 - INFO  - []
+2026-05-14 22:45:03,386 - INFO  - 
+2026-05-14 22:45:03,386 - INFO  - Assigns:
+2026-05-14 22:45:03,386 - INFO  - [True, True, True]
+2026-05-14 22:45:03,386 - INFO  - 
+2026-05-14 22:45:03,386 - INFO  - Post Condition:
+2026-05-14 22:45:03,386 - INFO  - [True]
+2026-05-14 22:45:03,386 - INFO  - 
+2026-05-14 22:45:03,386 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.91, satisfy=0.00) clauses=5
+2026-05-14 22:45:03,387 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) > 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:48:24,549 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) > 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop invariant \forall integer k; 0 <= k < i && arr[k] == min ==> count_eq(arr, 0, k + 1, min) == count; // Ensure count matches occurrences of min
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:48:35,960 - INFO  - syntax Correct
+2026-05-14 22:48:47,494 - INFO  - Loop Invariant:
+2026-05-14 22:48:47,494 - INFO  - [True, True, True, True, True, False, True, False]
+2026-05-14 22:48:47,494 - INFO  - 
+2026-05-14 22:48:47,494 - INFO  - Assertion:
+2026-05-14 22:48:47,494 - INFO  - []
+2026-05-14 22:48:47,494 - INFO  - 
+2026-05-14 22:48:47,494 - INFO  - Assigns:
+2026-05-14 22:48:47,494 - INFO  - [True, True, True]
+2026-05-14 22:48:47,495 - INFO  - 
+2026-05-14 22:48:47,495 - INFO  - Post Condition:
+2026-05-14 22:48:47,495 - INFO  - [True]
+2026-05-14 22:48:47,495 - INFO  - 
+2026-05-14 22:48:47,495 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=5
+2026-05-14 22:48:47,495 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) > 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop invariant \forall integer k; 0 <= k < i && arr[k] == min ==> count_eq(arr, 0, k + 1, min) == count; // Ensure count matches occurrences of min
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:50:10,087 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) > 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop invariant \forall integer k; 0 <= k < i && arr[k] == min ==> count_eq(arr, 0, k + 1, min) == count; // Ensure count matches occurrences of min
+      loop invariant \forall integer k; 0 <= k < i && arr[k] > min ==> count_eq(arr, 0, k + 1, min) == count_eq(arr, 0, k, min); // Ensure count does not change for elements greater than min
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:50:21,538 - INFO  - syntax Correct
+2026-05-14 22:50:32,943 - INFO  - Loop Invariant:
+2026-05-14 22:50:32,944 - INFO  - [True, True, True, True, True, False, False, False, True]
+2026-05-14 22:50:32,944 - INFO  - 
+2026-05-14 22:50:32,944 - INFO  - Assertion:
+2026-05-14 22:50:32,944 - INFO  - []
+2026-05-14 22:50:32,944 - INFO  - 
+2026-05-14 22:50:32,944 - INFO  - Assigns:
+2026-05-14 22:50:32,944 - INFO  - [True, True, True]
+2026-05-14 22:50:32,944 - INFO  - 
+2026-05-14 22:50:32,944 - INFO  - Post Condition:
+2026-05-14 22:50:32,944 - INFO  - [True]
+2026-05-14 22:50:32,944 - INFO  - 
+2026-05-14 22:50:32,945 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.77, satisfy=0.00) clauses=5
+2026-05-14 22:50:32,945 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 22:50:43,879 - INFO  - syntax Correct
+2026-05-14 22:50:55,057 - INFO  - Loop Invariant:
+2026-05-14 22:50:55,057 - INFO  - [True, True, True, True, True, False, True]
+2026-05-14 22:50:55,057 - INFO  - 
+2026-05-14 22:50:55,057 - INFO  - Assertion:
+2026-05-14 22:50:55,057 - INFO  - []
+2026-05-14 22:50:55,057 - INFO  - 
+2026-05-14 22:50:55,057 - INFO  - Assigns:
+2026-05-14 22:50:55,058 - INFO  - [True, True, True]
+2026-05-14 22:50:55,058 - INFO  - 
+2026-05-14 22:50:55,058 - INFO  - Post Condition:
+2026-05-14 22:50:55,058 - INFO  - [True]
+2026-05-14 22:50:55,058 - INFO  - 
+2026-05-14 22:50:55,058 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.91, satisfy=0.00) clauses=5
+2026-05-14 22:50:55,059 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) > 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:51:13,825 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) > 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop invariant \forall integer k; 0 <= k < i && arr[k] == min ==> count > 0; // Ensure count is consistent with min
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:51:26,255 - INFO  - syntax Correct
+2026-05-14 22:51:38,320 - INFO  - Loop Invariant:
+2026-05-14 22:51:38,321 - INFO  - [True, True, True, True, True, False, True, False]
+2026-05-14 22:51:38,321 - INFO  - 
+2026-05-14 22:51:38,321 - INFO  - Assertion:
+2026-05-14 22:51:38,321 - INFO  - []
+2026-05-14 22:51:38,321 - INFO  - 
+2026-05-14 22:51:38,321 - INFO  - Assigns:
+2026-05-14 22:51:38,321 - INFO  - [True, True, True]
+2026-05-14 22:51:38,321 - INFO  - 
+2026-05-14 22:51:38,321 - INFO  - Post Condition:
+2026-05-14 22:51:38,321 - INFO  - [True]
+2026-05-14 22:51:38,322 - INFO  - 
+2026-05-14 22:51:38,322 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=5
+2026-05-14 22:51:38,322 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 22:51:49,809 - INFO  - syntax Correct
+2026-05-14 22:52:00,932 - INFO  - Loop Invariant:
+2026-05-14 22:52:00,932 - INFO  - [True, True, True, True, True, False, True]
+2026-05-14 22:52:00,932 - INFO  - 
+2026-05-14 22:52:00,932 - INFO  - Assertion:
+2026-05-14 22:52:00,932 - INFO  - []
+2026-05-14 22:52:00,932 - INFO  - 
+2026-05-14 22:52:00,932 - INFO  - Assigns:
+2026-05-14 22:52:00,932 - INFO  - [True, True, True]
+2026-05-14 22:52:00,932 - INFO  - 
+2026-05-14 22:52:00,932 - INFO  - Post Condition:
+2026-05-14 22:52:00,932 - INFO  - [True]
+2026-05-14 22:52:00,933 - INFO  - 
+2026-05-14 22:52:00,933 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.91, satisfy=0.00) clauses=5
+2026-05-14 22:52:00,933 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) > 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:52:16,930 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) > 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+  ensures \result == count_eq(arr, 0, \at(n,Pre), min_value(arr, 0, \at(n,Pre)));
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant count == count_eq(arr, 0, i, min);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop invariant \forall integer k; 0 <= k < i && arr[k] == min ==> count > 0; // Ensure count is consistent with min
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:52:29,008 - INFO  - syntax Correct
+2026-05-14 22:52:40,649 - INFO  - Loop Invariant:
+2026-05-14 22:52:40,649 - INFO  - [True, True, True, True, True, False, True, False]
+2026-05-14 22:52:40,649 - INFO  - 
+2026-05-14 22:52:40,649 - INFO  - Assertion:
+2026-05-14 22:52:40,649 - INFO  - []
+2026-05-14 22:52:40,649 - INFO  - 
+2026-05-14 22:52:40,649 - INFO  - Assigns:
+2026-05-14 22:52:40,650 - INFO  - [True, True, True]
+2026-05-14 22:52:40,650 - INFO  - 
+2026-05-14 22:52:40,650 - INFO  - Post Condition:
+2026-05-14 22:52:40,650 - INFO  - [True]
+2026-05-14 22:52:40,650 - INFO  - 
+2026-05-14 22:52:40,650 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=5
+2026-05-14 22:52:40,650 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 22:52:40,652 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9090909090909091, 0.0), clauses=5)
+2026-05-14 22:52:51,770 - INFO  - syntax Correct
+2026-05-14 22:53:02,832 - INFO  - Loop Invariant:
+2026-05-14 22:53:02,832 - INFO  - [True, True, True, True, True, False, True]
+2026-05-14 22:53:02,832 - INFO  - 
+2026-05-14 22:53:02,832 - INFO  - Assertion:
+2026-05-14 22:53:02,832 - INFO  - []
+2026-05-14 22:53:02,832 - INFO  - 
+2026-05-14 22:53:02,832 - INFO  - Assigns:
+2026-05-14 22:53:02,832 - INFO  - [True, True, True]
+2026-05-14 22:53:02,832 - INFO  - 
+2026-05-14 22:53:02,832 - INFO  - Post Condition:
+2026-05-14 22:53:02,832 - INFO  - [True]
+2026-05-14 22:53:02,832 - INFO  - 
+2026-05-14 22:53:13,764 - INFO  - syntax Correct
+2026-05-14 22:53:24,603 - INFO  - Loop Invariant:
+2026-05-14 22:53:24,603 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:53:24,603 - INFO  - 
+2026-05-14 22:53:24,603 - INFO  - Assertion:
+2026-05-14 22:53:24,604 - INFO  - []
+2026-05-14 22:53:24,604 - INFO  - 
+2026-05-14 22:53:24,604 - INFO  - Assigns:
+2026-05-14 22:53:24,604 - INFO  - [True, True, True]
+2026-05-14 22:53:24,604 - INFO  - 
+2026-05-14 22:53:24,604 - INFO  - Post Condition:
+2026-05-14 22:53:24,604 - INFO  - [False]
+2026-05-14 22:53:24,604 - INFO  - 
+2026-05-14 22:53:25,585 - INFO  - syntax Correct
+2026-05-14 22:53:30,874 - INFO  - Loop Invariant:
+2026-05-14 22:53:30,874 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:53:30,874 - INFO  - 
+2026-05-14 22:53:30,874 - INFO  - Assertion:
+2026-05-14 22:53:30,874 - INFO  - []
+2026-05-14 22:53:30,874 - INFO  - 
+2026-05-14 22:53:30,874 - INFO  - Assigns:
+2026-05-14 22:53:30,875 - INFO  - [True, True, True]
+2026-05-14 22:53:30,875 - INFO  - 
+2026-05-14 22:53:30,875 - INFO  - Post Condition:
+2026-05-14 22:53:30,875 - INFO  - []
+2026-05-14 22:53:30,875 - INFO  - 
+2026-05-14 22:53:30,878 - INFO  - 
+SPECIFICATION FOR foo47
+2026-05-14 22:53:30,878 - INFO  - ==================================================
+
+2026-05-14 22:53:30,878 - INFO  - 
+QCP Specification for function foo47:
+/*@
+With arr_l
+Require store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100
+Ensure Results(__return)
+*/
+2026-05-14 22:53:31,033 - INFO  - 
+VERIFICATION FOR foo47
+2026-05-14 22:53:31,037 - INFO  - ==================================================
+
+2026-05-14 22:53:31,037 - INFO  - TRY TIME: 0
+2026-05-14 22:53:32,227 - INFO  - syntax Correct
+2026-05-14 22:53:38,027 - INFO  - Loop Invariant:
+2026-05-14 22:53:38,028 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:53:38,028 - INFO  - 
+2026-05-14 22:53:38,028 - INFO  - Assertion:
+2026-05-14 22:53:38,028 - INFO  - []
+2026-05-14 22:53:38,028 - INFO  - 
+2026-05-14 22:53:38,028 - INFO  - Assigns:
+2026-05-14 22:53:38,028 - INFO  - [True, True, True]
+2026-05-14 22:53:38,028 - INFO  - 
+2026-05-14 22:53:38,028 - INFO  - Post Condition:
+2026-05-14 22:53:38,028 - INFO  - []
+2026-05-14 22:53:38,028 - INFO  - 
+2026-05-14 22:53:38,028 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo47
+2026-05-14 22:53:38,028 - INFO  - ==================================================
+2026-05-14 22:53:38,028 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo47/20260514_223402_302047_4d8580a8/output/foo47.c
+2026-05-14 22:53:38,028 - INFO  - Output file content:
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer min_value{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 2147483647
+             : (a[hi - 1] < min_value(a, lo, hi - 1) ? a[hi - 1] : min_value(a, lo, hi - 1));
+*/
+
+/*@
+  requires \at(n,Pre) > 0;
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;
+*/
+int foo47(int n, int * arr, int arr_len) {
+
+    if (n == 0) {
+        return 0;
+    }
+
+    int min = arr[0];
+    int count = 1;
+
+    /*@
+      loop invariant arr_len == \at(arr_len,Pre);
+      loop invariant arr == \at(arr,Pre);
+      loop invariant n == \at(n,Pre);
+      loop invariant 1 <= i <= n;
+      loop invariant min == min_value(arr, 0, i);
+      loop invariant \forall integer k; 0 <= k < i ==> arr[k] >= min; // Ensure min is the smallest value seen so far
+      loop assigns i, min, count;
+      loop variant n - i;
+    */
+    for (int i = 1; i < n; i++) {
+        if (min > arr[i]) {
+            min = arr[i];
+            count = 1;
+        } else if (min == arr[i]) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+2026-05-14 22:53:38,029 - INFO  - ==================================================
+2026-05-14 22:53:38,029 - INFO  - first_pass:
+2026-05-14 22:53:38,029 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-14 22:53:38,029 - INFO  - ==================================================
+2026-05-14 22:53:38,029 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-14 22:53:38,029 - INFO  - Total execution time: 1175.95 seconds (19.60 minutes)
+2026-05-14 22:53:38,029 - INFO  - ==================================================
+2026-05-14 22:53:38,029 - INFO  - ==================================================
+2026-05-14 22:53:38,029 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-14 22:53:38,029 - INFO  - Total API calls: 16
+2026-05-14 22:53:38,029 - INFO  - Total prompt tokens (input): 192,305
+2026-05-14 22:53:38,029 - INFO  - Total completion tokens (output): 12,189
+2026-05-14 22:53:38,029 - INFO  - Total tokens: 204,494
+2026-05-14 22:53:38,029 - INFO  - Average prompt tokens per call: 12019.1
+2026-05-14 22:53:38,029 - INFO  - Average completion tokens per call: 761.8
+2026-05-14 22:53:38,029 - INFO  - Average total tokens per call: 12780.9
+2026-05-14 22:53:38,029 - INFO  - ==================================================

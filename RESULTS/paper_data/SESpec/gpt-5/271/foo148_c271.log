@@ -1,0 +1,1370 @@
+2026-05-17 11:38:56,835 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo148_c271/20260517_113856_531600_89e9a7e4
+2026-05-17 11:38:56,835 - INFO  - 
+🚀 Starting generation of function: foo148_c271
+2026-05-17 11:38:56,835 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 11:38:56,835 - INFO  - TRY TIME: 0
+2026-05-17 11:38:56,836 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 11:38:56,836 - INFO  - ==================================================
+
+2026-05-17 11:39:02,387 - INFO  - [auto only_loop] False — foo148_c271 returns 'int'
+2026-05-17 11:39:02,388 - INFO  - Initial pending functions: ['foo148_c271']
+2026-05-17 11:39:02,388 - INFO  - 
+GENERATE ANNOTATION FOR foo148_c271
+2026-05-17 11:39:02,394 - INFO  - ==================================================
+
+2026-05-17 11:39:02,394 - INFO  - Function foo148_c271 has been initialized
+2026-05-17 11:39:02,394 - INFO  - Starting to generate annotation code for foo148_c271
+2026-05-17 11:39:02,587 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo148_c271
+2026-05-17 11:39:02,588 - INFO  - ==================================================
+
+2026-05-17 11:39:02,865 - INFO  - Variable Maps:[{'count': '0', 'result': '0', 'arrSize': 'arrSize@pre', 'arr_len': 'arr_len@pre', 'arr': 'arr@pre'}]
+2026-05-17 11:39:02,870 - INFO  - Path conditions: ['arr_len@pre > 0 && arr_len@pre < 100']
+2026-05-17 11:39:02,870 - INFO  - Pre condition: arr_len@pre > 0 && arr_len@pre < 100 && (count == 0) * (result == 0) * (arrSize == arrSize@pre) * (arr_len == arr_len@pre) * (arr == arr@pre) * store_int_array(arr@pre, arr_len@pre, arr_l)
+2026-05-17 11:39:02,870 - INFO  - Loop Condition: i < arrSize
+2026-05-17 11:39:02,872 - INFO  - Array Names: ['arr']
+2026-05-17 11:39:02,872 - INFO  - Updated Loop Conditions: ['i < arrSize@pre']
+2026-05-17 11:39:02,874 - INFO  - Global Unchanged Variables: ['arrSize', 'arr_len', 'arr']
+2026-05-17 11:39:02,875 - INFO  - Non Inductive Variables: ['result']
+2026-05-17 11:39:02,876 - INFO  - Unchanged Arrays (Read-only): ['arr']
+2026-05-17 11:39:02,885 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 11:39:02,889 - INFO  - examples category: array
+2026-05-17 11:39:02,894 - INFO  - examples:
+2026-05-17 11:39:02,894 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 11:40:02,829 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=15
+2026-05-17 11:40:27,234 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 11:40:51,247 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=7
+2026-05-17 11:40:51,248 - INFO  - [inv-gen] converged at refine 3
+2026-05-17 11:41:07,429 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 11:41:26,321 - INFO  - ACSL format loop invariant
+2026-05-17 11:41:26,326 - INFO  - /*@
+          loop invariant 0 <= i;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+            */
+            for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+2026-05-17 11:41:26,328 - INFO  - QCP format loop invariant
+2026-05-17 11:41:26,329 - INFO  - /*@ Inv
+    exists  arr_l,    
+    store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (0 <= i) &&
+(arrSize == arrSize@pre) &&
+(arr_len == arr_len@pre) &&
+(arr == arr@pre) &&
+(forall (k:Z), 0 <= k && k < arrSize => arr_l[k] == arr_l[k]@pre) &&
+(count == cnt_odd_prefix(arr, i)) &&
+((count % 2 == 1) => (result == last_odd_value(arr, i))
+          loop assigns i, result, count)
+    */
+    
+            for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+2026-05-17 11:42:18,426 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo148_c271
+2026-05-17 11:42:18,427 - INFO  - ==================================================
+
+2026-05-17 11:42:18,524 - INFO  - Starting to generate ACSL specification for foo148_c271
+2026-05-17 11:43:07,250 - INFO  - syntax Correct
+2026-05-17 11:43:21,625 - INFO  - Loop Invariant:
+2026-05-17 11:43:21,632 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:43:21,633 - INFO  - 
+2026-05-17 11:43:21,637 - INFO  - Assertion:
+2026-05-17 11:43:21,639 - INFO  - []
+2026-05-17 11:43:21,639 - INFO  - 
+2026-05-17 11:43:21,639 - INFO  - Assigns:
+2026-05-17 11:43:21,640 - INFO  - [True]
+2026-05-17 11:43:21,641 - INFO  - 
+2026-05-17 11:43:21,647 - INFO  - Post Condition:
+2026-05-17 11:43:21,647 - INFO  - [False, False]
+2026-05-17 11:43:21,647 - INFO  - 
+2026-05-17 11:43:21,650 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=4
+2026-05-17 11:43:21,657 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize) [POSTCONDITION FAILED];
+  ensures \result == scan_result(arr, arrSize) [POSTCONDITION FAILED];
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= i;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+            */
+            for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:43:29,645 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:43:53,184 - INFO  - syntax Correct
+2026-05-17 11:44:07,555 - INFO  - Loop Invariant:
+2026-05-17 11:44:07,556 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:44:07,557 - INFO  - 
+2026-05-17 11:44:07,557 - INFO  - Assertion:
+2026-05-17 11:44:07,557 - INFO  - []
+2026-05-17 11:44:07,557 - INFO  - 
+2026-05-17 11:44:07,557 - INFO  - Assigns:
+2026-05-17 11:44:07,557 - INFO  - [True]
+2026-05-17 11:44:07,557 - INFO  - 
+2026-05-17 11:44:07,563 - INFO  - Post Condition:
+2026-05-17 11:44:07,563 - INFO  - [False]
+2026-05-17 11:44:07,564 - INFO  - 
+2026-05-17 11:44:07,571 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=5
+2026-05-17 11:44:07,587 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize) [POSTCONDITION FAILED];
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:44:15,710 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:44:39,349 - INFO  - syntax Correct
+2026-05-17 11:44:53,906 - INFO  - Loop Invariant:
+2026-05-17 11:44:53,918 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:44:53,923 - INFO  - 
+2026-05-17 11:44:53,923 - INFO  - Assertion:
+2026-05-17 11:44:53,923 - INFO  - []
+2026-05-17 11:44:53,923 - INFO  - 
+2026-05-17 11:44:53,923 - INFO  - Assigns:
+2026-05-17 11:44:53,923 - INFO  - [True]
+2026-05-17 11:44:53,923 - INFO  - 
+2026-05-17 11:44:53,946 - INFO  - Post Condition:
+2026-05-17 11:44:53,946 - INFO  - [False]
+2026-05-17 11:44:53,946 - INFO  - 
+2026-05-17 11:44:53,951 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=5
+2026-05-17 11:44:53,957 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize) [POSTCONDITION FAILED];
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:45:02,537 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:45:20,215 - INFO  - syntax Correct
+2026-05-17 11:45:33,694 - INFO  - Loop Invariant:
+2026-05-17 11:45:33,698 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:45:33,698 - INFO  - 
+2026-05-17 11:45:33,698 - INFO  - Assertion:
+2026-05-17 11:45:33,698 - INFO  - []
+2026-05-17 11:45:33,698 - INFO  - 
+2026-05-17 11:45:33,698 - INFO  - Assigns:
+2026-05-17 11:45:33,698 - INFO  - [True]
+2026-05-17 11:45:33,698 - INFO  - 
+2026-05-17 11:45:33,706 - INFO  - Post Condition:
+2026-05-17 11:45:33,711 - INFO  - [False]
+2026-05-17 11:45:33,711 - INFO  - 
+2026-05-17 11:45:33,712 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=6
+2026-05-17 11:45:33,712 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize) [POSTCONDITION FAILED];
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:45:43,349 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i <= arrSize;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+          loop variant arrSize - i;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:46:00,296 - INFO  - syntax Correct
+2026-05-17 11:46:19,264 - INFO  - Loop Invariant:
+2026-05-17 11:46:19,268 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:46:19,268 - INFO  - 
+2026-05-17 11:46:19,269 - INFO  - Assertion:
+2026-05-17 11:46:19,270 - INFO  - []
+2026-05-17 11:46:19,270 - INFO  - 
+2026-05-17 11:46:19,270 - INFO  - Assigns:
+2026-05-17 11:46:19,270 - INFO  - [True]
+2026-05-17 11:46:19,270 - INFO  - 
+2026-05-17 11:46:19,287 - INFO  - Post Condition:
+2026-05-17 11:46:19,287 - INFO  - [False]
+2026-05-17 11:46:19,287 - INFO  - 
+2026-05-17 11:46:19,295 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=6
+2026-05-17 11:46:19,302 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize) [POSTCONDITION FAILED];
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i <= arrSize;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+          loop variant arrSize - i;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:46:56,003 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures (cnt_odd_prefix(arr, arrSize) % 2 == 0) ==> \result == 0;
+  ensures (cnt_odd_prefix(arr, arrSize) % 2 == 1) ==> \result == last_odd_value(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i <= arrSize;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+          loop variant arrSize - i;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:47:12,221 - INFO  - syntax Correct
+2026-05-17 11:47:36,335 - INFO  - Loop Invariant:
+2026-05-17 11:47:36,338 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:47:36,338 - INFO  - 
+2026-05-17 11:47:36,338 - INFO  - Assertion:
+2026-05-17 11:47:36,338 - INFO  - []
+2026-05-17 11:47:36,338 - INFO  - 
+2026-05-17 11:47:36,338 - INFO  - Assigns:
+2026-05-17 11:47:36,338 - INFO  - [True]
+2026-05-17 11:47:36,338 - INFO  - 
+2026-05-17 11:47:36,346 - INFO  - Post Condition:
+2026-05-17 11:47:36,346 - INFO  - [False, True]
+2026-05-17 11:47:36,346 - INFO  - 
+2026-05-17 11:47:36,354 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=7
+2026-05-17 11:47:36,354 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures (cnt_odd_prefix(arr, arrSize) % 2 == 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (cnt_odd_prefix(arr, arrSize) % 2 == 1) ==> \result == last_odd_value(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i <= arrSize;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+          loop variant arrSize - i;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:47:44,902 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i <= arrSize;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+          loop variant arrSize - i;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:48:10,855 - INFO  - syntax Correct
+2026-05-17 11:48:24,590 - INFO  - Loop Invariant:
+2026-05-17 11:48:24,592 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:48:24,592 - INFO  - 
+2026-05-17 11:48:24,592 - INFO  - Assertion:
+2026-05-17 11:48:24,592 - INFO  - []
+2026-05-17 11:48:24,592 - INFO  - 
+2026-05-17 11:48:24,592 - INFO  - Assigns:
+2026-05-17 11:48:24,592 - INFO  - [True]
+2026-05-17 11:48:24,592 - INFO  - 
+2026-05-17 11:48:24,600 - INFO  - Post Condition:
+2026-05-17 11:48:24,603 - INFO  - [False]
+2026-05-17 11:48:24,603 - INFO  - 
+2026-05-17 11:48:24,606 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=6
+2026-05-17 11:48:24,614 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize) [POSTCONDITION FAILED];
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i <= arrSize;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+          loop variant arrSize - i;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:48:38,451 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures (cnt_odd_prefix(arr, arrSize) % 2 == 0) ==> \result == 0;
+  ensures (cnt_odd_prefix(arr, arrSize) % 2 == 1) ==> \result == last_odd_value(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i <= arrSize;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+          loop variant arrSize - i;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:48:55,214 - INFO  - syntax Correct
+2026-05-17 11:49:22,064 - INFO  - Loop Invariant:
+2026-05-17 11:49:22,076 - INFO  - [True, True, True, True, True, False, True]
+2026-05-17 11:49:22,076 - INFO  - 
+2026-05-17 11:49:22,076 - INFO  - Assertion:
+2026-05-17 11:49:22,076 - INFO  - []
+2026-05-17 11:49:22,076 - INFO  - 
+2026-05-17 11:49:22,076 - INFO  - Assigns:
+2026-05-17 11:49:22,076 - INFO  - [True]
+2026-05-17 11:49:22,076 - INFO  - 
+2026-05-17 11:49:22,076 - INFO  - Post Condition:
+2026-05-17 11:49:22,076 - INFO  - [False, True]
+2026-05-17 11:49:22,076 - INFO  - 
+2026-05-17 11:49:22,079 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-17 11:49:22,079 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 11:49:49,415 - INFO  - syntax Correct
+2026-05-17 11:50:03,312 - INFO  - Loop Invariant:
+2026-05-17 11:50:03,322 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:50:03,322 - INFO  - 
+2026-05-17 11:50:03,323 - INFO  - Assertion:
+2026-05-17 11:50:03,324 - INFO  - []
+2026-05-17 11:50:03,324 - INFO  - 
+2026-05-17 11:50:03,324 - INFO  - Assigns:
+2026-05-17 11:50:03,325 - INFO  - [True]
+2026-05-17 11:50:03,325 - INFO  - 
+2026-05-17 11:50:03,347 - INFO  - Post Condition:
+2026-05-17 11:50:03,347 - INFO  - [False, True]
+2026-05-17 11:50:03,347 - INFO  - 
+2026-05-17 11:50:03,391 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=7
+2026-05-17 11:50:03,400 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures (cnt_odd_prefix(arr, arrSize) % 2 == 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (cnt_odd_prefix(arr, arrSize) % 2 == 1) ==> \result == last_odd_value(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i <= arrSize;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+          loop variant arrSize - i;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:50:18,807 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures \result == scan_result(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i <= arrSize;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+          loop variant arrSize - i;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:50:34,179 - INFO  - syntax Correct
+2026-05-17 11:50:47,287 - INFO  - Loop Invariant:
+2026-05-17 11:50:47,290 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:50:47,290 - INFO  - 
+2026-05-17 11:50:47,290 - INFO  - Assertion:
+2026-05-17 11:50:47,290 - INFO  - []
+2026-05-17 11:50:47,290 - INFO  - 
+2026-05-17 11:50:47,290 - INFO  - Assigns:
+2026-05-17 11:50:47,290 - INFO  - [True]
+2026-05-17 11:50:47,290 - INFO  - 
+2026-05-17 11:50:47,292 - INFO  - Post Condition:
+2026-05-17 11:50:47,292 - INFO  - [False]
+2026-05-17 11:50:47,292 - INFO  - 
+2026-05-17 11:50:47,294 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=6
+2026-05-17 11:50:47,294 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 11:50:47,302 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9, 0.0), clauses=7)
+2026-05-17 11:51:03,216 - INFO  - syntax Correct
+2026-05-17 11:51:16,408 - INFO  - Loop Invariant:
+2026-05-17 11:51:16,410 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:51:16,411 - INFO  - 
+2026-05-17 11:51:16,411 - INFO  - Assertion:
+2026-05-17 11:51:16,411 - INFO  - []
+2026-05-17 11:51:16,411 - INFO  - 
+2026-05-17 11:51:16,411 - INFO  - Assigns:
+2026-05-17 11:51:16,411 - INFO  - [True]
+2026-05-17 11:51:16,411 - INFO  - 
+2026-05-17 11:51:16,419 - INFO  - Post Condition:
+2026-05-17 11:51:16,419 - INFO  - [False, True]
+2026-05-17 11:51:16,419 - INFO  - 
+2026-05-17 11:51:34,443 - INFO  - syntax Correct
+2026-05-17 11:51:37,815 - INFO  - Loop Invariant:
+2026-05-17 11:51:37,816 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:51:37,816 - INFO  - 
+2026-05-17 11:51:37,816 - INFO  - Assertion:
+2026-05-17 11:51:37,816 - INFO  - []
+2026-05-17 11:51:37,816 - INFO  - 
+2026-05-17 11:51:37,816 - INFO  - Assigns:
+2026-05-17 11:51:37,817 - INFO  - [True]
+2026-05-17 11:51:37,817 - INFO  - 
+2026-05-17 11:51:37,817 - INFO  - Post Condition:
+2026-05-17 11:51:37,817 - INFO  - [True]
+2026-05-17 11:51:37,817 - INFO  - 
+2026-05-17 11:51:37,837 - INFO  - 
+SPECIFICATION FOR foo148_c271
+2026-05-17 11:51:37,837 - INFO  - ==================================================
+
+2026-05-17 11:51:37,838 - INFO  - 
+QCP Specification for function foo148_c271:
+/*@
+With arr_l
+Require store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100
+Ensure Results(__return)
+*/
+2026-05-17 11:51:54,080 - INFO  - 
+VERIFICATION FOR foo148_c271
+2026-05-17 11:51:54,091 - INFO  - ==================================================
+
+2026-05-17 11:52:20,844 - INFO  - syntax Correct
+2026-05-17 11:52:24,389 - INFO  - Loop Invariant:
+2026-05-17 11:52:24,389 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 11:52:24,389 - INFO  - 
+2026-05-17 11:52:24,389 - INFO  - Assertion:
+2026-05-17 11:52:24,389 - INFO  - []
+2026-05-17 11:52:24,389 - INFO  - 
+2026-05-17 11:52:24,389 - INFO  - Assigns:
+2026-05-17 11:52:24,389 - INFO  - [True]
+2026-05-17 11:52:24,389 - INFO  - 
+2026-05-17 11:52:24,390 - INFO  - Post Condition:
+2026-05-17 11:52:24,390 - INFO  - [True]
+2026-05-17 11:52:24,390 - INFO  - 
+2026-05-17 11:52:24,390 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo148_c271
+2026-05-17 11:52:24,390 - INFO  - ==================================================
+2026-05-17 11:52:24,390 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo148_c271/20260517_113856_531600_89e9a7e4/output/foo148_c271.c
+2026-05-17 11:52:24,390 - INFO  - Output file content:
+
+/*@
+  logic integer cnt_odd_prefix(int* a, integer hi) =
+    hi <= 0 ? 0
+            : cnt_odd_prefix(a, hi - 1) + ((a[hi - 1] % 2 != 0) ? 1 : 0);
+*/
+
+/*@
+  logic integer last_odd_value(int* a, integer hi) =
+    hi <= 0 ? 0
+            : ((a[hi - 1] % 2 != 0) ? a[hi - 1] : last_odd_value(a, hi - 1));
+*/
+
+/*@ logic integer scan_result(int* a, integer hi) =
+      hi <= 0 ? 0
+              : ((a[hi - 1] % 2 != 0 && (cnt_odd_prefix(a, hi) % 2 != 0)) ? a[hi - 1]
+                                                                          : scan_result(a, hi - 1)); */
+/*@
+  requires \at(arr_len, Pre) > 0 && \at(arr_len, Pre) < 100;
+  requires 0 <= arrSize <= \at(arr_len, Pre);
+  requires arr != \null;
+  requires \valid(arr + (0 .. arrSize - 1));
+  assigns \nothing;
+  ensures (cnt_odd_prefix(arr, arrSize) % 2 == 1) ==> \result == last_odd_value(arr, arrSize);
+*/
+int foo148_c271(int * arr, int arr_len, int arrSize) {
+
+        int result = 0;
+        int count = 0;
+        
+        /*@
+          loop invariant 0 <= i <= arrSize;
+          loop invariant arrSize == \at(arrSize,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant \forall integer k; 0 <= k < arrSize ==> arr[k] == \at(arr[k],Pre);
+          loop invariant count == cnt_odd_prefix(arr, i);
+          loop invariant (count % 2 == 1) ==> (result == last_odd_value(arr, i));
+          loop assigns i, result, count;
+          loop variant arrSize - i;
+        */
+        for (int i = 0; i < arrSize; i++) {
+            if (arr[i] % 2 != 0) {
+                count++;
+                if (count % 2 != 0) {
+                    result = arr[i];
+                }
+            }
+        }
+            
+        return result;
+}
+
+2026-05-17 11:52:24,390 - INFO  - ==================================================
+2026-05-17 11:52:24,394 - INFO  - first_pass:
+2026-05-17 11:52:24,394 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 11:52:24,394 - INFO  - ==================================================
+2026-05-17 11:52:24,394 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 11:52:24,394 - INFO  - Total execution time: 807.56 seconds (13.46 minutes)
+2026-05-17 11:52:24,394 - INFO  - ==================================================
+2026-05-17 11:52:24,394 - INFO  - ==================================================
+2026-05-17 11:52:24,394 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 11:52:24,394 - INFO  - Total API calls: 14
+2026-05-17 11:52:24,394 - INFO  - Total prompt tokens (input): 186,199
+2026-05-17 11:52:24,394 - INFO  - Total completion tokens (output): 8,801
+2026-05-17 11:52:24,394 - INFO  - Total tokens: 195,000
+2026-05-17 11:52:24,394 - INFO  - Average prompt tokens per call: 13299.9
+2026-05-17 11:52:24,394 - INFO  - Average completion tokens per call: 628.6
+2026-05-17 11:52:24,395 - INFO  - Average total tokens per call: 13928.6
+2026-05-17 11:52:24,395 - INFO  - ==================================================

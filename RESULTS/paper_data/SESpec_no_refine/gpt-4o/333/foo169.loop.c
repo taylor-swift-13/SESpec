@@ -1,0 +1,33 @@
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : ((start % 10) * product_mod_10(start + 1, end)) % 10;
+*/
+
+/*@
+  requires \at(c,Pre) - \at(n,Pre) < 5 && \at(n,Pre) != \at(c,Pre);
+  requires result == 1 && c == \at(c,Pre) && n == \at(n,Pre);
+*/
+int foo169(int n, int c) {
+
+    int result = 1;
+    if (n == c) {
+        return 1;
+    } else if ((c - n) >= 5) {
+        return 0;
+    } else {
+
+        /*@
+          loop invariant n + 1 <= var <= c + 1;
+          loop invariant result == product_mod_10(n + 1, var - 1);
+          loop invariant c == \at(c,Pre);
+          loop invariant n == \at(n,Pre);
+          loop assigns var, result;
+        */
+        for (int var = n + 1; var < c + 1; var++) {
+            result = (result * (var % 10)) % 10;
+        }
+
+        return result % 10;
+    }
+}

@@ -104,11 +104,10 @@ class OpenAILLM(BaseChatModel):
             # `reasoning_effort=minimal` 大幅减少推理 token，让 gpt-5 系列
             # 在本流水线（7-17 次顺序调用）里实用。默认 `medium` 太慢。
             if str(self.model_name).startswith("gpt-5"):
-                kwargs["max_completion_tokens"] = 8000
-                if str(self.model_name).startswith("gpt-5.4"):
-                    kwargs["reasoning_effort"] = "low"
-                else:
-                    kwargs["reasoning_effort"] = "minimal"
+                effort = getattr(self.config, 'reasoning_effort', 'low') or 'low'
+                # high effort produces a lot more reasoning tokens; scale the budget.
+                kwargs["max_completion_tokens"] = 24000 if effort == "high" else 8000
+                kwargs["reasoning_effort"] = effort
             else:
                 kwargs["temperature"] = self.temperature
                 kwargs["top_p"] = self.top_p

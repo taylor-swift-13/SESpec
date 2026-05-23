@@ -1,0 +1,1009 @@
+2026-05-15 02:15:39,763 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo217/20260515_021539_845523_a168b7ca
+2026-05-15 02:15:39,764 - INFO  - 
+🚀 Starting generation of function: foo217
+2026-05-15 02:15:39,764 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 02:15:39,764 - INFO  - ==================================================
+
+2026-05-15 02:15:40,433 - INFO  - [auto only_loop] False — foo217 returns 'int'
+2026-05-15 02:15:40,433 - INFO  - Initial pending functions: ['foo217']
+2026-05-15 02:15:40,433 - INFO  - 
+GENERATE ANNOTATION FOR foo217
+2026-05-15 02:15:40,433 - INFO  - ==================================================
+
+2026-05-15 02:15:40,433 - INFO  - Function foo217 has been initialized
+2026-05-15 02:15:40,433 - INFO  - Starting to generate annotation code for foo217
+2026-05-15 02:15:40,480 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo217
+2026-05-15 02:15:40,480 - INFO  - ==================================================
+
+2026-05-15 02:15:40,546 - INFO  - Variable Maps:[{'sum': 'num@pre', 'result': '0', 'even': '0', 'num': 'num@pre'}]
+2026-05-15 02:15:40,546 - INFO  - Path conditions: [None]
+2026-05-15 02:15:40,546 - INFO  - Pre condition: (sum == num@pre) * (result == 0) * (even == 0) * (num == num@pre)
+2026-05-15 02:15:40,546 - INFO  - Loop Condition: sum > 0
+2026-05-15 02:15:40,547 - INFO  - Array Names: []
+2026-05-15 02:15:40,547 - INFO  - Updated Loop Conditions: ['num@pre > 0']
+2026-05-15 02:15:40,548 - INFO  - Global Unchanged Variables: ['sum', 'result', 'num']
+2026-05-15 02:15:40,548 - INFO  - Non Inductive Variables: []
+2026-05-15 02:15:40,548 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 02:15:40,549 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 02:15:40,551 - INFO  - examples category: numeric
+2026-05-15 02:15:40,551 - INFO  - examples:
+2026-05-15 02:15:40,551 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 02:15:54,784 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 02:16:25,746 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-15 02:16:39,683 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:16:54,330 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:16:54,331 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:17:19,722 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-15 02:17:56,192 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=6
+2026-05-15 02:17:56,193 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:18:18,356 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-15 02:18:33,095 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:18:33,096 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:18:55,949 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-15 02:19:30,462 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+2026-05-15 02:19:39,970 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8, 0.0), clauses=5)
+2026-05-15 02:20:07,867 - INFO  - ACSL format loop invariant
+2026-05-15 02:20:07,869 - INFO  - /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+2026-05-15 02:20:07,872 - INFO  - QCP format loop invariant
+2026-05-15 02:20:07,872 - INFO  - /*@ Inv
+    (0 <= even) &&
+(sum == (num@pre >> even)) &&
+(result == 0 => mask_odd_bits(even) == 0) &&
+(num == num@pre
+          loop assigns result, sum, even)
+    */
+    
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+2026-05-15 02:20:10,851 - INFO  - CORRECT INVARIANT
+2026-05-15 02:20:10,851 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo217
+2026-05-15 02:20:10,851 - INFO  - ==================================================
+
+2026-05-15 02:20:10,881 - INFO  - Starting to generate ACSL specification for foo217
+2026-05-15 02:20:24,068 - INFO  - syntax Correct
+2026-05-15 02:20:25,113 - INFO  - Loop Invariant:
+2026-05-15 02:20:25,113 - INFO  - [True, True, True, True]
+2026-05-15 02:20:25,113 - INFO  - 
+2026-05-15 02:20:25,113 - INFO  - Assertion:
+2026-05-15 02:20:25,113 - INFO  - []
+2026-05-15 02:20:25,113 - INFO  - 
+2026-05-15 02:20:25,113 - INFO  - Assigns:
+2026-05-15 02:20:25,113 - INFO  - []
+2026-05-15 02:20:25,113 - INFO  - 
+2026-05-15 02:20:25,113 - INFO  - Post Condition:
+2026-05-15 02:20:25,113 - INFO  - []
+2026-05-15 02:20:25,114 - INFO  - 
+2026-05-15 02:20:25,114 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:25,114 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:20:37,144 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:20:38,100 - INFO  - syntax Correct
+2026-05-15 02:20:39,233 - INFO  - Loop Invariant:
+2026-05-15 02:20:39,234 - INFO  - [True, True, True, True]
+2026-05-15 02:20:39,234 - INFO  - 
+2026-05-15 02:20:39,234 - INFO  - Assertion:
+2026-05-15 02:20:39,234 - INFO  - []
+2026-05-15 02:20:39,234 - INFO  - 
+2026-05-15 02:20:39,234 - INFO  - Assigns:
+2026-05-15 02:20:39,234 - INFO  - []
+2026-05-15 02:20:39,235 - INFO  - 
+2026-05-15 02:20:39,235 - INFO  - Post Condition:
+2026-05-15 02:20:39,235 - INFO  - []
+2026-05-15 02:20:39,235 - INFO  - 
+2026-05-15 02:20:39,235 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:39,236 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:20:51,337 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:20:52,144 - INFO  - syntax Correct
+2026-05-15 02:20:53,126 - INFO  - Loop Invariant:
+2026-05-15 02:20:53,126 - INFO  - [True, True, True, True]
+2026-05-15 02:20:53,126 - INFO  - 
+2026-05-15 02:20:53,127 - INFO  - Assertion:
+2026-05-15 02:20:53,127 - INFO  - []
+2026-05-15 02:20:53,127 - INFO  - 
+2026-05-15 02:20:53,127 - INFO  - Assigns:
+2026-05-15 02:20:53,128 - INFO  - []
+2026-05-15 02:20:53,128 - INFO  - 
+2026-05-15 02:20:53,128 - INFO  - Post Condition:
+2026-05-15 02:20:53,128 - INFO  - []
+2026-05-15 02:20:53,128 - INFO  - 
+2026-05-15 02:20:53,128 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:53,129 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:20:54,182 - INFO  - syntax Correct
+2026-05-15 02:20:55,154 - INFO  - Loop Invariant:
+2026-05-15 02:20:55,155 - INFO  - [True, True, True, True]
+2026-05-15 02:20:55,155 - INFO  - 
+2026-05-15 02:20:55,155 - INFO  - Assertion:
+2026-05-15 02:20:55,155 - INFO  - []
+2026-05-15 02:20:55,155 - INFO  - 
+2026-05-15 02:20:55,155 - INFO  - Assigns:
+2026-05-15 02:20:55,155 - INFO  - []
+2026-05-15 02:20:55,155 - INFO  - 
+2026-05-15 02:20:55,155 - INFO  - Post Condition:
+2026-05-15 02:20:55,155 - INFO  - []
+2026-05-15 02:20:55,156 - INFO  - 
+2026-05-15 02:20:55,156 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:55,156 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:21:14,445 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  requires 0 <= num;
+  assigns \nothing;
+  ensures \result == (num | (
+        ( \sum integer i; 0 <= i && i < 32 && ((\at(num,Pre) >> i) & 1) == 1 && (i % 2 == 1) ? (1 << i) : 0 )
+  ));
+*/
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> (\sum integer j; 0 <= j && j < even && (j % 2 == 1 && (((\at(num,Pre) >> j) & 1) == 1) ? (1 << j) : 0) == 0);
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:21:14,799 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo217/20260515_021539_845523_a168b7ca/output/foo217.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo217/20260515_021539_845523_a168b7ca/output/foo217.c:25: Warning: 
+  unexpected token 'integer'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo217/20260515_021539_845523_a168b7ca/output/foo217.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:21:14,799 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 02:21:14,799 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:21:15,794 - INFO  - syntax Correct
+2026-05-15 02:21:16,955 - INFO  - Loop Invariant:
+2026-05-15 02:21:16,955 - INFO  - [True, True, True, True]
+2026-05-15 02:21:16,955 - INFO  - 
+2026-05-15 02:21:16,955 - INFO  - Assertion:
+2026-05-15 02:21:16,955 - INFO  - []
+2026-05-15 02:21:16,956 - INFO  - 
+2026-05-15 02:21:16,956 - INFO  - Assigns:
+2026-05-15 02:21:16,956 - INFO  - []
+2026-05-15 02:21:16,956 - INFO  - 
+2026-05-15 02:21:16,956 - INFO  - Post Condition:
+2026-05-15 02:21:16,956 - INFO  - []
+2026-05-15 02:21:16,956 - INFO  - 
+2026-05-15 02:21:16,956 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=0
+2026-05-15 02:21:16,957 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:21:29,816 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:21:30,520 - INFO  - syntax Correct
+2026-05-15 02:21:31,295 - INFO  - Loop Invariant:
+2026-05-15 02:21:31,295 - INFO  - [True, True, True, True]
+2026-05-15 02:21:31,295 - INFO  - 
+2026-05-15 02:21:31,295 - INFO  - Assertion:
+2026-05-15 02:21:31,295 - INFO  - []
+2026-05-15 02:21:31,295 - INFO  - 
+2026-05-15 02:21:31,295 - INFO  - Assigns:
+2026-05-15 02:21:31,295 - INFO  - []
+2026-05-15 02:21:31,295 - INFO  - 
+2026-05-15 02:21:31,295 - INFO  - Post Condition:
+2026-05-15 02:21:31,295 - INFO  - []
+2026-05-15 02:21:31,295 - INFO  - 
+2026-05-15 02:21:31,295 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=0
+2026-05-15 02:21:31,296 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:21:32,028 - INFO  - syntax Correct
+2026-05-15 02:21:32,875 - INFO  - Loop Invariant:
+2026-05-15 02:21:32,875 - INFO  - [True, True, True, True]
+2026-05-15 02:21:32,875 - INFO  - 
+2026-05-15 02:21:32,875 - INFO  - Assertion:
+2026-05-15 02:21:32,875 - INFO  - []
+2026-05-15 02:21:32,875 - INFO  - 
+2026-05-15 02:21:32,876 - INFO  - Assigns:
+2026-05-15 02:21:32,876 - INFO  - []
+2026-05-15 02:21:32,876 - INFO  - 
+2026-05-15 02:21:32,876 - INFO  - Post Condition:
+2026-05-15 02:21:32,876 - INFO  - []
+2026-05-15 02:21:32,876 - INFO  - 
+2026-05-15 02:21:32,876 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=0
+2026-05-15 02:21:32,876 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:21:45,280 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:21:45,995 - INFO  - syntax Correct
+2026-05-15 02:21:46,795 - INFO  - Loop Invariant:
+2026-05-15 02:21:46,796 - INFO  - [True, True, True, True]
+2026-05-15 02:21:46,796 - INFO  - 
+2026-05-15 02:21:46,796 - INFO  - Assertion:
+2026-05-15 02:21:46,796 - INFO  - []
+2026-05-15 02:21:46,796 - INFO  - 
+2026-05-15 02:21:46,796 - INFO  - Assigns:
+2026-05-15 02:21:46,796 - INFO  - []
+2026-05-15 02:21:46,796 - INFO  - 
+2026-05-15 02:21:46,796 - INFO  - Post Condition:
+2026-05-15 02:21:46,797 - INFO  - []
+2026-05-15 02:21:46,797 - INFO  - 
+2026-05-15 02:21:46,797 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=0
+2026-05-15 02:21:46,797 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:21:47,498 - INFO  - syntax Correct
+2026-05-15 02:21:48,307 - INFO  - Loop Invariant:
+2026-05-15 02:21:48,307 - INFO  - [True, True, True, True]
+2026-05-15 02:21:48,307 - INFO  - 
+2026-05-15 02:21:48,307 - INFO  - Assertion:
+2026-05-15 02:21:48,307 - INFO  - []
+2026-05-15 02:21:48,307 - INFO  - 
+2026-05-15 02:21:48,307 - INFO  - Assigns:
+2026-05-15 02:21:48,307 - INFO  - []
+2026-05-15 02:21:48,308 - INFO  - 
+2026-05-15 02:21:48,308 - INFO  - Post Condition:
+2026-05-15 02:21:48,308 - INFO  - []
+2026-05-15 02:21:48,308 - INFO  - 
+2026-05-15 02:21:48,308 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=0
+2026-05-15 02:21:48,308 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:22:01,929 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:22:01,931 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 1.0, 0.0), clauses=0)
+2026-05-15 02:22:02,728 - INFO  - syntax Correct
+2026-05-15 02:22:03,692 - INFO  - Loop Invariant:
+2026-05-15 02:22:03,692 - INFO  - [True, True, True, True]
+2026-05-15 02:22:03,692 - INFO  - 
+2026-05-15 02:22:03,692 - INFO  - Assertion:
+2026-05-15 02:22:03,692 - INFO  - []
+2026-05-15 02:22:03,692 - INFO  - 
+2026-05-15 02:22:03,693 - INFO  - Assigns:
+2026-05-15 02:22:03,693 - INFO  - []
+2026-05-15 02:22:03,693 - INFO  - 
+2026-05-15 02:22:03,693 - INFO  - Post Condition:
+2026-05-15 02:22:03,693 - INFO  - []
+2026-05-15 02:22:03,693 - INFO  - 
+2026-05-15 02:22:03,694 - INFO  - 
+SPECIFICATION FOR foo217
+2026-05-15 02:22:03,694 - INFO  - ==================================================
+
+2026-05-15 02:22:03,694 - INFO  - 
+QCP Specification for function foo217:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-15 02:22:03,794 - INFO  - 
+VERIFICATION FOR foo217
+2026-05-15 02:22:03,798 - INFO  - ==================================================
+
+2026-05-15 02:22:03,798 - INFO  - TRY TIME: 0
+2026-05-15 02:22:04,646 - INFO  - syntax Correct
+2026-05-15 02:22:05,568 - INFO  - Loop Invariant:
+2026-05-15 02:22:05,568 - INFO  - [True, True, True, True]
+2026-05-15 02:22:05,568 - INFO  - 
+2026-05-15 02:22:05,568 - INFO  - Assertion:
+2026-05-15 02:22:05,568 - INFO  - []
+2026-05-15 02:22:05,568 - INFO  - 
+2026-05-15 02:22:05,568 - INFO  - Assigns:
+2026-05-15 02:22:05,568 - INFO  - []
+2026-05-15 02:22:05,568 - INFO  - 
+2026-05-15 02:22:05,568 - INFO  - Post Condition:
+2026-05-15 02:22:05,568 - INFO  - []
+2026-05-15 02:22:05,568 - INFO  - 
+2026-05-15 02:22:05,569 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo217
+2026-05-15 02:22:05,569 - INFO  - ==================================================
+2026-05-15 02:22:05,569 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo217/20260515_021539_845523_a168b7ca/output/foo217.c
+2026-05-15 02:22:05,569 - INFO  - Output file content:
+
+/*@ 
+  logic integer mask_odd_bits(integer e) =
+    e <= 0 ? 0 :
+    ( (e-1) % 2 == 1 ? (1 << (e-1)) : 0 ) + mask_odd_bits(e-1);
+*/
+
+/*@
+  predicate result_eq_masked(integer orig, integer res, integer e) =
+    res == (orig & mask_odd_bits(e));
+*/
+
+int foo217(int num) {
+
+		int even = 0;
+		int result = 0;
+		int sum = num;
+		
+            
+        /*@
+          loop invariant 0 <= even;
+          loop invariant sum == (\at(num,Pre) >> even);
+          loop invariant result == 0 ==> mask_odd_bits(even) == 0;
+          loop invariant num == \at(num,Pre);
+          loop assigns result, sum, even;
+        */
+            while (sum > 0) {
+			if (even % 2 == 1) {
+				result |= (1 << even);
+			}
+			even++;
+			sum >>= 1;
+		}
+            
+		return (num | result);
+}
+
+2026-05-15 02:22:05,569 - INFO  - ==================================================
+2026-05-15 02:22:05,569 - INFO  - first_pass:
+2026-05-15 02:22:05,569 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 02:22:05,569 - INFO  - ==================================================
+2026-05-15 02:22:05,570 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 02:22:05,570 - INFO  - Total execution time: 385.81 seconds (6.43 minutes)
+2026-05-15 02:22:05,570 - INFO  - ==================================================
+2026-05-15 02:22:05,570 - INFO  - ==================================================
+2026-05-15 02:22:05,570 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 02:22:05,570 - INFO  - Total API calls: 6
+2026-05-15 02:22:05,570 - INFO  - Total prompt tokens (input): 40,257
+2026-05-15 02:22:05,570 - INFO  - Total completion tokens (output): 4,447
+2026-05-15 02:22:05,570 - INFO  - Total tokens: 44,704
+2026-05-15 02:22:05,570 - INFO  - Average prompt tokens per call: 6709.5
+2026-05-15 02:22:05,570 - INFO  - Average completion tokens per call: 741.2
+2026-05-15 02:22:05,570 - INFO  - Average total tokens per call: 7450.7
+2026-05-15 02:22:05,571 - INFO  - ==================================================

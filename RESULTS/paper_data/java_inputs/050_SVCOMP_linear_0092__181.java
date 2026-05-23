@@ -1,0 +1,23 @@
+class SVCOMP_linear_0092__181 {
+static void foo181(int i, int j, int k) {
+
+int n;
+int b;
+
+n = 0;
+b = 0;
+
+while(n < (2 * k)){
+n = n + 1;
+if(b == 1){
+b = 0;
+i = i + 1;
+}
+else{
+b = 1;
+j = j + 1;
+}
+}
+
+}
+}

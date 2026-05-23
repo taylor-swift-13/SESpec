@@ -1,0 +1,503 @@
+2026-05-18 21:49:49,465 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c
+2026-05-18 21:49:49,466 - INFO  - 
+🚀 Starting generation of function: foo136
+2026-05-18 21:49:49,466 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 21:49:49,466 - INFO  - TRY TIME: 0
+2026-05-18 21:49:49,466 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 21:49:49,466 - INFO  - ==================================================
+
+2026-05-18 21:49:51,234 - INFO  - [auto only_loop] False — foo136 returns 'int'
+2026-05-18 21:49:51,234 - INFO  - Initial pending functions: ['foo136']
+2026-05-18 21:49:51,234 - INFO  - 
+GENERATE ANNOTATION FOR foo136
+2026-05-18 21:49:51,234 - INFO  - ==================================================
+
+2026-05-18 21:49:51,234 - INFO  - Function foo136 has been initialized
+2026-05-18 21:49:51,234 - INFO  - Starting to generate annotation code for foo136
+2026-05-18 21:49:51,292 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo136
+2026-05-18 21:49:51,292 - INFO  - ==================================================
+
+2026-05-18 21:49:51,378 - INFO  - Variable Maps:[{'ans': '-1', 'r': 'x@pre', 'l': '0', 'x': 'x@pre'}]
+2026-05-18 21:49:51,378 - INFO  - Path conditions: [None]
+2026-05-18 21:49:51,378 - INFO  - Pre condition: (ans == -1) * (r == x@pre) * (l == 0) * (x == x@pre)
+2026-05-18 21:49:51,378 - INFO  - Loop Condition: l <= r
+2026-05-18 21:49:51,379 - INFO  - Array Names: []
+2026-05-18 21:49:51,380 - INFO  - Updated Loop Conditions: ['0 <= x@pre']
+2026-05-18 21:49:51,380 - INFO  - Global Unchanged Variables: ['x']
+2026-05-18 21:49:51,381 - INFO  - Non Inductive Variables: ['ans', 'l', 'r']
+2026-05-18 21:49:51,381 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-18 21:49:51,383 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 21:49:51,385 - INFO  - examples category: numeric
+2026-05-18 21:49:51,385 - INFO  - examples:
+2026-05-18 21:49:51,385 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-18 21:50:00,194 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 21:50:00,196 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:50:16,458 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 21:50:16,460 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:50:29,001 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 21:50:29,001 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-18 21:50:29,002 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=6)
+2026-05-18 21:50:29,634 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 21:50:38,940 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 21:50:38,942 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:50:48,298 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 21:50:48,300 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mid' (assigns) on line 21
+2026-05-18 21:50:48,605 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:50:59,605 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 21:50:59,605 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-18 21:50:59,606 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=6)
+2026-05-18 21:51:00,123 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 21:51:06,775 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:51:06,776 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:51:14,188 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:51:14,190 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:51:22,989 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:51:22,989 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-18 21:51:22,990 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-18 21:51:23,610 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 21:51:23,941 - INFO  - ACSL format loop invariant
+2026-05-18 21:51:23,941 - INFO  - /*@
+          loop invariant (0 <= \at(x,Pre)) ==> 0 <= l && l <= r + 1 && r <= \at(x,Pre);
+          loop invariant (0 <= \at(x,Pre)) ==> (ans == -1 || (0 <= ans && ans * ans <= \at(x,Pre)));
+          loop invariant (0 <= \at(x,Pre)) ==> (ans == -1 || ans <= r);
+          loop invariant (!(0 <= \at(x,Pre))) ==> ((ans == -1) && (r == \at(x,Pre)) && (l == 0) && (x == \at(x,Pre)));
+          loop invariant x == \at(x,Pre);
+          loop assigns mid, ans, l, r;
+            */
+            while (l <= r) {
+            int mid = l + (r - l) / 2;
+            if ((long) mid * mid <= x) {
+                ans = mid;
+                l = mid + 1;
+            } else {
+                r = mid - 1;
+            }
+        }
+2026-05-18 21:51:23,942 - INFO  - QCP format loop invariant
+2026-05-18 21:51:23,942 - INFO  - /*@ Inv
+    ((0 <= x@pre) => 0 <= l && l <= r + 1 && r <= x@pre) &&
+((0 <= x@pre) => (ans == -1 || (0 <= ans && ans * ans <= x@pre))) &&
+((0 <= x@pre) => (ans == -1 || ans <= r)) &&
+((!(0 <= x@pre)) => ((ans == -1) && (r == x@pre) && (l == 0) && (x == x@pre))) &&
+(x == x@pre
+          loop assigns mid, ans, l, r)
+    */
+    
+            while (l <= r) {
+            int mid = l + (r - l) / 2;
+            if ((long) mid * mid <= x) {
+                ans = mid;
+                l = mid + 1;
+            } else {
+                r = mid - 1;
+            }
+        }
+2026-05-18 21:51:24,260 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo136
+2026-05-18 21:51:24,260 - INFO  - ==================================================
+
+2026-05-18 21:51:24,303 - INFO  - Starting to generate complete annotation code for foo136
+2026-05-18 21:51:24,311 - INFO  - Starting to generate ACSL specification for foo136
+2026-05-18 21:51:35,761 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c":40: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c:3: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:51:35,762 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=3
+2026-05-18 21:51:35,763 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:51:46,474 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c":40: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c:3: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:51:46,474 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=3
+2026-05-18 21:51:46,475 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:51:55,627 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c":40: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c:3: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:51:55,628 - INFO  - [spec-gen] refine 3/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=3
+2026-05-18 21:51:55,628 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 21:51:55,628 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=3)
+2026-05-18 21:51:56,019 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c":40: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c:3: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:51:56,021 - INFO  - 
+SPECIFICATION FOR foo136
+2026-05-18 21:51:56,021 - INFO  - ==================================================
+
+2026-05-18 21:51:56,022 - INFO  - 
+QCP Specification for function foo136:
+/*@
+
+Require emp
+Ensure (0 > x && __return == -1)
+*/
+2026-05-18 21:51:56,274 - INFO  - 
+VERIFICATION FOR foo136
+2026-05-18 21:51:56,275 - INFO  - ==================================================
+
+2026-05-18 21:51:56,609 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c":40: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c:3: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:52:06,373 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c":34: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c:3: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:52:06,373 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=3
+2026-05-18 21:52:06,375 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:52:25,484 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c":34: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c:3: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:52:25,484 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=3
+2026-05-18 21:52:25,485 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:52:34,155 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c":34: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c:3: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:52:34,156 - INFO  - [spec-gen] refine 3/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=3
+2026-05-18 21:52:34,156 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 21:52:34,157 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=3)
+2026-05-18 21:52:34,538 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c":34: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c:3: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:52:34,993 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c":34: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c:3: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo136/20260518_214949_2889007_e78d345c/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:52:34,993 - INFO  - first_pass:
+2026-05-18 21:52:34,993 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-18 21:52:34,993 - INFO  - ==================================================
+2026-05-18 21:52:34,993 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 21:52:34,994 - INFO  - Total execution time: 165.53 seconds (2.76 minutes)
+2026-05-18 21:52:34,994 - INFO  - ==================================================
+2026-05-18 21:52:34,994 - INFO  - ==================================================
+2026-05-18 21:52:34,994 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 21:52:34,994 - INFO  - Total API calls: 15
+2026-05-18 21:52:34,994 - INFO  - Total prompt tokens (input): 112,771
+2026-05-18 21:52:34,994 - INFO  - Total completion tokens (output): 10,097
+2026-05-18 21:52:34,994 - INFO  - Total tokens: 122,868
+2026-05-18 21:52:34,994 - INFO  - Average prompt tokens per call: 7518.1
+2026-05-18 21:52:34,994 - INFO  - Average completion tokens per call: 673.1
+2026-05-18 21:52:34,994 - INFO  - Average total tokens per call: 8191.2
+2026-05-18 21:52:34,997 - INFO  - ==================================================

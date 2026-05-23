@@ -1,0 +1,2046 @@
+2026-05-17 16:53:56,201 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae
+2026-05-17 16:53:56,202 - INFO  - 
+🚀 Starting generation of function: foo389
+2026-05-17 16:53:56,202 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 16:53:56,202 - INFO  - TRY TIME: 0
+2026-05-17 16:53:56,202 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 16:53:56,202 - INFO  - ==================================================
+
+2026-05-17 16:53:57,185 - INFO  - [auto only_loop] False — foo389 returns 'int'
+2026-05-17 16:53:57,186 - INFO  - Initial pending functions: ['foo389']
+2026-05-17 16:53:57,186 - INFO  - 
+GENERATE ANNOTATION FOR foo389
+2026-05-17 16:53:57,186 - INFO  - ==================================================
+
+2026-05-17 16:53:57,186 - INFO  - Function foo389 has been initialized
+2026-05-17 16:53:57,186 - INFO  - Starting to generate annotation code for foo389
+2026-05-17 16:53:57,231 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo389
+2026-05-17 16:53:57,231 - INFO  - ==================================================
+
+2026-05-17 16:53:57,308 - INFO  - Variable Maps:[{'res': '0', 'n': 'n@pre', 'q': 'q@pre', 'p': 'p@pre'}]
+2026-05-17 16:53:57,308 - INFO  - Path conditions: [None]
+2026-05-17 16:53:57,308 - INFO  - Pre condition: (res == 0) * (n == n@pre) * (q == q@pre) * (p == p@pre)
+2026-05-17 16:53:57,308 - INFO  - Loop Condition: n > 0
+2026-05-17 16:53:57,309 - INFO  - Array Names: []
+2026-05-17 16:53:57,309 - INFO  - Updated Loop Conditions: ['n@pre > 0']
+2026-05-17 16:53:57,310 - INFO  - Global Unchanged Variables: ['q']
+2026-05-17 16:53:57,310 - INFO  - Non Inductive Variables: ['res']
+2026-05-17 16:53:57,310 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 16:53:57,311 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 16:53:57,313 - INFO  - examples category: numeric
+2026-05-17 16:53:57,313 - INFO  - examples:
+2026-05-17 16:53:57,313 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-17 16:54:40,199 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 16:54:52,834 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 16:54:52,838 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 16:55:21,034 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-17 16:55:21,035 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 16:55:43,346 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 16:56:21,017 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-17 16:56:21,019 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 16:56:44,008 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 16:56:55,423 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 16:56:55,424 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 16:57:17,568 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 16:57:53,613 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-17 16:57:53,613 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 16:58:15,790 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 16:58:28,171 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6666666666666666, 0.0), clauses=6)
+2026-05-17 16:58:50,636 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 16:59:12,319 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 16:59:42,251 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-17 16:59:55,887 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 16:59:55,887 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 17:00:17,340 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 17:00:31,096 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-17 17:00:31,097 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 17:00:52,742 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 17:01:14,667 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 17:01:14,667 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 17:01:36,123 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 17:02:08,549 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-17 17:02:08,549 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 17:02:30,054 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 17:02:46,315 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6, 0.0), clauses=5)
+2026-05-17 17:03:08,252 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 17:03:29,793 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-17 17:03:58,928 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-17 17:04:14,518 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 17:04:14,519 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 17:04:36,146 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-17 17:05:07,641 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=2
+2026-05-17 17:05:07,641 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 17:05:29,154 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-17 17:06:01,298 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=2
+2026-05-17 17:06:01,298 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 17:06:22,805 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-17 17:06:54,310 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-17 17:06:54,310 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 17:07:15,950 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-17 17:07:26,268 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.5, 0.0), clauses=4)
+2026-05-17 17:07:48,209 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 17:07:48,406 - INFO  - ACSL format loop invariant
+2026-05-17 17:07:48,406 - INFO  - /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant (\at(n,Pre) == n) ==> (p == \at(p,Pre) && res == 0);
+          n == \at(n,Pre) - k &&
+          p == (\at(p,Pre) * power10(k)) % \at(q,Pre) &&
+          res == ((\at(p,Pre) * power10(k)) / \at(q,Pre)));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+2026-05-17 17:07:48,407 - INFO  - QCP format loop invariant
+2026-05-17 17:07:48,407 - INFO  - /*@ Inv
+    (q == q@pre) &&
+((n@pre == n) => (p == p@pre && res == 0)
+          n == n@pre - k &&
+          p == (p@pre * power10(k)) % q@pre &&
+          res == ((p@pre * power10(k)) / q@pre))
+      loop assigns n, p, res)
+    */
+    
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+2026-05-17 17:07:48,594 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo389
+2026-05-17 17:07:48,595 - INFO  - ==================================================
+
+2026-05-17 17:07:48,613 - INFO  - Starting to generate complete annotation code for foo389
+2026-05-17 17:07:48,619 - INFO  - Starting to generate ACSL specification for foo389
+2026-05-17 17:07:55,620 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c:32: Warning: 
+  unexpected token 'n'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 17:07:55,621 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 17:08:18,335 - INFO  - syntax Correct
+2026-05-17 17:08:29,093 - INFO  - Loop Invariant:
+2026-05-17 17:08:29,094 - INFO  - [True, False, False]
+2026-05-17 17:08:29,094 - INFO  - 
+2026-05-17 17:08:29,094 - INFO  - Assertion:
+2026-05-17 17:08:29,094 - INFO  - []
+2026-05-17 17:08:29,094 - INFO  - 
+2026-05-17 17:08:29,094 - INFO  - Assigns:
+2026-05-17 17:08:29,094 - INFO  - [True]
+2026-05-17 17:08:29,094 - INFO  - 
+2026-05-17 17:08:29,094 - INFO  - Post Condition:
+2026-05-17 17:08:29,094 - INFO  - [True, True]
+2026-05-17 17:08:29,094 - INFO  - 
+2026-05-17 17:08:29,094 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=4
+2026-05-17 17:08:29,094 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \at(n,Pre) <= 0 ==> \result == 0;
+  ensures \at(n,Pre) > 0 ==>
+            (\exists integer k;
+                k == \at(n,Pre) &&
+                \result == ((\at(p,Pre) * power10(k)) / \at(q,Pre))
+            );
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant n >= 0;
+      loop invariant (\exists integer k;
+                        0 <= k <= \at(n,Pre) &&
+                        n == \at(n,Pre) - k &&
+                        p == (\at(p,Pre) * power10(k)) % \at(q,Pre) &&
+                        res == (\at(p,Pre) * power10(k)) / \at(q,Pre)
+                     );
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:08:41,447 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires n >= 0;
+  assigns \nothing;
+  ensures \at(n,Pre) <= 0 ==> \result == 0;
+  ensures \at(n,Pre) > 0 ==>
+            (\exists integer k;
+                k == \at(n,Pre) &&
+                \result == ((\at(p,Pre) * power10(k)) / \at(q,Pre))
+            );
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant n >= 0;
+      /* Define k as the number of iterations already performed: k = \at(n,Pre) - n */
+      loop invariant 0 <= (\at(n,Pre) - n) && (\at(n,Pre) - n) <= \at(n,Pre);
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == (\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre);
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:08:41,632 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c":45: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c:30: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 17:08:41,632 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 17:09:00,070 - INFO  - syntax Correct
+2026-05-17 17:09:10,980 - INFO  - Loop Invariant:
+2026-05-17 17:09:10,980 - INFO  - [True, True, True, False, False]
+2026-05-17 17:09:10,980 - INFO  - 
+2026-05-17 17:09:10,980 - INFO  - Assertion:
+2026-05-17 17:09:10,981 - INFO  - []
+2026-05-17 17:09:10,981 - INFO  - 
+2026-05-17 17:09:10,981 - INFO  - Assigns:
+2026-05-17 17:09:10,981 - INFO  - [True]
+2026-05-17 17:09:10,981 - INFO  - 
+2026-05-17 17:09:10,981 - INFO  - Post Condition:
+2026-05-17 17:09:10,981 - INFO  - [True, True]
+2026-05-17 17:09:10,981 - INFO  - 
+2026-05-17 17:09:10,981 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=5
+2026-05-17 17:09:10,981 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires n >= 0;
+  assigns \nothing;
+  ensures \at(n,Pre) <= 0 ==> \result == 0;
+  ensures \at(n,Pre) > 0 ==>
+            (\exists integer k;
+                k == \at(n,Pre) &&
+                \result == ((\at(p,Pre) * power10(k)) / \at(q,Pre))
+            );
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant n >= 0;
+      loop invariant 0 <= (\at(n,Pre) - n) && (\at(n,Pre) - n) <= \at(n,Pre);
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == (\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre);
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:09:22,530 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires n >= 0;
+  requires q != 0;
+  assigns \nothing;
+  ensures \at(n,Pre) <= 0 ==> \result == 0;
+  ensures \at(n,Pre) > 0 ==>
+            (\exists integer k;
+                k == \at(n,Pre) &&
+                \result == ((\at(p,Pre) * power10(k)) / \at(q,Pre))
+            );
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant n >= 0;
+      /* Arithmetic decomposition: there exists k = number of iterations done */
+      loop invariant (\exists integer k;
+                        0 <= k <= \at(n,Pre) &&
+                        n == \at(n,Pre) - k &&
+                        0 <= p < \at(q,Pre) &&
+                        (\at(p,Pre) * power10(k)) == res * \at(q,Pre) + p
+                    );
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:09:22,705 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c":49: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c:31: Warning: 
+  lexical error, unexpected block-comment opening
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 17:09:22,706 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 17:09:39,993 - INFO  - syntax Correct
+2026-05-17 17:09:50,767 - INFO  - Loop Invariant:
+2026-05-17 17:09:50,767 - INFO  - [True, True, False]
+2026-05-17 17:09:50,767 - INFO  - 
+2026-05-17 17:09:50,767 - INFO  - Assertion:
+2026-05-17 17:09:50,767 - INFO  - []
+2026-05-17 17:09:50,767 - INFO  - 
+2026-05-17 17:09:50,767 - INFO  - Assigns:
+2026-05-17 17:09:50,767 - INFO  - [True]
+2026-05-17 17:09:50,767 - INFO  - 
+2026-05-17 17:09:50,767 - INFO  - Post Condition:
+2026-05-17 17:09:50,768 - INFO  - [True, True]
+2026-05-17 17:09:50,768 - INFO  - 
+2026-05-17 17:09:50,768 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 17:09:50,768 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires n >= 0;
+  requires q != 0;
+  assigns \nothing;
+  ensures \at(n,Pre) <= 0 ==> \result == 0;
+  ensures \at(n,Pre) > 0 ==>
+            (\exists integer k;
+                k == \at(n,Pre) &&
+                \result == ((\at(p,Pre) * power10(k)) / \at(q,Pre))
+            );
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant n >= 0;
+      loop invariant (\exists integer k;
+                        0 <= k <= \at(n,Pre) &&
+                        n == \at(n,Pre) - k &&
+                        0 <= p < \at(q,Pre) &&
+                        (\at(p,Pre) * power10(k)) == res * \at(q,Pre) + p
+                    );
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:09:59,174 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires n >= 0;
+  requires q != 0;
+  assigns \nothing;
+  ensures \at(n,Pre) <= 0 ==> \result == 0;
+  ensures \at(n,Pre) > 0 ==>
+            (\exists integer k;
+                k == \at(n,Pre) &&
+                \result == ((\at(p,Pre) * power10(k)) / \at(q,Pre))
+            );
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant n >= 0;
+      loop invariant (\exists integer k;
+                        0 <= k <= \at(n,Pre) &&
+                        n == \at(n,Pre) - k &&
+                        0 <= p < \at(q,Pre) &&
+                        (\at(p,Pre) * power10(k)) == res * \at(q,Pre) + p
+                    );
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:10:09,959 - INFO  - syntax Correct
+2026-05-17 17:10:20,731 - INFO  - Loop Invariant:
+2026-05-17 17:10:20,731 - INFO  - [True, True, False]
+2026-05-17 17:10:20,731 - INFO  - 
+2026-05-17 17:10:20,731 - INFO  - Assertion:
+2026-05-17 17:10:20,731 - INFO  - []
+2026-05-17 17:10:20,731 - INFO  - 
+2026-05-17 17:10:20,731 - INFO  - Assigns:
+2026-05-17 17:10:20,731 - INFO  - [True]
+2026-05-17 17:10:20,731 - INFO  - 
+2026-05-17 17:10:20,732 - INFO  - Post Condition:
+2026-05-17 17:10:20,732 - INFO  - [True, True]
+2026-05-17 17:10:20,732 - INFO  - 
+2026-05-17 17:10:20,732 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 17:10:20,732 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires n >= 0;
+  requires q != 0;
+  assigns \nothing;
+  ensures \at(n,Pre) <= 0 ==> \result == 0;
+  ensures \at(n,Pre) > 0 ==>
+            (\exists integer k;
+                k == \at(n,Pre) &&
+                \result == ((\at(p,Pre) * power10(k)) / \at(q,Pre))
+            );
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant n >= 0;
+      loop invariant (\exists integer k;
+                        0 <= k <= \at(n,Pre) &&
+                        n == \at(n,Pre) - k &&
+                        0 <= p < \at(q,Pre) &&
+                        (\at(p,Pre) * power10(k)) == res * \at(q,Pre) + p
+                    );
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:10:29,146 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires n >= 0;
+  requires q != 0;
+  assigns \nothing;
+  ensures \at(n,Pre) <= 0 ==> \result == 0;
+  ensures \at(n,Pre) > 0 ==>
+            (\exists integer k;
+                k == \at(n,Pre) &&
+                \result == ((\at(p,Pre) * power10(k)) / \at(q,Pre))
+            );
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant n >= 0;
+      loop invariant (\exists integer k;
+                        0 <= k <= \at(n,Pre) &&
+                        n == \at(n,Pre) - k &&
+                        (\at(p,Pre) * power10(k)) == res * \at(q,Pre) + p
+                    );
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:10:39,882 - INFO  - syntax Correct
+2026-05-17 17:10:50,629 - INFO  - Loop Invariant:
+2026-05-17 17:10:50,629 - INFO  - [True, True, False]
+2026-05-17 17:10:50,629 - INFO  - 
+2026-05-17 17:10:50,629 - INFO  - Assertion:
+2026-05-17 17:10:50,629 - INFO  - []
+2026-05-17 17:10:50,629 - INFO  - 
+2026-05-17 17:10:50,629 - INFO  - Assigns:
+2026-05-17 17:10:50,629 - INFO  - [True]
+2026-05-17 17:10:50,629 - INFO  - 
+2026-05-17 17:10:50,629 - INFO  - Post Condition:
+2026-05-17 17:10:50,629 - INFO  - [False, False]
+2026-05-17 17:10:50,629 - INFO  - 
+2026-05-17 17:10:50,630 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=6
+2026-05-17 17:10:50,630 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 17:11:01,403 - INFO  - syntax Correct
+2026-05-17 17:11:12,126 - INFO  - Loop Invariant:
+2026-05-17 17:11:12,126 - INFO  - [True, True, False]
+2026-05-17 17:11:12,126 - INFO  - 
+2026-05-17 17:11:12,126 - INFO  - Assertion:
+2026-05-17 17:11:12,126 - INFO  - []
+2026-05-17 17:11:12,126 - INFO  - 
+2026-05-17 17:11:12,126 - INFO  - Assigns:
+2026-05-17 17:11:12,126 - INFO  - [True]
+2026-05-17 17:11:12,126 - INFO  - 
+2026-05-17 17:11:12,126 - INFO  - Post Condition:
+2026-05-17 17:11:12,126 - INFO  - [True, True]
+2026-05-17 17:11:12,126 - INFO  - 
+2026-05-17 17:11:12,126 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 17:11:12,127 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires n >= 0;
+  requires q != 0;
+  assigns \nothing;
+  ensures \at(n,Pre) <= 0 ==> \result == 0;
+  ensures \at(n,Pre) > 0 ==>
+            (\exists integer k;
+                k == \at(n,Pre) &&
+                \result == ((\at(p,Pre) * power10(k)) / \at(q,Pre))
+            );
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant n >= 0;
+      loop invariant (\exists integer k;
+                        0 <= k <= \at(n,Pre) &&
+                        n == \at(n,Pre) - k &&
+                        0 <= p < \at(q,Pre) &&
+                        (\at(p,Pre) * power10(k)) == res * \at(q,Pre) + p
+                    );
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:11:20,289 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires n >= 0;
+  requires q != 0;
+  assigns \nothing;
+  ensures \at(n,Pre) <= 0 ==> \result == 0;
+  ensures \at(n,Pre) > 0 ==>
+            (\exists integer k;
+                k == \at(n,Pre) &&
+                \result == ((\at(p,Pre) * power10(k)) / \at(q,Pre))
+            );
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant n >= 0;
+      loop invariant (\exists integer k;
+                        0 <= k <= \at(n,Pre) &&
+                        n == \at(n,Pre) - k &&
+                        0 <= p < \at(q,Pre) &&
+                        (\at(p,Pre) * power10(k)) == res * \at(q,Pre) + p
+                    );
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:11:31,085 - INFO  - syntax Correct
+2026-05-17 17:11:41,838 - INFO  - Loop Invariant:
+2026-05-17 17:11:41,838 - INFO  - [True, True, False]
+2026-05-17 17:11:41,838 - INFO  - 
+2026-05-17 17:11:41,838 - INFO  - Assertion:
+2026-05-17 17:11:41,838 - INFO  - []
+2026-05-17 17:11:41,838 - INFO  - 
+2026-05-17 17:11:41,838 - INFO  - Assigns:
+2026-05-17 17:11:41,838 - INFO  - [True]
+2026-05-17 17:11:41,838 - INFO  - 
+2026-05-17 17:11:41,838 - INFO  - Post Condition:
+2026-05-17 17:11:41,838 - INFO  - [True, True]
+2026-05-17 17:11:41,838 - INFO  - 
+2026-05-17 17:11:41,839 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 17:11:41,839 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 17:11:41,840 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8333333333333334, 0.0), clauses=6)
+2026-05-17 17:11:52,602 - INFO  - syntax Correct
+2026-05-17 17:12:03,375 - INFO  - Loop Invariant:
+2026-05-17 17:12:03,376 - INFO  - [True, True, False]
+2026-05-17 17:12:03,376 - INFO  - 
+2026-05-17 17:12:03,376 - INFO  - Assertion:
+2026-05-17 17:12:03,376 - INFO  - []
+2026-05-17 17:12:03,376 - INFO  - 
+2026-05-17 17:12:03,376 - INFO  - Assigns:
+2026-05-17 17:12:03,376 - INFO  - [True]
+2026-05-17 17:12:03,376 - INFO  - 
+2026-05-17 17:12:03,376 - INFO  - Post Condition:
+2026-05-17 17:12:03,376 - INFO  - [True, True]
+2026-05-17 17:12:03,376 - INFO  - 
+2026-05-17 17:12:03,549 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c:31: Warning: 
+  unexpected token '0'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 17:12:03,550 - INFO  - 
+SPECIFICATION FOR foo389
+2026-05-17 17:12:03,550 - INFO  - ==================================================
+
+2026-05-17 17:12:03,550 - INFO  - 
+QCP Specification for function foo389:
+/*@
+
+Require emp
+Ensure (n <= 0 && __return == 0)
+*/
+2026-05-17 17:12:03,667 - INFO  - 
+VERIFICATION FOR foo389
+2026-05-17 17:12:03,667 - INFO  - ==================================================
+
+2026-05-17 17:12:03,848 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c:31: Warning: 
+  unexpected token '0'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 17:12:11,755 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c:31: Warning: 
+  unexpected token 'n'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 17:12:11,756 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 17:12:45,370 - INFO  - syntax Correct
+2026-05-17 17:13:06,183 - INFO  - Loop Invariant:
+2026-05-17 17:13:06,183 - INFO  - [True, False, False, False]
+2026-05-17 17:13:06,183 - INFO  - 
+2026-05-17 17:13:06,183 - INFO  - Assertion:
+2026-05-17 17:13:06,183 - INFO  - []
+2026-05-17 17:13:06,183 - INFO  - 
+2026-05-17 17:13:06,184 - INFO  - Assigns:
+2026-05-17 17:13:06,184 - INFO  - [True]
+2026-05-17 17:13:06,184 - INFO  - 
+2026-05-17 17:13:06,184 - INFO  - Post Condition:
+2026-05-17 17:13:06,184 - INFO  - [True, False]
+2026-05-17 17:13:06,184 - INFO  - 
+2026-05-17 17:13:06,184 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.43, satisfy=0.00) clauses=4
+2026-05-17 17:13:06,184 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+             [POSTCONDITION FAILED];
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:13:17,911 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q != 0;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:13:28,993 - INFO  - syntax Correct
+2026-05-17 17:13:39,853 - INFO  - Loop Invariant:
+2026-05-17 17:13:39,853 - INFO  - [True, False, False, False, True]
+2026-05-17 17:13:39,853 - INFO  - 
+2026-05-17 17:13:39,853 - INFO  - Assertion:
+2026-05-17 17:13:39,853 - INFO  - []
+2026-05-17 17:13:39,853 - INFO  - 
+2026-05-17 17:13:39,853 - INFO  - Assigns:
+2026-05-17 17:13:39,854 - INFO  - [True]
+2026-05-17 17:13:39,854 - INFO  - 
+2026-05-17 17:13:39,854 - INFO  - Post Condition:
+2026-05-17 17:13:39,854 - INFO  - [True, True]
+2026-05-17 17:13:39,854 - INFO  - 
+2026-05-17 17:13:39,854 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.62, satisfy=0.00) clauses=5
+2026-05-17 17:13:39,854 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q != 0;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:13:47,980 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q != 0;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:13:59,076 - INFO  - syntax Correct
+2026-05-17 17:14:09,918 - INFO  - Loop Invariant:
+2026-05-17 17:14:09,918 - INFO  - [True, False, False, False, True]
+2026-05-17 17:14:09,918 - INFO  - 
+2026-05-17 17:14:09,919 - INFO  - Assertion:
+2026-05-17 17:14:09,919 - INFO  - []
+2026-05-17 17:14:09,919 - INFO  - 
+2026-05-17 17:14:09,919 - INFO  - Assigns:
+2026-05-17 17:14:09,919 - INFO  - [True]
+2026-05-17 17:14:09,919 - INFO  - 
+2026-05-17 17:14:09,919 - INFO  - Post Condition:
+2026-05-17 17:14:09,919 - INFO  - [True, True]
+2026-05-17 17:14:09,919 - INFO  - 
+2026-05-17 17:14:09,919 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.62, satisfy=0.00) clauses=5
+2026-05-17 17:14:09,919 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q != 0;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:14:18,733 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q != 0;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:14:30,294 - INFO  - syntax Correct
+2026-05-17 17:14:41,194 - INFO  - Loop Invariant:
+2026-05-17 17:14:41,194 - INFO  - [True, False, True, False, False, True, True]
+2026-05-17 17:14:41,194 - INFO  - 
+2026-05-17 17:14:41,194 - INFO  - Assertion:
+2026-05-17 17:14:41,194 - INFO  - []
+2026-05-17 17:14:41,194 - INFO  - 
+2026-05-17 17:14:41,194 - INFO  - Assigns:
+2026-05-17 17:14:41,194 - INFO  - [True]
+2026-05-17 17:14:41,194 - INFO  - 
+2026-05-17 17:14:41,194 - INFO  - Post Condition:
+2026-05-17 17:14:41,194 - INFO  - [True, True]
+2026-05-17 17:14:41,194 - INFO  - 
+2026-05-17 17:14:41,194 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=5
+2026-05-17 17:14:41,195 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q != 0;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:14:51,197 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q > 0;
+  requires n >= 0;
+  requires 0 <= p && p < q;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:15:02,241 - INFO  - syntax Correct
+2026-05-17 17:15:13,065 - INFO  - Loop Invariant:
+2026-05-17 17:15:13,065 - INFO  - [True, True, True, True, False, True, True]
+2026-05-17 17:15:13,066 - INFO  - 
+2026-05-17 17:15:13,066 - INFO  - Assertion:
+2026-05-17 17:15:13,066 - INFO  - []
+2026-05-17 17:15:13,066 - INFO  - 
+2026-05-17 17:15:13,066 - INFO  - Assigns:
+2026-05-17 17:15:13,066 - INFO  - [True]
+2026-05-17 17:15:13,066 - INFO  - 
+2026-05-17 17:15:13,066 - INFO  - Post Condition:
+2026-05-17 17:15:13,066 - INFO  - [True, True]
+2026-05-17 17:15:13,066 - INFO  - 
+2026-05-17 17:15:13,066 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=7
+2026-05-17 17:15:13,066 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q > 0;
+  requires n >= 0;
+  requires 0 <= p && p < q;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:15:26,556 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q > 0;
+  requires n >= 0;
+  requires 0 <= p && p < q;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) * 10 == (\at(p,Pre) * power10(\at(n,Pre) - (n - 1)));
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:15:37,696 - INFO  - syntax Correct
+2026-05-17 17:15:48,504 - INFO  - Loop Invariant:
+2026-05-17 17:15:48,505 - INFO  - [True, True, True, True, False, True, True, True]
+2026-05-17 17:15:48,505 - INFO  - 
+2026-05-17 17:15:48,505 - INFO  - Assertion:
+2026-05-17 17:15:48,505 - INFO  - []
+2026-05-17 17:15:48,505 - INFO  - 
+2026-05-17 17:15:48,505 - INFO  - Assigns:
+2026-05-17 17:15:48,505 - INFO  - [True]
+2026-05-17 17:15:48,505 - INFO  - 
+2026-05-17 17:15:48,505 - INFO  - Post Condition:
+2026-05-17 17:15:48,505 - INFO  - [True, True]
+2026-05-17 17:15:48,505 - INFO  - 
+2026-05-17 17:15:48,505 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.91, satisfy=0.00) clauses=7
+2026-05-17 17:15:48,505 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q > 0;
+  requires n >= 0;
+  requires 0 <= p && p < q;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) * 10 == (\at(p,Pre) * power10(\at(n,Pre) - (n - 1)));
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:16:01,937 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q > 0;
+  requires n >= 0;
+  requires 0 <= p && p < q;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) * 10 == (\at(p,Pre) * power10(\at(n,Pre) - (n - 1)));
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:16:13,685 - INFO  - syntax Correct
+2026-05-17 17:16:24,914 - INFO  - Loop Invariant:
+2026-05-17 17:16:24,914 - INFO  - [True, True, True, True, False, True, True, True]
+2026-05-17 17:16:24,914 - INFO  - 
+2026-05-17 17:16:24,914 - INFO  - Assertion:
+2026-05-17 17:16:24,914 - INFO  - []
+2026-05-17 17:16:24,914 - INFO  - 
+2026-05-17 17:16:24,915 - INFO  - Assigns:
+2026-05-17 17:16:24,915 - INFO  - [True]
+2026-05-17 17:16:24,915 - INFO  - 
+2026-05-17 17:16:24,915 - INFO  - Post Condition:
+2026-05-17 17:16:24,915 - INFO  - [True, True]
+2026-05-17 17:16:24,915 - INFO  - 
+2026-05-17 17:16:24,916 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.91, satisfy=0.00) clauses=7
+2026-05-17 17:16:24,916 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q > 0;
+  requires n >= 0;
+  requires 0 <= p && p < q;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) * 10 == (\at(p,Pre) * power10(\at(n,Pre) - (n - 1)));
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:16:32,526 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q > 0;
+  requires n >= 0;
+  requires 0 <= p && p < q;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) * 10 == (\at(p,Pre) * power10(\at(n,Pre) - (n - 1)));
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:16:44,274 - INFO  - syntax Correct
+2026-05-17 17:16:55,477 - INFO  - Loop Invariant:
+2026-05-17 17:16:55,478 - INFO  - [True, True, True, True, False, True, True, True]
+2026-05-17 17:16:55,478 - INFO  - 
+2026-05-17 17:16:55,478 - INFO  - Assertion:
+2026-05-17 17:16:55,478 - INFO  - []
+2026-05-17 17:16:55,478 - INFO  - 
+2026-05-17 17:16:55,478 - INFO  - Assigns:
+2026-05-17 17:16:55,479 - INFO  - [True]
+2026-05-17 17:16:55,479 - INFO  - 
+2026-05-17 17:16:55,479 - INFO  - Post Condition:
+2026-05-17 17:16:55,479 - INFO  - [True, True]
+2026-05-17 17:16:55,479 - INFO  - 
+2026-05-17 17:16:55,480 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.91, satisfy=0.00) clauses=7
+2026-05-17 17:16:55,480 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=13)
+2026-05-17 17:17:07,222 - INFO  - syntax Correct
+2026-05-17 17:17:18,704 - INFO  - Loop Invariant:
+2026-05-17 17:17:18,704 - INFO  - [True, True, True, True, False, True, True, True]
+2026-05-17 17:17:18,704 - INFO  - 
+2026-05-17 17:17:18,704 - INFO  - Assertion:
+2026-05-17 17:17:18,704 - INFO  - []
+2026-05-17 17:17:18,704 - INFO  - 
+2026-05-17 17:17:18,704 - INFO  - Assigns:
+2026-05-17 17:17:18,705 - INFO  - [True]
+2026-05-17 17:17:18,705 - INFO  - 
+2026-05-17 17:17:18,705 - INFO  - Post Condition:
+2026-05-17 17:17:18,705 - INFO  - [True, True]
+2026-05-17 17:17:18,705 - INFO  - 
+2026-05-17 17:17:18,705 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.91, satisfy=0.00) clauses=7
+2026-05-17 17:17:18,706 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q > 0;
+  requires n >= 0;
+  requires 0 <= p && p < q;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) * 10 == (\at(p,Pre) * power10(\at(n,Pre) - (n - 1)));
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:17:27,145 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q > 0;
+  requires n >= 0;
+  requires 0 <= p && p < q;
+  assigns \nothing;
+  ensures (\at(n,Pre) <= 0) ==> \result == 0;
+  ensures (\at(n,Pre) > 0) ==>
+            (
+              \at(q,Pre) != 0 && 
+              \result == ((\at(p,Pre) * power10(\at(n,Pre))) / \at(q,Pre)))
+            ;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) == res * \at(q,Pre) + p;
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) * 10 == (\at(p,Pre) * power10(\at(n,Pre) - (n - 1)));
+      loop invariant p == (\at(p,Pre) * power10(\at(n,Pre) - n)) % \at(q,Pre);
+      loop invariant res == ((\at(p,Pre) * power10(\at(n,Pre) - n)) / \at(q,Pre));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 17:17:27,147 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9090909090909091, 0.0), clauses=7)
+2026-05-17 17:17:38,919 - INFO  - syntax Correct
+2026-05-17 20:17:42,284 - INFO  - Loop Invariant:
+2026-05-17 20:17:42,285 - INFO  - [True, True, True, True, False, True, True, True]
+2026-05-17 20:17:42,285 - INFO  - 
+2026-05-17 20:17:42,285 - INFO  - Assertion:
+2026-05-17 20:17:42,285 - INFO  - []
+2026-05-17 20:17:42,285 - INFO  - 
+2026-05-17 20:17:42,285 - INFO  - Assigns:
+2026-05-17 20:17:42,285 - INFO  - [True]
+2026-05-17 20:17:42,285 - INFO  - 
+2026-05-17 20:17:42,285 - INFO  - Post Condition:
+2026-05-17 20:17:42,285 - INFO  - [True, True]
+2026-05-17 20:17:42,285 - INFO  - 
+2026-05-17 20:22:13,384 - INFO  - syntax Correct
+2026-05-17 20:22:25,041 - INFO  - Loop Invariant:
+2026-05-17 20:22:25,042 - INFO  - [True, True, True, True, True, False, False]
+2026-05-17 20:22:25,042 - INFO  - 
+2026-05-17 20:22:25,042 - INFO  - Assertion:
+2026-05-17 20:22:25,043 - INFO  - []
+2026-05-17 20:22:25,043 - INFO  - 
+2026-05-17 20:22:25,043 - INFO  - Assigns:
+2026-05-17 20:22:25,043 - INFO  - [True]
+2026-05-17 20:22:25,043 - INFO  - 
+2026-05-17 20:22:25,043 - INFO  - Post Condition:
+2026-05-17 20:22:25,043 - INFO  - [True, True]
+2026-05-17 20:22:25,044 - INFO  - 
+2026-05-17 20:22:36,429 - INFO  - syntax Correct
+2026-05-17 20:22:48,121 - INFO  - Loop Invariant:
+2026-05-17 20:22:48,123 - INFO  - [True, True, True, True, True]
+2026-05-17 20:22:48,123 - INFO  - 
+2026-05-17 20:22:48,123 - INFO  - Assertion:
+2026-05-17 20:22:48,123 - INFO  - []
+2026-05-17 20:22:48,124 - INFO  - 
+2026-05-17 20:22:48,124 - INFO  - Assigns:
+2026-05-17 20:22:48,124 - INFO  - [True]
+2026-05-17 20:22:48,124 - INFO  - 
+2026-05-17 20:22:48,126 - INFO  - Post Condition:
+2026-05-17 20:22:48,126 - INFO  - [False, False]
+2026-05-17 20:22:48,126 - INFO  - 
+2026-05-17 20:22:51,943 - INFO  - syntax Correct
+2026-05-17 20:22:55,817 - INFO  - Loop Invariant:
+2026-05-17 20:22:55,818 - INFO  - [True, True, True, True, True]
+2026-05-17 20:22:55,818 - INFO  - 
+2026-05-17 20:22:55,818 - INFO  - Assertion:
+2026-05-17 20:22:55,818 - INFO  - []
+2026-05-17 20:22:55,818 - INFO  - 
+2026-05-17 20:22:55,819 - INFO  - Assigns:
+2026-05-17 20:22:55,819 - INFO  - [True]
+2026-05-17 20:22:55,819 - INFO  - 
+2026-05-17 20:22:55,819 - INFO  - Post Condition:
+2026-05-17 20:22:55,819 - INFO  - []
+2026-05-17 20:22:55,819 - INFO  - 
+2026-05-17 20:22:59,696 - INFO  - syntax Correct
+2026-05-17 20:23:03,361 - INFO  - Loop Invariant:
+2026-05-17 20:23:03,361 - INFO  - [True, True, True, True, True]
+2026-05-17 20:23:03,361 - INFO  - 
+2026-05-17 20:23:03,361 - INFO  - Assertion:
+2026-05-17 20:23:03,362 - INFO  - []
+2026-05-17 20:23:03,362 - INFO  - 
+2026-05-17 20:23:03,362 - INFO  - Assigns:
+2026-05-17 20:23:03,362 - INFO  - [True]
+2026-05-17 20:23:03,362 - INFO  - 
+2026-05-17 20:23:03,362 - INFO  - Post Condition:
+2026-05-17 20:23:03,362 - INFO  - []
+2026-05-17 20:23:03,362 - INFO  - 
+2026-05-17 20:23:03,363 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo389
+2026-05-17 20:23:03,363 - INFO  - ==================================================
+2026-05-17 20:23:03,363 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo389/20260517_165356_956487_b758c1ae/output/foo389.c
+2026-05-17 20:23:03,363 - INFO  - Output file content:
+
+/*@
+  logic integer power10(integer k) =
+    k <= 0 ? 1 : 10 * power10(k-1);
+*/
+
+/*@
+  requires \true;
+*/
+int unknown();
+
+/*@
+  requires \true;
+  requires q > 0;
+  requires n >= 0;
+  requires 0 <= p && p < q;
+  assigns \nothing;
+*/
+int foo389(int p, int q, int n) {
+
+    int res = 0;
+
+    /*@
+      loop invariant q == \at(q,Pre);
+      loop invariant 0 <= n && n <= \at(n,Pre);
+      loop invariant 0 <= res;
+      loop invariant 0 <= p && p < \at(q,Pre);
+      loop invariant (\at(p,Pre) * power10(\at(n,Pre) - n)) * 10 == (\at(p,Pre) * power10(\at(n,Pre) - (n - 1)));
+      loop assigns n, p, res;
+    */
+    while (n > 0) {
+        n -= 1;
+        p *= 10;
+        res = p / q;
+        p %= q;
+    }
+
+    return res;
+}
+
+2026-05-17 20:23:03,363 - INFO  - ==================================================
+2026-05-17 20:23:03,364 - INFO  - first_pass:
+2026-05-17 20:23:03,364 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 20:23:03,365 - INFO  - ==================================================
+2026-05-17 20:23:03,365 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 20:23:03,366 - INFO  - Total execution time: 12547.16 seconds (209.12 minutes)
+2026-05-17 20:23:03,366 - INFO  - ==================================================
+2026-05-17 20:23:03,366 - INFO  - ==================================================
+2026-05-17 20:23:03,366 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 20:23:03,366 - INFO  - Total API calls: 39
+2026-05-17 20:23:03,367 - INFO  - Total prompt tokens (input): 550,897
+2026-05-17 20:23:03,368 - INFO  - Total completion tokens (output): 30,963
+2026-05-17 20:23:03,368 - INFO  - Total tokens: 581,860
+2026-05-17 20:23:03,368 - INFO  - Average prompt tokens per call: 14125.6
+2026-05-17 20:23:03,369 - INFO  - Average completion tokens per call: 793.9
+2026-05-17 20:23:03,369 - INFO  - Average total tokens per call: 14919.5
+2026-05-17 20:23:03,369 - INFO  - ==================================================

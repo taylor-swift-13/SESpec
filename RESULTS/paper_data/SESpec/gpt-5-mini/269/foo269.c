@@ -1,0 +1,36 @@
+
+/*@
+  logic integer div_rec(integer w, integer k) =
+    k == 0 ? 1
+  : k == 1 ? w
+  : k == 2 ? w * w
+  : ((w - 1) * (div_rec(w, k-1) + div_rec(w, k-2))) % 1000000007;
+*/
+
+/*@
+  requires dim >= 2;
+  assigns \nothing;   
+*/
+int foo269(int dim, int w) {
+
+		int count = 1000000007;
+		int *div = (int *)malloc(sizeof(int) * (dim + 1));
+int div_len = dim + 1;
+		div[0] = 1;
+		div[1] = w;
+		div[2] = w * w;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 3 <= d && d <= dim + 1;
+          loop assigns d, div[0 .. dim];
+            */
+            for (int d = 3; d <= dim; d++) {
+			div[d] = ((w - 1)
+					* (div[d - 1] + div[d - 2])) % count;
+		}
+            
+		return div[dim];
+}

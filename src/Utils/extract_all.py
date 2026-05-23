@@ -156,11 +156,22 @@ def function_info_init(tu_dict, root_dir, function_name, file_cache, global_type
     # 处理函数参数，递归处理相关Type
     
     for param in function_cursor.get_arguments():
-        
+
         process_parameter(param, function_info.parameter_list,function_code)
 
-    
-    
+    # Resolve per-pointer array lengths (layer a + b deterministic only —
+    # the LLM fallback is wired up lazily in spec_gen.py, where the per-run
+    # llm + cache live; here we run cheap static layers so unit tests and
+    # downstream readers can rely on length_expr being populated when the
+    # naming convention or body scan resolves it.).
+    resolve_array_lengths(
+        function_info.parameter_list,
+        function_code,
+        function_name=function_name,
+        llm=None,
+        llm_cache=None,
+    )
+
     # 分析函数体中调用的函数
     find_function_calls(function_cursor, function_info)
 

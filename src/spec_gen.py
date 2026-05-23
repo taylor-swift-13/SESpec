@@ -2,7 +2,7 @@ import os
 import re
 import logging
 from Utils.main_class import *
-from Utils.utils import extract_function
+from Utils.utils import extract_function, source_has_acsl_assert
 from convertor import SpecificationConvertor
 from specification_verify import SpecVerifier
 from LoopInvGen.acsl_fixer import ACSLFixer
@@ -1609,8 +1609,13 @@ class SpecGenerator:
             # contract-level fix.
             total_v = post + loop + inst + assigns
             valid_ratio = (sum(1 for x in total_v if x) / len(total_v)) if total_v else 0.0
-            # satisfy bucket = real `assert` proof obligations only.
-            satisfy_ratio = (sum(1 for x in asrt if x) / len(asrt)) if asrt else 0.0
+            # satisfy bucket = ACSL `/*@ assert ... */` proof obligations only.
+            # If the source has no ACSL assert annotation, satisfy is vacuously
+            # true (1.0) — C library `assert(...)` macros do not count.
+            if source_has_acsl_assert(content):
+                satisfy_ratio = (sum(1 for x in asrt if x) / len(asrt)) if asrt else 0.0
+            else:
+                satisfy_ratio = 1.0
             return syntax_ok, satisfy_ratio, valid_ratio
 
         def _count_target_clauses(text):
@@ -1643,7 +1648,7 @@ class SpecGenerator:
                 and all(loop_result) and all(assigns_result)
             )
             syntax = syntax_error == ''
-            satisfy = all(assert_result)
+            satisfy = (not source_has_acsl_assert(content)) or all(assert_result)
 
             score = _grade(verifier)
             clause_count = _count_target_clauses(content)
@@ -1890,6 +1895,14 @@ class SpecGenerator:
                 return None
     
     def get_refine_prompt(self, error_message, strategy_blocks, c_code, allow_full_file=False):
+        if getattr(self.config, 'trivial_refine', False):
+            with open("prompt/refine_trivial.txt", "r", encoding="utf-8") as file:
+                prompt_template = file.read()
+            return prompt_template.format(
+                error_str=error_message,
+                c_code=c_code,
+            )
+
          # Read prompt template from file
         with open("prompt/func/refine.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
@@ -2061,9 +2074,13 @@ class SpecGenerator:
         # brackets, const/rparen drops, unbound names) without paying for
         # an LLM round-trip. Falls through to the LLM if any residual
         # syntax error remains after re-verification.
-        fixer = ACSLFixer(logger=self.logger)
-        report = fixer.fix(c_code, error_message)
-        if report.fixes_applied:
+        if getattr(self.config, 'trivial_refine', False):
+            self.logger.info('[acsl-fixer] skipped (trivial_refine)')
+            report = None
+        else:
+            fixer = ACSLFixer(logger=self.logger)
+            report = fixer.fix(c_code, error_message)
+        if report and report.fixes_applied:
             for msg in report.fixes_applied:
                 self.logger.info(f'[acsl-fixer] {msg}')
             c_code = report.annotations
@@ -2085,15 +2102,23 @@ class SpecGenerator:
         else:
             self.logger.info('[acsl-fixer] no deterministic fix applicable')
 
-        with open("prompt/error.txt", "r", encoding="utf-8") as file:
-            prompt_template = file.read()
+        if getattr(self.config, 'trivial_refine', False):
+            with open("prompt/refine_trivial.txt", "r", encoding="utf-8") as file:
+                prompt_template = file.read()
+            error_prompt = prompt_template.format(
+                error_str=error_message,
+                c_code=c_code,
+            )
+        else:
+            with open("prompt/error.txt", "r", encoding="utf-8") as file:
+                prompt_template = file.read()
 
-        category_hints = self._load_category_hints()
-        error_prompt = prompt_template.format(
-            error_str=error_message,
-            c_code=c_code,
-            category_hints=category_hints,
-        )
+            category_hints = self._load_category_hints()
+            error_prompt = prompt_template.format(
+                error_str=error_message,
+                c_code=c_code,
+                category_hints=category_hints,
+            )
 
         try:
             """Call OpenAI API to get ACSL annotations"""

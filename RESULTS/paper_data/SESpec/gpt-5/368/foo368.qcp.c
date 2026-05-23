@@ -1,0 +1,41 @@
+#include "../verification_stdlib.h"
+    #include "../verification_list.h"
+    #include "../int_array_def.h"
+
+    /*@ Extern Coq (Result: Assertion) */
+    /*@ Extern Coq (Results: Z -> Assertion) */
+
+/*@ Extern Coq (nCk : Z -> Z -> Z) */
+int foo368(int n, int r, int p) 
+/*@
+
+Require emp
+Ensure Results(__return)
+*/{
+
+        if (n < r) {
+            return 0;
+        }
+
+        int ncr = 1;
+       
+  /*@ Inv
+    (1 <= i && i <= r + 1) &&
+    (r == r@pre) &&
+    (n == n@pre) &&
+    (p == p@pre) &&
+    (n >= r) &&
+    (0 <= r) &&
+    (0 <= i - 1 <= r) &&
+    (ncr == nCk(n, i - 1)) &&
+    (forall (k:Z), 0 <= k && k <= i - 1 => nCk(n, k) >= 0) &&
+    ((i <= r@pre) => (i >= 1)) &&
+    ((i <= r@pre) => (ncr == nCk(n, i - 1))) &&
+    ((i == r + 1) => (ncr == nCk(n, r)))
+    */
+for (int i = 1; i <= r; i++) {
+        ncr = (ncr * (n - i + 1)) / i;
+    }
+
+        return ncr % p;
+}

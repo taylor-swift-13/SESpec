@@ -1,0 +1,523 @@
+$ /home/yangfp/miniconda3/envs/SpecAutoGen/bin/python main.py --config /home/yangfp/SESpec/src/results/tmp/sespec_default_sespec_355_gpt-5.4-mini_20260515_021620_294061_60263c24.json
+
+[stdout]
+🚀 Starting specification generation for function: foo218
+📁 Project directory: sespec
+📄 Configuration file: /home/yangfp/SESpec/src/results/tmp/sespec_default_sespec_355_gpt-5.4-mini_20260515_021620_294061_60263c24.json
+🤖 Using model: gpt-5.4-mini
+workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6
+
+🚀 Starting generation of function: foo218
+
+FUNCTION INITIALIZATION
+==================================================
+
+[auto only_loop] False — foo218 returns 'int'
+Initial pending functions: ['foo218']
+
+GENERATE ANNOTATION FOR foo218
+==================================================
+
+Function foo218 has been initialized
+Starting to generate annotation code for foo218
+File /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/3_output/foo218.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/1_output/foo218.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/2_output/foo218.c created and written successfully.
+
+GENERATE LOOP INVARIANT FOR foo218
+==================================================
+
+Loop 0 : Outer
+Sorted indices: [0]
+LoopEntry_0:
+(sum == num@pre) * (end == 0) * (result == 0) * (num == num@pre)
+Successfully generated /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/loop/foo218.json
+(sum == num@pre) * (end == 0) * (result == 0) * (num == num@pre)
+Variable Maps:[{'sum': 'num@pre', 'end': '0', 'result': '0', 'num': 'num@pre'}]
+Path conditions: [None]
+Pre condition: (sum == num@pre) * (end == 0) * (result == 0) * (num == num@pre)
+Loop Condition: sum > 0
+Array Names: []
+Updated Loop Conditions: ['num@pre > 0']
+Global Unchanged Variables: ['sum', 'end', 'num']
+Non Inductive Variables: []
+Unchanged Arrays (Read-only): []
+[inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+examples category: numeric
+examples:
+
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+[inv-gen] refine 1/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+[inv-gen] refine 2/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+[inv-gen] refine 3/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+[inv-gen] converged at refine 3
+ACSL format loop invariant
+/*@
+          loop invariant (\at(num,Pre) > 0) ==> (0 <= result && sum >= 0);
+          loop invariant (!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(end == 0)&&(result == 0)&&(num == \at(num,Pre)));
+          loop invariant (\at(num,Pre) > 0) ==> (num == \at(num,Pre));
+          loop invariant num == \at(num,Pre);
+          loop assigns end, sum, result;
+            */
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				end |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+QCP format loop invariant
+/*@ Inv
+    ((num@pre > 0) => (0 <= result && sum >= 0)) &&
+((!(num@pre > 0)) => ((sum == num@pre)&&(end == 0)&&(result == 0)&&(num == num@pre))) &&
+((num@pre > 0) => (num == num@pre)) &&
+(num == num@pre
+          loop assigns end, sum, result)
+    */
+    
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				end |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+LoopEntry_0:
+(sum == num@pre) * (end == 0) * (result == 0) * (num == num@pre)
+[1;31mfatal error: [0mbison: syntax error, unexpected PT_IDENT, expecting PT_RPAREN or PT_COLON in /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/2_output/foo218.c:27:14
+Successfully generated /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/loop/foo218.json
+CORRECT INVARIANT
+
+GENERATE FUNCTION SPECIFICATION FOR foo218
+==================================================
+
+Starting to generate ACSL specification for foo218
+File /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c:2: Warning: 
+  unbound logic function pow2. Ignoring logic specification of function foo218
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+File /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c:4: Warning: 
+  invalid operands to binary |; unexpected 𝔹 and ℤ. Ignoring logic specification of function foo218
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+File /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[False, True]
+
+[spec-gen] refine 3/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=3
+postconditon before refine: 
+
+/*@ logic integer pow2(integer n) = n <= 0 ? 1 : 2 * pow2(n - 1); */
+
+/*@ ensures (\at(num,Pre) > 0) ==> (\result == (\at(num,Pre) | (pow2(\at(num,Pre)) - 1))) [POSTCONDITION FAILED];
+    ensures !(\at(num,Pre) > 0) ==> (\result == \at(num,Pre));
+    assigns \nothing;
+*/
+int foo218(int num) {
+
+		int result = 0;
+		int end = 0;
+		int sum = num;
+		
+            /*@
+          loop invariant (\at(num,Pre) > 0) ==> (0 <= result && sum >= 0);
+          loop invariant (!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(end == 0)&&(result == 0)&&(num == \at(num,Pre)));
+          loop invariant (\at(num,Pre) > 0) ==> (num == \at(num,Pre));
+          loop invariant num == \at(num,Pre);
+          loop assigns end, sum, result;
+            */
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				end |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+            
+		return (num | end);
+}
+
+postconditon after refine: 
+
+/*@ logic integer pow2(integer n) = n <= 0 ? 1 : 2 * pow2(n - 1); */
+
+/*@
+  ensures !(\at(num,Pre) > 0) ==> (\result == \at(num,Pre));
+  assigns \nothing;
+*/
+int foo218(int num) {
+
+		int result = 0;
+		int end = 0;
+		int sum = num;
+		
+            /*@
+          loop invariant (\at(num,Pre) > 0) ==> (0 <= result && sum >= 0);
+          loop invariant (!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(end == 0)&&(result == 0)&&(num == \at(num,Pre)));
+          loop invariant (\at(num,Pre) > 0) ==> (num == \at(num,Pre));
+          loop invariant num == \at(num,Pre);
+          loop assigns end, sum, result;
+            */
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				end |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+            
+		return (num | end);
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[True]
+
+[spec-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=2
+[spec-gen] converged at refine 4
+
+SPECIFICATION FOR foo218
+==================================================
+
+
+QCP Specification for function foo218:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+
+VERIFICATION FOR foo218
+==================================================
+
+TRY TIME: 0
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True]
+
+Post Condition:
+[True]
+
+
+🎯 FINAL SPECIFICATION FOR foo218
+==================================================
+Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo218/20260515_021621_847643_71c0f9e6/output/foo218.c
+Output file content:
+
+/*@ logic integer pow2(integer n) = n <= 0 ? 1 : 2 * pow2(n - 1); */
+
+/*@
+  ensures !(\at(num,Pre) > 0) ==> (\result == \at(num,Pre));
+  assigns \nothing;
+*/
+int foo218(int num) {
+
+		int result = 0;
+		int end = 0;
+		int sum = num;
+		
+            /*@
+          loop invariant (\at(num,Pre) > 0) ==> (0 <= result && sum >= 0);
+          loop invariant (!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(end == 0)&&(result == 0)&&(num == \at(num,Pre)));
+          loop invariant (\at(num,Pre) > 0) ==> (num == \at(num,Pre));
+          loop invariant num == \at(num,Pre);
+          loop assigns end, sum, result;
+            */
+            while (sum > 0) {
+			if (result % 2 == 1) {
+				end |= (1 << result);
+			}
+			result++;
+			sum >>= 1;
+		}
+            
+		return (num | end);
+}
+
+==================================================
+first_pass:
+syntax=1, valid=1,satisfy=1
+==================================================
+⏰ OVERALL EXECUTION TIME STATISTICS
+Total execution time: 192.05 seconds (3.20 minutes)
+==================================================
+==================================================
+📊 TOKEN USAGE STATISTICS
+Total API calls: 7
+Total prompt tokens (input): 36,936
+Total completion tokens (output): 3,171
+Total tokens: 40,107
+Average prompt tokens per call: 5276.6
+Average completion tokens per call: 453.0
+Average total tokens per call: 5729.6
+==================================================
+✅ Generation completed!
+
+[stderr]
+

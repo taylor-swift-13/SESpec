@@ -1,0 +1,905 @@
+2026-05-18 22:21:46,735 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f
+2026-05-18 22:21:46,735 - INFO  - 
+🚀 Starting generation of function: foo296
+2026-05-18 22:21:46,735 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 22:21:46,735 - INFO  - TRY TIME: 0
+2026-05-18 22:21:46,735 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 22:21:46,736 - INFO  - ==================================================
+
+2026-05-18 22:21:47,769 - INFO  - [auto only_loop] False — foo296 returns 'int'
+2026-05-18 22:21:47,770 - INFO  - Initial pending functions: ['foo296', 'malloc']
+2026-05-18 22:21:47,770 - INFO  - Now processing function malloc
+
+2026-05-18 22:21:47,770 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-18 22:21:47,770 - INFO  - 
+GENERATE ANNOTATION FOR foo296
+2026-05-18 22:21:47,770 - INFO  - ==================================================
+
+2026-05-18 22:21:47,770 - INFO  - Function foo296 has been initialized
+2026-05-18 22:21:47,770 - INFO  - Starting to generate annotation code for foo296
+2026-05-18 22:21:47,853 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo296
+2026-05-18 22:21:47,853 - INFO  - ==================================================
+
+2026-05-18 22:21:47,938 - INFO  - Variable Maps:[{}]
+2026-05-18 22:21:47,938 - INFO  - Path conditions: [None]
+2026-05-18 22:21:47,938 - INFO  - Pre condition: 
+2026-05-18 22:21:47,938 - INFO  - Loop Condition: c <= seed
+2026-05-18 22:21:47,940 - INFO  - Array Names: ['result']
+2026-05-18 22:21:47,940 - INFO  - Updated Loop Conditions: ['c <= seed']
+2026-05-18 22:21:47,940 - INFO  - Global Unchanged Variables: []
+2026-05-18 22:21:47,940 - INFO  - Non Inductive Variables: []
+2026-05-18 22:21:47,941 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-18 22:21:47,942 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 22:21:47,944 - INFO  - examples category: array
+2026-05-18 22:21:47,945 - INFO  - examples:
+2026-05-18 22:21:47,945 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 22:21:57,917 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 22:21:57,926 - INFO  - [acsl-fixer] )-drop: removed line 21: loop invariant (!(c <= seed)) ==> ();
+2026-05-18 22:21:58,752 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:22:39,706 - INFO  - [inv-gen] refine 2/3 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 22:23:12,803 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 22:23:12,805 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:23:30,610 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.0), clauses=3)
+2026-05-18 22:24:48,589 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:True | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:25:24,921 - INFO  - [inv-gen] refine 1/3 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 22:26:11,255 - INFO  - [inv-gen] refine 2/3 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-18 22:26:51,909 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-18 22:27:07,599 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6666666666666666, 0.0), clauses=3)
+2026-05-18 22:27:35,992 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:27:43,472 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 22:27:43,474 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:28:19,992 - INFO  - [inv-gen] refine 2/3 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-18 22:28:55,348 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-18 22:29:08,928 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6666666666666666, 0.0), clauses=3)
+2026-05-18 22:29:36,508 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:29:37,324 - INFO  - ACSL format loop invariant
+2026-05-18 22:29:37,324 - INFO  - /*@
+      loop invariant 2 <= c;
+      loop invariant \valid(result + (0 .. seed));
+                          result[k] == result[k-1] + result[k-2];
+      loop assigns c, result[0 .. seed];
+    */
+    for (int c = 2; c <= seed; c++) {
+        result[c] = result[c - 1] + result[c - 2];
+    }
+2026-05-18 22:29:37,326 - INFO  - QCP format loop invariant
+2026-05-18 22:29:37,326 - INFO  - /*@ Inv
+    (2 <= c) &&
+(\valid(result + (0 .. seed))
+                          result_l[k] == result_l[k-1] + result_l[k-2]
+      loop assigns c, result_l[0 .. seed])
+    */
+    
+    for (int c = 2; c <= seed; c++) {
+        result[c] = result[c - 1] + result[c - 2];
+    }
+2026-05-18 22:29:38,232 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo296
+2026-05-18 22:29:38,232 - INFO  - ==================================================
+
+2026-05-18 22:29:38,288 - INFO  - Starting to generate ACSL specification for foo296
+2026-05-18 22:30:00,874 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c:4: Warning: 
+  \result meaningless. Ignoring logic specification of function foo296
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:30:00,875 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=4
+2026-05-18 22:30:00,876 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:30:58,169 - INFO  - syntax Correct
+2026-05-18 22:31:20,277 - INFO  - Loop Invariant:
+2026-05-18 22:31:20,278 - INFO  - [False, True, False]
+2026-05-18 22:31:20,278 - INFO  - Loop Invariant: failures:
+2026-05-18 22:31:20,278 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 17):
+2026-05-18 22:31:20,278 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 17
+2026-05-18 22:31:20,278 - INFO  - Error line content: loop invariant 2 <= c <= seed + 1;
+2026-05-18 22:31:20,278 - INFO  - 
+2026-05-18 22:31:20,278 - INFO  - Goal Preservation of Invariant (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 19):
+2026-05-18 22:31:20,278 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 19
+2026-05-18 22:31:20,278 - INFO  - Error line content: loop invariant \forall integer k; 0 <= k <= c ==> (
+2026-05-18 22:31:20,278 - INFO  - 
+2026-05-18 22:31:20,278 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 19):
+2026-05-18 22:31:20,278 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 19
+2026-05-18 22:31:20,278 - INFO  - Error line content: loop invariant \forall integer k; 0 <= k <= c ==> (
+2026-05-18 22:31:20,278 - INFO  - 
+2026-05-18 22:31:20,278 - INFO  - 
+2026-05-18 22:31:20,278 - INFO  - Assertion:
+2026-05-18 22:31:20,279 - INFO  - [False]
+2026-05-18 22:31:20,279 - INFO  - Assertion: failures:
+2026-05-18 22:31:20,279 - INFO  - Goal Assertion (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 14):
+2026-05-18 22:31:20,279 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 14
+2026-05-18 22:31:20,279 - INFO  - Error line content: /*@ assert \valid(result + (0 .. seed)); */
+2026-05-18 22:31:20,279 - INFO  - 
+2026-05-18 22:31:20,279 - INFO  - 
+2026-05-18 22:31:20,279 - INFO  - Assigns:
+2026-05-18 22:31:20,279 - INFO  - [True, True, True, False, False, False, True]
+2026-05-18 22:31:20,279 - INFO  - Assigns: failures:
+2026-05-18 22:31:20,279 - INFO  - Goal Assigns nothing in 'foo296' (3/6):
+2026-05-18 22:31:20,279 - INFO  - 
+2026-05-18 22:31:20,279 - INFO  - Goal Assigns nothing in 'foo296' (4/6):
+2026-05-18 22:31:20,279 - INFO  - 
+2026-05-18 22:31:20,279 - INFO  - Goal Assigns nothing in 'foo296' (5/6):
+2026-05-18 22:31:20,279 - INFO  - 
+2026-05-18 22:31:20,279 - INFO  - 
+2026-05-18 22:31:20,279 - INFO  - Post Condition:
+2026-05-18 22:31:20,279 - INFO  - [True]
+2026-05-18 22:31:20,279 - INFO  - 
+2026-05-18 22:31:20,279 - INFO  - Instance:
+2026-05-18 22:31:20,280 - INFO  - []
+2026-05-18 22:31:20,280 - INFO  - 
+2026-05-18 22:31:20,280 - INFO  - [spec-gen] refine 2/3 score=(syntax=True, satisfy=0.00, valid=0.55) clauses=3
+2026-05-18 22:31:20,281 - INFO  - postconditon before refine: 
+
+/*@
+  requires seed >= 0;
+  assigns \nothing;
+  ensures \true;
+*/
+int foo296(int seed) {
+
+    int *result = (int *)malloc(sizeof(int) * (seed + 1));
+    int result_len = seed + 1;
+    result[0] = 2;
+    result[1] = 1;
+
+    /*@ assert \valid(result + (0 .. seed)); */
+    
+    /*@
+      loop invariant 2 <= c <= seed + 1;
+      loop invariant \valid(result + (0 .. seed));
+      loop invariant \forall integer k; 0 <= k <= c ==> (
+                      (k == 0 ==> result[0] == 2) &&
+                      (k == 1 ==> result[1] == 1) &&
+                      (k >= 2 ==> result[k] == result[k-1] + result[k-2])
+                    );
+      loop assigns c, result[0 .. seed];
+    */
+    for (int c = 2; c <= seed; c++) {
+        result[c] = result[c - 1] + result[c - 2];
+    }
+    
+    return result[seed];
+}
+
+2026-05-18 22:31:47,287 - INFO  - postconditon after refine: 
+
+/*@
+  requires seed >= 1;
+  assigns \nothing;
+  ensures \true;
+*/
+int foo296(int seed) {
+
+    int *result = (int *)malloc(sizeof(int) * (seed + 1));
+    int result_len = seed + 1;
+    result[0] = 2;
+    result[1] = 1;
+
+    /*@ assert result != \null; */
+    /*@ assert \valid(result + (0 .. seed)); */
+    
+    /*@
+      loop invariant 2 <= c <= seed + 1;
+      loop invariant \valid(result + (0 .. seed));
+      loop invariant \forall integer k; 0 <= k < c ==> (
+                      (k == 0 ==> result[0] == 2) &&
+                      (k == 1 ==> result[1] == 1) &&
+                      (k >= 2 ==> result[k] == result[k-1] + result[k-2])
+                    );
+      loop assigns c;
+    */
+    for (int c = 2; c <= seed; c++) {
+        result[c] = result[c - 1] + result[c - 2];
+    }
+    
+    return result[seed];
+}
+
+2026-05-18 22:32:14,194 - INFO  - syntax Correct
+2026-05-18 22:32:36,191 - INFO  - Loop Invariant:
+2026-05-18 22:32:36,191 - INFO  - [True, True, False]
+2026-05-18 22:32:36,191 - INFO  - Loop Invariant: failures:
+2026-05-18 22:32:36,191 - INFO  - Goal Preservation of Invariant (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 20):
+2026-05-18 22:32:36,191 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 20
+2026-05-18 22:32:36,191 - INFO  - Error line content: loop invariant \forall integer k; 0 <= k < c ==> (
+2026-05-18 22:32:36,191 - INFO  - 
+2026-05-18 22:32:36,191 - INFO  - 
+2026-05-18 22:32:36,192 - INFO  - Assertion:
+2026-05-18 22:32:36,192 - INFO  - [False, False]
+2026-05-18 22:32:36,192 - INFO  - Assertion: failures:
+2026-05-18 22:32:36,192 - INFO  - Goal Assertion (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 14):
+2026-05-18 22:32:36,192 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 14
+2026-05-18 22:32:36,192 - INFO  - Error line content: /*@ assert result != \null; */
+2026-05-18 22:32:36,192 - INFO  - 
+2026-05-18 22:32:36,192 - INFO  - Goal Assertion (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 15):
+2026-05-18 22:32:36,192 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 15
+2026-05-18 22:32:36,192 - INFO  - Error line content: /*@ assert \valid(result + (0 .. seed)); */
+2026-05-18 22:32:36,192 - INFO  - 
+2026-05-18 22:32:36,192 - INFO  - 
+2026-05-18 22:32:36,192 - INFO  - Assigns:
+2026-05-18 22:32:36,192 - INFO  - [True, True, True, False, False, True, True]
+2026-05-18 22:32:36,192 - INFO  - Assigns: failures:
+2026-05-18 22:32:36,192 - INFO  - Goal Assigns nothing in 'foo296' (3/6):
+2026-05-18 22:32:36,192 - INFO  - 
+2026-05-18 22:32:36,192 - INFO  - Goal Assigns nothing in 'foo296' (4/6):
+2026-05-18 22:32:36,192 - INFO  - 
+2026-05-18 22:32:36,192 - INFO  - 
+2026-05-18 22:32:36,192 - INFO  - Post Condition:
+2026-05-18 22:32:36,192 - INFO  - [True]
+2026-05-18 22:32:36,192 - INFO  - 
+2026-05-18 22:32:36,192 - INFO  - Instance:
+2026-05-18 22:32:36,192 - INFO  - []
+2026-05-18 22:32:36,192 - INFO  - 
+2026-05-18 22:32:36,193 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.73) clauses=3
+2026-05-18 22:32:36,193 - INFO  - postconditon before refine: 
+
+/*@
+  requires seed >= 1;
+  assigns \nothing;
+  ensures \true;
+*/
+int foo296(int seed) {
+
+    int *result = (int *)malloc(sizeof(int) * (seed + 1));
+    int result_len = seed + 1;
+    result[0] = 2;
+    result[1] = 1;
+
+    /*@ assert result != \null; */
+    /*@ assert \valid(result + (0 .. seed)); */
+    
+    /*@
+      loop invariant 2 <= c <= seed + 1;
+      loop invariant \valid(result + (0 .. seed));
+      loop invariant \forall integer k; 0 <= k < c ==> (
+                      (k == 0 ==> result[0] == 2) &&
+                      (k == 1 ==> result[1] == 1) &&
+                      (k >= 2 ==> result[k] == result[k-1] + result[k-2])
+                    );
+      loop assigns c;
+    */
+    for (int c = 2; c <= seed; c++) {
+        result[c] = result[c - 1] + result[c - 2];
+    }
+    
+    return result[seed];
+}
+
+2026-05-18 22:33:14,399 - INFO  - postconditon after refine: 
+
+/*@
+  requires seed >= 1;
+  assigns \nothing;
+  ensures \true;
+*/
+int foo296(int seed) {
+
+    int *result = (int *)malloc(sizeof(int) * (seed + 1));
+    int result_len = seed + 1;
+    result[0] = 2;
+    result[1] = 1;
+
+    if (result == \null) { return 0; }
+
+    /*@ assert result != \null; */
+    /*@ assert \valid(result + (0 .. seed)); */
+    
+    /*@
+      loop invariant 2 <= c <= seed + 1;
+      loop invariant \valid(result + (0 .. seed));
+      loop invariant result[0] == 2;
+      loop invariant result[1] == 1;
+      loop invariant \forall integer k; 2 <= k < c ==> result[k] == result[k-1] + result[k-2];
+      loop assigns c;
+    */
+    for (int c = 2; c <= seed; c++) {
+        result[c] = result[c - 1] + result[c - 2];
+    }
+    
+    return result[seed];
+}
+
+2026-05-18 22:33:14,402 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.7272727272727273), clauses=3)
+2026-05-18 22:33:42,184 - INFO  - syntax Correct
+2026-05-18 22:34:04,092 - INFO  - Loop Invariant:
+2026-05-18 22:34:04,093 - INFO  - [True, True, False]
+2026-05-18 22:34:04,093 - INFO  - Loop Invariant: failures:
+2026-05-18 22:34:04,093 - INFO  - Goal Preservation of Invariant (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 20):
+2026-05-18 22:34:04,093 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 20
+2026-05-18 22:34:04,093 - INFO  - Error line content: loop invariant \forall integer k; 0 <= k < c ==> (
+2026-05-18 22:34:04,093 - INFO  - 
+2026-05-18 22:34:04,093 - INFO  - 
+2026-05-18 22:34:04,093 - INFO  - Assertion:
+2026-05-18 22:34:04,093 - INFO  - [False, False]
+2026-05-18 22:34:04,093 - INFO  - Assertion: failures:
+2026-05-18 22:34:04,093 - INFO  - Goal Assertion (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 14):
+2026-05-18 22:34:04,093 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 14
+2026-05-18 22:34:04,093 - INFO  - Error line content: /*@ assert result != \null; */
+2026-05-18 22:34:04,093 - INFO  - 
+2026-05-18 22:34:04,093 - INFO  - Goal Assertion (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 15):
+2026-05-18 22:34:04,093 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 15
+2026-05-18 22:34:04,093 - INFO  - Error line content: /*@ assert \valid(result + (0 .. seed)); */
+2026-05-18 22:34:04,094 - INFO  - 
+2026-05-18 22:34:04,094 - INFO  - 
+2026-05-18 22:34:04,094 - INFO  - Assigns:
+2026-05-18 22:34:04,094 - INFO  - [True, True, True, False, False, True, True]
+2026-05-18 22:34:04,094 - INFO  - Assigns: failures:
+2026-05-18 22:34:04,094 - INFO  - Goal Assigns nothing in 'foo296' (3/6):
+2026-05-18 22:34:04,094 - INFO  - 
+2026-05-18 22:34:04,094 - INFO  - Goal Assigns nothing in 'foo296' (4/6):
+2026-05-18 22:34:04,094 - INFO  - 
+2026-05-18 22:34:04,094 - INFO  - 
+2026-05-18 22:34:04,094 - INFO  - Post Condition:
+2026-05-18 22:34:04,094 - INFO  - [True]
+2026-05-18 22:34:04,094 - INFO  - 
+2026-05-18 22:34:04,094 - INFO  - Instance:
+2026-05-18 22:34:04,094 - INFO  - []
+2026-05-18 22:34:04,094 - INFO  - 
+2026-05-18 22:34:04,855 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c:20: Warning: 
+  unexpected token '('
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:34:04,858 - INFO  - 
+SPECIFICATION FOR foo296
+2026-05-18 22:34:04,859 - INFO  - ==================================================
+
+2026-05-18 22:34:04,859 - INFO  - 
+QCP Specification for function foo296:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-18 22:34:05,322 - INFO  - 
+VERIFICATION FOR foo296
+2026-05-18 22:34:05,327 - INFO  - ==================================================
+
+2026-05-18 22:34:06,248 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c:20: Warning: 
+  unexpected token '('
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:34:19,460 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c:26: Warning: 
+  unexpected token 'result'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:34:19,461 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=4
+2026-05-18 22:34:19,462 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:35:11,152 - INFO  - syntax Correct
+2026-05-18 22:35:33,192 - INFO  - Loop Invariant:
+2026-05-18 22:35:33,193 - INFO  - [False, True, True]
+2026-05-18 22:35:33,193 - INFO  - Loop Invariant: failures:
+2026-05-18 22:35:33,193 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 23):
+2026-05-18 22:35:33,193 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 23
+2026-05-18 22:35:33,193 - INFO  - Error line content: loop invariant 2 <= c <= seed + 1;
+2026-05-18 22:35:33,193 - INFO  - 
+2026-05-18 22:35:33,193 - INFO  - 
+2026-05-18 22:35:33,193 - INFO  - Assertion:
+2026-05-18 22:35:33,193 - INFO  - [False]
+2026-05-18 22:35:33,193 - INFO  - Assertion: failures:
+2026-05-18 22:35:33,193 - INFO  - Goal Assertion (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 20):
+2026-05-18 22:35:33,193 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 20
+2026-05-18 22:35:33,193 - INFO  - Error line content: /*@ assert \valid(result + (0 .. seed)); */
+2026-05-18 22:35:33,193 - INFO  - 
+2026-05-18 22:35:33,193 - INFO  - 
+2026-05-18 22:35:33,193 - INFO  - Assigns:
+2026-05-18 22:35:33,193 - INFO  - [True, True, True, False, False, False, True]
+2026-05-18 22:35:33,193 - INFO  - Assigns: failures:
+2026-05-18 22:35:33,193 - INFO  - Goal Assigns nothing in 'foo296' (3/6):
+2026-05-18 22:35:33,194 - INFO  - 
+2026-05-18 22:35:33,194 - INFO  - Goal Assigns nothing in 'foo296' (4/6):
+2026-05-18 22:35:33,194 - INFO  - 
+2026-05-18 22:35:33,194 - INFO  - Goal Assigns nothing in 'foo296' (5/6):
+2026-05-18 22:35:33,194 - INFO  - 
+2026-05-18 22:35:33,194 - INFO  - 
+2026-05-18 22:35:33,194 - INFO  - Post Condition:
+2026-05-18 22:35:33,194 - INFO  - [False]
+2026-05-18 22:35:33,194 - INFO  - Post Condition: failures:
+2026-05-18 22:35:33,194 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 11) in 'foo296':
+2026-05-18 22:35:33,194 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 11
+2026-05-18 22:35:33,194 - INFO  - Error line content: ensures \result == fib_shift(seed);
+2026-05-18 22:35:33,194 - INFO  - 
+2026-05-18 22:35:33,194 - INFO  - 
+2026-05-18 22:35:33,194 - INFO  - Instance:
+2026-05-18 22:35:33,194 - INFO  - []
+2026-05-18 22:35:33,194 - INFO  - 
+2026-05-18 22:35:33,194 - INFO  - [spec-gen] refine 2/3 score=(syntax=True, satisfy=0.00, valid=0.55) clauses=3
+2026-05-18 22:35:33,195 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer fib_shift(integer n) =
+    n == 0 ? 2
+    : n == 1 ? 1
+    : fib_shift(n-1) + fib_shift(n-2);
+*/
+/*@
+  requires seed >= 0;
+  assigns \nothing;
+  ensures \result == fib_shift(seed) [POSTCONDITION FAILED];
+*/
+int foo296(int seed) {
+
+    int *result = (int *)malloc(sizeof(int) * (seed + 1));
+    int result_len = seed + 1;
+    result[0] = 2;
+    result[1] = 1;
+
+    /*@ assert \valid(result + (0 .. seed)); */
+    
+    /*@
+      loop invariant 2 <= c <= seed + 1;
+      loop invariant \valid(result + (0 .. seed));
+      loop invariant \forall integer i; 2 <= i < c ==> result[i] == result[i-1] + result[i-2];
+      loop assigns c, result[0 .. seed];
+    */
+    for (int c = 2; c <= seed; c++) {
+        result[c] = result[c - 1] + result[c - 2];
+    }
+    
+    return result[seed];
+}
+
+2026-05-18 22:36:02,946 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer fib_shift(integer n) =
+    n == 0 ? 2
+    : n == 1 ? 1
+    : fib_shift(n-1) + fib_shift(n-2);
+*/
+
+/*@
+  // A simple contract for malloc to help verification: when n>0 it returns
+  // a non-null pointer and a valid block of n elements of type char.
+  // Placed in the file so calls to malloc can be reasoned about.
+  requires n > 0;
+  assigns \result;
+  ensures \result != \null;
+  ensures \valid((char*)\result + (0 .. n-1));
+*/
+void *malloc(unsigned long n);
+
+/*@
+  requires seed >= 1;
+  assigns \nothing;
+  ensures \result == fib_shift(seed);
+*/
+int foo296(int seed) {
+
+    int *result = (int *)malloc(sizeof(int) * (seed + 1));
+    int result_len = seed + 1;
+    result[0] = 2;
+    result[1] = 1;
+
+    /*@ assert result != \null && \valid((int*)result + (0 .. seed)); */
+    
+    /*@
+      loop invariant 2 <= c <= seed + 1;
+      loop invariant \valid((int*)result + (0 .. seed));
+      loop invariant result[0] == 2 && result[1] == 1;
+      loop invariant \forall integer i; 2 <= i < c ==> result[i] == result[i-1] + result[i-2];
+      loop assigns c, result[0 .. seed];
+    */
+    for (int c = 2; c <= seed; c++) {
+        result[c] = result[c - 1] + result[c - 2];
+    }
+    
+    return result[seed];
+}
+
+2026-05-18 22:36:30,188 - INFO  - syntax Correct
+2026-05-18 22:36:50,073 - INFO  - Loop Invariant:
+2026-05-18 22:36:50,074 - INFO  - [True, True, True, True]
+2026-05-18 22:36:50,074 - INFO  - 
+2026-05-18 22:36:50,074 - INFO  - Assertion:
+2026-05-18 22:36:50,074 - INFO  - [False]
+2026-05-18 22:36:50,074 - INFO  - Assertion: failures:
+2026-05-18 22:36:50,074 - INFO  - Goal Assertion (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 32):
+2026-05-18 22:36:50,074 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 32
+2026-05-18 22:36:50,075 - INFO  - Error line content: /*@ assert result != \null && \valid((int*)result + (0 .. seed)); */
+2026-05-18 22:36:50,075 - INFO  - 
+2026-05-18 22:36:50,075 - INFO  - 
+2026-05-18 22:36:50,075 - INFO  - Assigns:
+2026-05-18 22:36:50,075 - INFO  - [True, True, True, False, False, False, True]
+2026-05-18 22:36:50,075 - INFO  - Assigns: failures:
+2026-05-18 22:36:50,075 - INFO  - Goal Assigns nothing in 'foo296' (3/6):
+2026-05-18 22:36:50,075 - INFO  - 
+2026-05-18 22:36:50,075 - INFO  - Goal Assigns nothing in 'foo296' (4/6):
+2026-05-18 22:36:50,075 - INFO  - 
+2026-05-18 22:36:50,075 - INFO  - Goal Assigns nothing in 'foo296' (5/6):
+2026-05-18 22:36:50,075 - INFO  - 
+2026-05-18 22:36:50,075 - INFO  - 
+2026-05-18 22:36:50,076 - INFO  - Post Condition:
+2026-05-18 22:36:50,076 - INFO  - [False]
+2026-05-18 22:36:50,076 - INFO  - Post Condition: failures:
+2026-05-18 22:36:50,076 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 23) in 'foo296':
+2026-05-18 22:36:50,076 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 23
+2026-05-18 22:36:50,076 - INFO  - Error line content: ensures \result == fib_shift(seed);
+2026-05-18 22:36:50,076 - INFO  - 
+2026-05-18 22:36:50,076 - INFO  - 
+2026-05-18 22:36:50,076 - INFO  - Instance:
+2026-05-18 22:36:50,076 - INFO  - [True]
+2026-05-18 22:36:50,076 - INFO  - 
+2026-05-18 22:36:50,077 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.69) clauses=3
+2026-05-18 22:36:50,077 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer fib_shift(integer n) =
+    n == 0 ? 2
+    : n == 1 ? 1
+    : fib_shift(n-1) + fib_shift(n-2);
+*/
+
+/*@
+  // A simple contract for malloc to help verification: when n>0 it returns
+  // a non-null pointer and a valid block of n elements of type char.
+  // Placed in the file so calls to malloc can be reasoned about.
+  requires n > 0;
+  assigns \result;
+  ensures \result != \null [POSTCONDITION FAILED];
+  ensures \valid((char*)\result + (0 .. n-1));
+*/
+void *malloc(unsigned long n);
+
+/*@
+  requires seed >= 1;
+  assigns \nothing;
+  ensures \result == fib_shift(seed);
+*/
+int foo296(int seed) {
+
+    int *result = (int *)malloc(sizeof(int) * (seed + 1));
+    int result_len = seed + 1;
+    result[0] = 2;
+    result[1] = 1;
+
+    /*@ assert result != \null && \valid((int*)result + (0 .. seed)); */
+    
+    /*@
+      loop invariant 2 <= c <= seed + 1;
+      loop invariant \valid((int*)result + (0 .. seed));
+      loop invariant result[0] == 2 && result[1] == 1;
+      loop invariant \forall integer i; 2 <= i < c ==> result[i] == result[i-1] + result[i-2];
+      loop assigns c, result[0 .. seed];
+    */
+    for (int c = 2; c <= seed; c++) {
+        result[c] = result[c - 1] + result[c - 2];
+    }
+    
+    return result[seed];
+}
+
+2026-05-18 22:37:09,811 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer fib_shift(integer n) =
+    n == 0 ? 2
+    : n == 1 ? 1
+    : fib_shift(n-1) + fib_shift(n-2);
+*/
+
+/*@
+  // Minimal specification for malloc usable by this file:
+  // - when n>0 it returns a non-null pointer,
+  // - and for any m with m*sizeof(int) <= n it provides a valid int array of length m.
+  requires n > 0;
+  assigns \result;
+  ensures \result != \null;
+  ensures \valid((char*)\result + (0 .. n-1));
+  ensures \forall integer m; m >= 0 && (m * (integer)sizeof(int)) <= (integer)n
+            ==> \valid((int*)\result + (0 .. m-1));
+*/
+void *malloc(unsigned long n);
+
+/*@
+  requires seed >= 1;
+  assigns \nothing;
+  ensures \result == fib_shift(seed);
+*/
+int foo296(int seed) {
+
+    int *result = (int *)malloc(sizeof(int) * (seed + 1));
+    int result_len = seed + 1;
+    result[0] = 2;
+    result[1] = 1;
+
+    /*@ assert result != \null && \valid((int*)result + (0 .. seed)); */
+    
+    /*@
+      loop invariant 2 <= c <= seed + 1;
+      loop invariant \valid((int*)result + (0 .. seed));
+      loop invariant result[0] == 2 && result[1] == 1;
+      loop invariant \forall integer i; 2 <= i < c ==> result[i] == result[i-1] + result[i-2];
+      loop assigns c, result[0 .. seed];
+    */
+    for (int c = 2; c <= seed; c++) {
+        result[c] = result[c - 1] + result[c - 2];
+    }
+    
+    return result[seed];
+}
+
+2026-05-18 22:37:09,820 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.6923076923076923), clauses=3)
+2026-05-18 22:37:36,175 - INFO  - syntax Correct
+2026-05-18 22:37:53,482 - INFO  - Loop Invariant:
+2026-05-18 22:37:53,483 - INFO  - [True, True, True, True]
+2026-05-18 22:37:53,483 - INFO  - 
+2026-05-18 22:37:53,485 - INFO  - Assertion:
+2026-05-18 22:37:53,485 - INFO  - [False]
+2026-05-18 22:37:53,485 - INFO  - Assertion: failures:
+2026-05-18 22:37:53,485 - INFO  - Goal Assertion (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 32):
+2026-05-18 22:37:53,485 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 32
+2026-05-18 22:37:53,485 - INFO  - Error line content: /*@ assert result != \null && \valid((int*)result + (0 .. seed)); */
+2026-05-18 22:37:53,485 - INFO  - 
+2026-05-18 22:37:53,485 - INFO  - 
+2026-05-18 22:37:53,486 - INFO  - Assigns:
+2026-05-18 22:37:53,486 - INFO  - [True, True, True, False, False, False, True]
+2026-05-18 22:37:53,486 - INFO  - Assigns: failures:
+2026-05-18 22:37:53,486 - INFO  - Goal Assigns nothing in 'foo296' (3/6):
+2026-05-18 22:37:53,486 - INFO  - 
+2026-05-18 22:37:53,486 - INFO  - Goal Assigns nothing in 'foo296' (4/6):
+2026-05-18 22:37:53,486 - INFO  - 
+2026-05-18 22:37:53,486 - INFO  - Goal Assigns nothing in 'foo296' (5/6):
+2026-05-18 22:37:53,486 - INFO  - 
+2026-05-18 22:37:53,486 - INFO  - 
+2026-05-18 22:37:53,486 - INFO  - Post Condition:
+2026-05-18 22:37:53,487 - INFO  - [False]
+2026-05-18 22:37:53,487 - INFO  - Post Condition: failures:
+2026-05-18 22:37:53,487 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 23) in 'foo296':
+2026-05-18 22:37:53,487 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 23
+2026-05-18 22:37:53,487 - INFO  - Error line content: ensures \result == fib_shift(seed);
+2026-05-18 22:37:53,487 - INFO  - 
+2026-05-18 22:37:53,487 - INFO  - 
+2026-05-18 22:37:53,487 - INFO  - Instance:
+2026-05-18 22:37:53,487 - INFO  - [True]
+2026-05-18 22:37:53,487 - INFO  - 
+2026-05-18 22:38:09,172 - INFO  - syntax Correct
+2026-05-18 22:38:22,063 - INFO  - Loop Invariant:
+2026-05-18 22:38:22,064 - INFO  - [True, True, True, True]
+2026-05-18 22:38:22,064 - INFO  - 
+2026-05-18 22:38:22,064 - INFO  - Assertion:
+2026-05-18 22:38:22,064 - INFO  - [False]
+2026-05-18 22:38:22,064 - INFO  - Assertion: failures:
+2026-05-18 22:38:22,064 - INFO  - Goal Assertion (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 31):
+2026-05-18 22:38:22,064 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 31
+2026-05-18 22:38:22,064 - INFO  - Error line content: /*@ assert result != \null && \valid((int*)result + (0 .. seed)); */
+2026-05-18 22:38:22,064 - INFO  - 
+2026-05-18 22:38:22,064 - INFO  - 
+2026-05-18 22:38:22,064 - INFO  - Assigns:
+2026-05-18 22:38:22,064 - INFO  - [True, True, True, False, False, False, True]
+2026-05-18 22:38:22,065 - INFO  - Assigns: failures:
+2026-05-18 22:38:22,065 - INFO  - Goal Assigns nothing in 'foo296' (3/6):
+2026-05-18 22:38:22,065 - INFO  - 
+2026-05-18 22:38:22,065 - INFO  - Goal Assigns nothing in 'foo296' (4/6):
+2026-05-18 22:38:22,065 - INFO  - 
+2026-05-18 22:38:22,065 - INFO  - Goal Assigns nothing in 'foo296' (5/6):
+2026-05-18 22:38:22,065 - INFO  - 
+2026-05-18 22:38:22,065 - INFO  - 
+2026-05-18 22:38:22,065 - INFO  - Post Condition:
+2026-05-18 22:38:22,065 - INFO  - []
+2026-05-18 22:38:22,065 - INFO  - 
+2026-05-18 22:38:22,065 - INFO  - Instance:
+2026-05-18 22:38:22,065 - INFO  - [True]
+2026-05-18 22:38:22,065 - INFO  - 
+2026-05-18 22:38:34,453 - INFO  - syntax Correct
+2026-05-18 22:38:47,412 - INFO  - Loop Invariant:
+2026-05-18 22:38:47,412 - INFO  - [True, True, True, True]
+2026-05-18 22:38:47,413 - INFO  - 
+2026-05-18 22:38:47,413 - INFO  - Assertion:
+2026-05-18 22:38:47,413 - INFO  - [False]
+2026-05-18 22:38:47,413 - INFO  - Assertion: failures:
+2026-05-18 22:38:47,413 - INFO  - Goal Assertion (file log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c, line 31):
+2026-05-18 22:38:47,413 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo296/20260518_222146_2997259_a1bd321f/output/foo296.c at line: 31
+2026-05-18 22:38:47,413 - INFO  - Error line content: /*@ assert result != \null && \valid((int*)result + (0 .. seed)); */
+2026-05-18 22:38:47,413 - INFO  - 
+2026-05-18 22:38:47,413 - INFO  - 
+2026-05-18 22:38:47,413 - INFO  - Assigns:
+2026-05-18 22:38:47,413 - INFO  - [True, True, True, False, False, False, True]
+2026-05-18 22:38:47,413 - INFO  - Assigns: failures:
+2026-05-18 22:38:47,413 - INFO  - Goal Assigns nothing in 'foo296' (3/6):
+2026-05-18 22:38:47,413 - INFO  - 
+2026-05-18 22:38:47,413 - INFO  - Goal Assigns nothing in 'foo296' (4/6):
+2026-05-18 22:38:47,413 - INFO  - 
+2026-05-18 22:38:47,413 - INFO  - Goal Assigns nothing in 'foo296' (5/6):
+2026-05-18 22:38:47,413 - INFO  - 
+2026-05-18 22:38:47,413 - INFO  - 
+2026-05-18 22:38:47,413 - INFO  - Post Condition:
+2026-05-18 22:38:47,414 - INFO  - []
+2026-05-18 22:38:47,414 - INFO  - 
+2026-05-18 22:38:47,414 - INFO  - Instance:
+2026-05-18 22:38:47,414 - INFO  - [True]
+2026-05-18 22:38:47,414 - INFO  - 
+2026-05-18 22:38:47,414 - INFO  - first_pass:
+2026-05-18 22:38:47,414 - INFO  - syntax=1, valid=None,satisfy=None
+2026-05-18 22:38:47,414 - INFO  - ==================================================
+2026-05-18 22:38:47,414 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 22:38:47,414 - INFO  - Total execution time: 1020.68 seconds (17.01 minutes)
+2026-05-18 22:38:47,415 - INFO  - ==================================================
+2026-05-18 22:38:47,415 - INFO  - ==================================================
+2026-05-18 22:38:47,415 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 22:38:47,415 - INFO  - Total API calls: 20
+2026-05-18 22:38:47,415 - INFO  - Total prompt tokens (input): 287,004
+2026-05-18 22:38:47,415 - INFO  - Total completion tokens (output): 21,440
+2026-05-18 22:38:47,415 - INFO  - Total tokens: 308,444
+2026-05-18 22:38:47,415 - INFO  - Average prompt tokens per call: 14350.2
+2026-05-18 22:38:47,415 - INFO  - Average completion tokens per call: 1072.0
+2026-05-18 22:38:47,415 - INFO  - Average total tokens per call: 15422.2
+2026-05-18 22:38:47,415 - INFO  - ==================================================

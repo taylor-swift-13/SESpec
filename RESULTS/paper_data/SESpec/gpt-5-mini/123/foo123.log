@@ -1,0 +1,447 @@
+2026-05-18 21:48:11,204 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54
+2026-05-18 21:48:11,204 - INFO  - 
+🚀 Starting generation of function: foo123
+2026-05-18 21:48:11,204 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 21:48:11,204 - INFO  - TRY TIME: 0
+2026-05-18 21:48:11,204 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 21:48:11,204 - INFO  - ==================================================
+
+2026-05-18 21:48:12,328 - INFO  - [auto only_loop] False — foo123 returns 'int'
+2026-05-18 21:48:12,329 - INFO  - Initial pending functions: ['foo123', 'strlen']
+2026-05-18 21:48:12,329 - INFO  - Now processing function strlen
+
+2026-05-18 21:48:12,329 - INFO  - [stdlib stub] Skipping body extraction for 'strlen' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-18 21:48:12,329 - INFO  - 
+GENERATE ANNOTATION FOR foo123
+2026-05-18 21:48:12,329 - INFO  - ==================================================
+
+2026-05-18 21:48:12,329 - INFO  - Function foo123 has been initialized
+2026-05-18 21:48:12,329 - INFO  - Starting to generate annotation code for foo123
+2026-05-18 21:48:12,394 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo123
+2026-05-18 21:48:12,394 - INFO  - ==================================================
+
+2026-05-18 21:48:12,485 - INFO  - Variable Maps:[{}]
+2026-05-18 21:48:12,486 - INFO  - Path conditions: [None]
+2026-05-18 21:48:12,486 - INFO  - Pre condition: 
+2026-05-18 21:48:12,486 - INFO  - Loop Condition: i < ((int)strlen(pat))
+2026-05-18 21:48:12,488 - INFO  - Array Names: ['pat', 'txt']
+2026-05-18 21:48:12,488 - INFO  - Updated Loop Conditions: ['i < ((int)strlen(pat))']
+2026-05-18 21:48:12,488 - INFO  - Global Unchanged Variables: []
+2026-05-18 21:48:12,488 - INFO  - Non Inductive Variables: []
+2026-05-18 21:48:12,490 - INFO  - Unchanged Arrays (Read-only): ['pat', 'txt']
+2026-05-18 21:48:12,492 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 21:48:12,496 - INFO  - examples category: array
+2026-05-18 21:48:12,497 - INFO  - examples:
+2026-05-18 21:48:12,497 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 21:48:19,102 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:48:19,104 - INFO  - [acsl-fixer] const-drop: removed line 3: predicate equal_prefix{L}(const char* pat, const char* txt, integer n) =
+2026-05-18 21:48:19,440 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:48:28,372 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:48:28,373 - INFO  - [acsl-fixer] const-drop: removed line 3: predicate equal_prefix(const char* pat, const char* txt, integer n) =
+2026-05-18 21:48:28,640 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:48:37,586 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:48:37,586 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-18 21:48:37,587 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-18 21:48:38,149 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 21:48:44,751 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:48:44,752 - INFO  - [acsl-fixer] const-drop: removed line 3: predicate equal_prefix{L}(const char* pat, const char* txt, integer n) =
+2026-05-18 21:48:45,077 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:48:53,879 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:48:53,880 - INFO  - [acsl-fixer] const-drop: removed line 3: predicate equal_prefix(const char* pat, const char* txt, integer n) =
+2026-05-18 21:48:54,174 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:49:02,528 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:49:02,529 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-18 21:49:02,530 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-18 21:49:03,290 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 21:49:08,299 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:49:08,300 - INFO  - [acsl-fixer] const-drop: removed line 3: predicate equal_prefix(const char* pat, const char* txt, integer n) =
+2026-05-18 21:49:08,634 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:49:20,138 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:49:20,139 - INFO  - [acsl-fixer] const-drop: removed line 3: predicate equal_prefix(const char* pat, const char* txt, integer n) =
+2026-05-18 21:49:20,505 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:49:28,980 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:49:28,980 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-18 21:49:28,981 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-18 21:49:29,713 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 21:49:30,093 - INFO  - ACSL format loop invariant
+2026-05-18 21:49:30,093 - INFO  - /*@
+          loop invariant 0 <= i <= (int)strlen(pat);
+          loop invariant (i < (int)strlen(pat)) ==> (i < (int)strlen(txt) && equal_prefix(pat, txt, i));
+          loop invariant (!(i < (int)strlen(pat))) ==> equal_prefix(pat, txt, (int)strlen(pat));
+          loop invariant \forall integer k; 0 <= k < (int)strlen(txt) ==> txt[k] == \at(txt[k], Pre);
+          loop invariant \forall integer k; 0 <= k < (int)strlen(pat) ==> pat[k] == \at(pat[k], Pre);
+          loop assigns i;
+        */
+        while(i < ((int)strlen(pat))) {
+            if(i >= ((int)strlen(txt)) || pat[i] != txt[i])
+                return 0;
+            i = i + 1;
+        }
+2026-05-18 21:49:30,095 - INFO  - QCP format loop invariant
+2026-05-18 21:49:30,095 - INFO  - /*@ Inv
+    exists  pat_l txt_l,    
+    store_int_array(pat, txt, pat_l) && txt > 0 && txt < 100 && store_int_array(txt, 100, txt_l) &&
+    (0 <= i && i <= (int)strlen(pat)) &&
+((i < (int)strlen(pat)) => (i < (int)strlen(txt) && equal_prefix(pat, txt, i))) &&
+((!(i < (int)strlen(pat))) => equal_prefix(pat, txt, (int)strlen(pat))) &&
+(forall (k:Z), 0 <= k && k < (int)strlen(txt) => txt_l[k] == txt_l[k]@pre) &&
+(forall (k:Z), 0 <= k && k < (int)strlen(pat) => pat_l[k] == pat_l[k]@pre
+          loop assigns i)
+    */
+    
+        while(i < ((int)strlen(pat))) {
+            if(i >= ((int)strlen(txt)) || pat[i] != txt[i])
+                return 0;
+            i = i + 1;
+        }
+2026-05-18 21:49:30,482 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo123
+2026-05-18 21:49:30,482 - INFO  - ==================================================
+
+2026-05-18 21:49:30,507 - INFO  - Starting to generate ACSL specification for foo123
+2026-05-18 21:49:41,528 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token 'const'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:49:41,529 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=9
+2026-05-18 21:49:41,530 - INFO  - [acsl-fixer] const-drop: removed line 3: predicate equal_prefix(const char* pat, const char* txt, integer n) =
+2026-05-18 21:49:42,048 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token '\forall'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:49:42,049 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:50:07,677 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token 'const'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:50:07,678 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=7
+2026-05-18 21:50:07,679 - INFO  - [acsl-fixer] const-drop: removed line 3: predicate equal_prefix(const char* pat, const char* txt, integer n) =
+2026-05-18 21:50:08,135 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token '\forall'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:50:08,135 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:50:21,607 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token 'const'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:50:21,608 - INFO  - [spec-gen] refine 3/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=7
+2026-05-18 21:50:21,608 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 21:50:21,609 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=9)
+2026-05-18 21:50:22,030 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token 'const'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:50:22,032 - INFO  - 
+SPECIFICATION FOR foo123
+2026-05-18 21:50:22,032 - INFO  - ==================================================
+
+2026-05-18 21:50:22,032 - INFO  - 
+QCP Specification for function foo123:
+/*@
+With pat_l txt_l
+Require store_int_array(pat, txt, pat_l) && txt > 0 && txt < 100 && store_int_array(txt, 100, txt_l)
+Ensure Results(__return)
+*/
+2026-05-18 21:50:22,300 - INFO  - 
+VERIFICATION FOR foo123
+2026-05-18 21:50:22,301 - INFO  - ==================================================
+
+2026-05-18 21:50:22,790 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token 'const'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:50:33,145 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token 'const'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:50:33,145 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=11
+2026-05-18 21:50:33,146 - INFO  - [acsl-fixer] const-drop: removed line 3: predicate equal_prefix(const char* pat, const char* txt, integer n) =
+2026-05-18 21:50:33,476 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token '\forall'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:50:33,476 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:50:55,068 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token 'const'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:50:55,069 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=9
+2026-05-18 21:50:55,070 - INFO  - [acsl-fixer] const-drop: removed line 3: predicate equal_prefix(const char* pat, const char* txt, integer n) =
+2026-05-18 21:50:55,449 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token '\forall'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:50:55,450 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:51:06,384 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token 'const'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:51:06,385 - INFO  - [spec-gen] refine 3/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=9
+2026-05-18 21:51:06,385 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 21:51:06,386 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=11)
+2026-05-18 21:51:06,684 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token 'const'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:51:07,009 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c:3: Warning: 
+  unexpected token 'const'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo123/20260518_214811_2880799_b7c0aa54/output/foo123.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:51:07,010 - INFO  - first_pass:
+2026-05-18 21:51:07,010 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-18 21:51:07,010 - INFO  - ==================================================
+2026-05-18 21:51:07,010 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 21:51:07,010 - INFO  - Total execution time: 175.81 seconds (2.93 minutes)
+2026-05-18 21:51:07,010 - INFO  - ==================================================
+2026-05-18 21:51:07,010 - INFO  - ==================================================
+2026-05-18 21:51:07,010 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 21:51:07,010 - INFO  - Total API calls: 15
+2026-05-18 21:51:07,011 - INFO  - Total prompt tokens (input): 104,699
+2026-05-18 21:51:07,011 - INFO  - Total completion tokens (output): 10,674
+2026-05-18 21:51:07,011 - INFO  - Total tokens: 115,373
+2026-05-18 21:51:07,011 - INFO  - Average prompt tokens per call: 6979.9
+2026-05-18 21:51:07,011 - INFO  - Average completion tokens per call: 711.6
+2026-05-18 21:51:07,011 - INFO  - Average total tokens per call: 7691.5
+2026-05-18 21:51:07,011 - INFO  - ==================================================

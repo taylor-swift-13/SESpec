@@ -1,0 +1,25 @@
+
+int foo219(int * args, int args_len, int array, int n) {
+
+		int ret = 0;
+		int hi = n - 1;
+		int result = -1;
+		
+            /*@
+              loop invariant result == -1 || args[result] == array;
+              loop assigns ret, hi, result;
+            */
+            while (ret <= hi) {
+			int tmp = (ret + hi) / 2;
+			if (args[tmp] == array) {
+				result = tmp;
+				hi = tmp - 1;
+			} else if (args[tmp] < array) {
+				ret = tmp + 1;
+			} else {
+				hi = tmp - 1;
+			}
+		}
+            
+		return result;
+}

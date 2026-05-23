@@ -1,0 +1,956 @@
+2026-05-15 02:11:44,373 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo204/20260515_021144_836960_73c54501
+2026-05-15 02:11:44,373 - INFO  - 
+🚀 Starting generation of function: foo204
+2026-05-15 02:11:44,373 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 02:11:44,373 - INFO  - ==================================================
+
+2026-05-15 02:11:44,705 - INFO  - [auto only_loop] False — foo204 returns 'int'
+2026-05-15 02:11:44,706 - INFO  - Initial pending functions: ['foo204']
+2026-05-15 02:11:44,706 - INFO  - 
+GENERATE ANNOTATION FOR foo204
+2026-05-15 02:11:44,706 - INFO  - ==================================================
+
+2026-05-15 02:11:44,706 - INFO  - Function foo204 has been initialized
+2026-05-15 02:11:44,706 - INFO  - Starting to generate annotation code for foo204
+2026-05-15 02:11:44,760 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo204
+2026-05-15 02:11:44,760 - INFO  - ==================================================
+
+2026-05-15 02:11:44,838 - INFO  - Variable Maps:[{'sum': '0', 'n': 'n@pre'}]
+2026-05-15 02:11:44,838 - INFO  - Path conditions: [None]
+2026-05-15 02:11:44,838 - INFO  - Pre condition: (sum == 0) * (n == n@pre)
+2026-05-15 02:11:44,838 - INFO  - Loop Condition: i <= n
+2026-05-15 02:11:44,839 - INFO  - Array Names: []
+2026-05-15 02:11:44,839 - INFO  - Updated Loop Conditions: ['i <= n@pre']
+2026-05-15 02:11:44,840 - INFO  - Global Unchanged Variables: ['n']
+2026-05-15 02:11:44,840 - INFO  - Non Inductive Variables: []
+2026-05-15 02:11:44,840 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 02:11:44,841 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 02:11:44,843 - INFO  - examples category: numeric
+2026-05-15 02:11:44,843 - INFO  - examples:
+2026-05-15 02:11:44,843 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 02:11:57,491 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-15 02:12:27,388 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 02:12:50,640 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 02:12:50,641 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:12:51,820 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-15 02:13:12,021 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 02:13:12,021 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:13:13,285 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-15 02:13:36,309 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 02:13:36,310 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:13:37,613 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-15 02:13:54,138 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-15 02:13:54,139 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:13:55,309 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-15 02:14:13,222 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6666666666666666, 0.0), clauses=3)
+2026-05-15 02:14:18,983 - INFO  - ACSL format loop invariant
+2026-05-15 02:14:18,984 - INFO  - /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n,Pre);
+      loop assigns i, sum;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+2026-05-15 02:14:18,986 - INFO  - QCP format loop invariant
+2026-05-15 02:14:18,986 - INFO  - /*@ Inv
+    (1 <= i && i <= n + 1) &&
+(n == n@pre
+      loop assigns i, sum)
+    */
+    
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+2026-05-15 02:14:20,794 - INFO  - CORRECT INVARIANT
+2026-05-15 02:14:20,794 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo204
+2026-05-15 02:14:20,794 - INFO  - ==================================================
+
+2026-05-15 02:14:20,821 - INFO  - Starting to generate ACSL specification for foo204
+2026-05-15 02:14:53,702 - INFO  - syntax Correct
+2026-05-15 02:15:05,407 - INFO  - Loop Invariant:
+2026-05-15 02:15:05,407 - INFO  - [True, True, False]
+2026-05-15 02:15:05,407 - INFO  - 
+2026-05-15 02:15:05,407 - INFO  - Assertion:
+2026-05-15 02:15:05,407 - INFO  - []
+2026-05-15 02:15:05,408 - INFO  - 
+2026-05-15 02:15:05,408 - INFO  - Assigns:
+2026-05-15 02:15:05,408 - INFO  - [True]
+2026-05-15 02:15:05,408 - INFO  - 
+2026-05-15 02:15:05,408 - INFO  - Post Condition:
+2026-05-15 02:15:05,408 - INFO  - [False]
+2026-05-15 02:15:05,408 - INFO  - 
+2026-05-15 02:15:05,408 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=3
+2026-05-15 02:15:05,409 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n) [POSTCONDITION FAILED];
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n,Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:16:28,670 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n); // Fixed postcondition
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n, Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:16:40,169 - INFO  - syntax Correct
+2026-05-15 02:16:51,344 - INFO  - Loop Invariant:
+2026-05-15 02:16:51,345 - INFO  - [True, True, False]
+2026-05-15 02:16:51,345 - INFO  - 
+2026-05-15 02:16:51,345 - INFO  - Assertion:
+2026-05-15 02:16:51,345 - INFO  - []
+2026-05-15 02:16:51,345 - INFO  - 
+2026-05-15 02:16:51,345 - INFO  - Assigns:
+2026-05-15 02:16:51,345 - INFO  - [True]
+2026-05-15 02:16:51,345 - INFO  - 
+2026-05-15 02:16:51,345 - INFO  - Post Condition:
+2026-05-15 02:16:51,345 - INFO  - [False]
+2026-05-15 02:16:51,345 - INFO  - 
+2026-05-15 02:16:51,345 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=3
+2026-05-15 02:16:51,345 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n) [POSTCONDITION FAILED]; // Fixed postcondition
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n, Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:17:09,242 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n); // Fixed postcondition
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n, Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:17:23,139 - INFO  - syntax Correct
+2026-05-15 02:17:34,036 - INFO  - Loop Invariant:
+2026-05-15 02:17:34,037 - INFO  - [True, True, False]
+2026-05-15 02:17:34,037 - INFO  - 
+2026-05-15 02:17:34,037 - INFO  - Assertion:
+2026-05-15 02:17:34,037 - INFO  - []
+2026-05-15 02:17:34,038 - INFO  - 
+2026-05-15 02:17:34,038 - INFO  - Assigns:
+2026-05-15 02:17:34,038 - INFO  - [True]
+2026-05-15 02:17:34,038 - INFO  - 
+2026-05-15 02:17:34,038 - INFO  - Post Condition:
+2026-05-15 02:17:34,038 - INFO  - [False]
+2026-05-15 02:17:34,038 - INFO  - 
+2026-05-15 02:17:34,039 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=3
+2026-05-15 02:17:34,039 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:17:45,647 - INFO  - syntax Correct
+2026-05-15 02:17:57,558 - INFO  - Loop Invariant:
+2026-05-15 02:17:57,558 - INFO  - [True, True, False]
+2026-05-15 02:17:57,558 - INFO  - 
+2026-05-15 02:17:57,559 - INFO  - Assertion:
+2026-05-15 02:17:57,559 - INFO  - []
+2026-05-15 02:17:57,559 - INFO  - 
+2026-05-15 02:17:57,559 - INFO  - Assigns:
+2026-05-15 02:17:57,559 - INFO  - [True]
+2026-05-15 02:17:57,559 - INFO  - 
+2026-05-15 02:17:57,559 - INFO  - Post Condition:
+2026-05-15 02:17:57,560 - INFO  - [False]
+2026-05-15 02:17:57,560 - INFO  - 
+2026-05-15 02:17:57,560 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=3
+2026-05-15 02:17:57,560 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n) [POSTCONDITION FAILED];
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n,Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:18:40,544 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n > 0; // Strengthened precondition to ensure n is positive
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n); // Postcondition now valid for all n > 0
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n, Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:18:51,639 - INFO  - syntax Correct
+2026-05-15 02:19:02,747 - INFO  - Loop Invariant:
+2026-05-15 02:19:02,748 - INFO  - [True, True, False]
+2026-05-15 02:19:02,748 - INFO  - 
+2026-05-15 02:19:02,748 - INFO  - Assertion:
+2026-05-15 02:19:02,748 - INFO  - []
+2026-05-15 02:19:02,748 - INFO  - 
+2026-05-15 02:19:02,748 - INFO  - Assigns:
+2026-05-15 02:19:02,749 - INFO  - [True]
+2026-05-15 02:19:02,749 - INFO  - 
+2026-05-15 02:19:02,749 - INFO  - Post Condition:
+2026-05-15 02:19:02,749 - INFO  - [False]
+2026-05-15 02:19:02,749 - INFO  - 
+2026-05-15 02:19:02,750 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=3
+2026-05-15 02:19:02,750 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:19:14,029 - INFO  - syntax Correct
+2026-05-15 02:19:24,915 - INFO  - Loop Invariant:
+2026-05-15 02:19:24,915 - INFO  - [True, True, False]
+2026-05-15 02:19:24,915 - INFO  - 
+2026-05-15 02:19:24,915 - INFO  - Assertion:
+2026-05-15 02:19:24,915 - INFO  - []
+2026-05-15 02:19:24,915 - INFO  - 
+2026-05-15 02:19:24,915 - INFO  - Assigns:
+2026-05-15 02:19:24,915 - INFO  - [True]
+2026-05-15 02:19:24,915 - INFO  - 
+2026-05-15 02:19:24,915 - INFO  - Post Condition:
+2026-05-15 02:19:24,915 - INFO  - [False]
+2026-05-15 02:19:24,915 - INFO  - 
+2026-05-15 02:19:24,916 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=3
+2026-05-15 02:19:24,916 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n) [POSTCONDITION FAILED];
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n,Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:20:02,570 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n); // Fixed postcondition
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n, Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop invariant \forall integer k; 1 <= k < i ==> (n % k == 0 && k % 2 != 0) ==> sum >= k;
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:20:14,080 - INFO  - syntax Correct
+2026-05-15 02:20:25,259 - INFO  - Loop Invariant:
+2026-05-15 02:20:25,260 - INFO  - [True, True, False, False]
+2026-05-15 02:20:25,260 - INFO  - 
+2026-05-15 02:20:25,260 - INFO  - Assertion:
+2026-05-15 02:20:25,260 - INFO  - []
+2026-05-15 02:20:25,260 - INFO  - 
+2026-05-15 02:20:25,260 - INFO  - Assigns:
+2026-05-15 02:20:25,260 - INFO  - [True]
+2026-05-15 02:20:25,260 - INFO  - 
+2026-05-15 02:20:25,261 - INFO  - Post Condition:
+2026-05-15 02:20:25,261 - INFO  - [False]
+2026-05-15 02:20:25,261 - INFO  - 
+2026-05-15 02:20:25,261 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=3
+2026-05-15 02:20:25,261 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:20:36,132 - INFO  - syntax Correct
+2026-05-15 02:20:46,930 - INFO  - Loop Invariant:
+2026-05-15 02:20:46,930 - INFO  - [True, True, False]
+2026-05-15 02:20:46,930 - INFO  - 
+2026-05-15 02:20:46,930 - INFO  - Assertion:
+2026-05-15 02:20:46,931 - INFO  - []
+2026-05-15 02:20:46,931 - INFO  - 
+2026-05-15 02:20:46,931 - INFO  - Assigns:
+2026-05-15 02:20:46,931 - INFO  - [True]
+2026-05-15 02:20:46,931 - INFO  - 
+2026-05-15 02:20:46,931 - INFO  - Post Condition:
+2026-05-15 02:20:46,932 - INFO  - [False]
+2026-05-15 02:20:46,932 - INFO  - 
+2026-05-15 02:20:46,932 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=3
+2026-05-15 02:20:46,932 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n) [POSTCONDITION FAILED];
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n,Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:21:15,790 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n); // Fixed postcondition
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n,Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop invariant \forall integer k; 1 <= k < i ==> 
+        (n % k == 0 && k % 2 != 0) ==> sum >= k;
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:21:26,816 - INFO  - syntax Correct
+2026-05-15 02:21:37,608 - INFO  - Loop Invariant:
+2026-05-15 02:21:37,608 - INFO  - [True, True, False, False]
+2026-05-15 02:21:37,608 - INFO  - 
+2026-05-15 02:21:37,608 - INFO  - Assertion:
+2026-05-15 02:21:37,608 - INFO  - []
+2026-05-15 02:21:37,608 - INFO  - 
+2026-05-15 02:21:37,608 - INFO  - Assigns:
+2026-05-15 02:21:37,608 - INFO  - [True]
+2026-05-15 02:21:37,608 - INFO  - 
+2026-05-15 02:21:37,608 - INFO  - Post Condition:
+2026-05-15 02:21:37,609 - INFO  - [False]
+2026-05-15 02:21:37,609 - INFO  - 
+2026-05-15 02:21:37,609 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=3
+2026-05-15 02:21:37,609 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:21:48,316 - INFO  - syntax Correct
+2026-05-15 02:21:59,109 - INFO  - Loop Invariant:
+2026-05-15 02:21:59,109 - INFO  - [True, True, False]
+2026-05-15 02:21:59,109 - INFO  - 
+2026-05-15 02:21:59,109 - INFO  - Assertion:
+2026-05-15 02:21:59,109 - INFO  - []
+2026-05-15 02:21:59,110 - INFO  - 
+2026-05-15 02:21:59,110 - INFO  - Assigns:
+2026-05-15 02:21:59,110 - INFO  - [True]
+2026-05-15 02:21:59,110 - INFO  - 
+2026-05-15 02:21:59,110 - INFO  - Post Condition:
+2026-05-15 02:21:59,110 - INFO  - [False]
+2026-05-15 02:21:59,110 - INFO  - 
+2026-05-15 02:21:59,111 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=3
+2026-05-15 02:21:59,111 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n) [POSTCONDITION FAILED];
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n,Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:22:27,323 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_odd_divisors(n); // Postcondition fixed
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n, Pre);
+      loop invariant sum == \sum(1, i - 1, \lambda integer j; (n % j == 0 && j % 2 != 0) ? j : 0);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:22:27,325 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.6, 0.0), clauses=3)
+2026-05-15 02:22:38,076 - INFO  - syntax Correct
+2026-05-15 02:22:48,834 - INFO  - Loop Invariant:
+2026-05-15 02:22:48,835 - INFO  - [True, True, False]
+2026-05-15 02:22:48,835 - INFO  - 
+2026-05-15 02:22:48,835 - INFO  - Assertion:
+2026-05-15 02:22:48,835 - INFO  - []
+2026-05-15 02:22:48,835 - INFO  - 
+2026-05-15 02:22:48,835 - INFO  - Assigns:
+2026-05-15 02:22:48,835 - INFO  - [True]
+2026-05-15 02:22:48,835 - INFO  - 
+2026-05-15 02:22:48,835 - INFO  - Post Condition:
+2026-05-15 02:22:48,835 - INFO  - [False]
+2026-05-15 02:22:48,835 - INFO  - 
+2026-05-15 02:22:49,173 - INFO  - syntax Correct
+2026-05-15 02:22:49,522 - INFO  - Loop Invariant:
+2026-05-15 02:22:49,522 - INFO  - [True, True]
+2026-05-15 02:22:49,522 - INFO  - 
+2026-05-15 02:22:49,523 - INFO  - Assertion:
+2026-05-15 02:22:49,523 - INFO  - []
+2026-05-15 02:22:49,523 - INFO  - 
+2026-05-15 02:22:49,523 - INFO  - Assigns:
+2026-05-15 02:22:49,523 - INFO  - [True]
+2026-05-15 02:22:49,523 - INFO  - 
+2026-05-15 02:22:49,523 - INFO  - Post Condition:
+2026-05-15 02:22:49,523 - INFO  - []
+2026-05-15 02:22:49,523 - INFO  - 
+2026-05-15 02:22:49,524 - INFO  - 
+SPECIFICATION FOR foo204
+2026-05-15 02:22:49,524 - INFO  - ==================================================
+
+2026-05-15 02:22:49,524 - INFO  - 
+QCP Specification for function foo204:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-15 02:22:49,597 - INFO  - 
+VERIFICATION FOR foo204
+2026-05-15 02:22:49,597 - INFO  - ==================================================
+
+2026-05-15 02:22:49,597 - INFO  - TRY TIME: 0
+2026-05-15 02:22:49,923 - INFO  - syntax Correct
+2026-05-15 02:22:50,297 - INFO  - Loop Invariant:
+2026-05-15 02:22:50,297 - INFO  - [True, True]
+2026-05-15 02:22:50,297 - INFO  - 
+2026-05-15 02:22:50,297 - INFO  - Assertion:
+2026-05-15 02:22:50,297 - INFO  - []
+2026-05-15 02:22:50,297 - INFO  - 
+2026-05-15 02:22:50,297 - INFO  - Assigns:
+2026-05-15 02:22:50,297 - INFO  - [True]
+2026-05-15 02:22:50,298 - INFO  - 
+2026-05-15 02:22:50,298 - INFO  - Post Condition:
+2026-05-15 02:22:50,298 - INFO  - []
+2026-05-15 02:22:50,298 - INFO  - 
+2026-05-15 02:22:50,298 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo204
+2026-05-15 02:22:50,298 - INFO  - ==================================================
+2026-05-15 02:22:50,298 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo204/20260515_021144_836960_73c54501/output/foo204.c
+2026-05-15 02:22:50,298 - INFO  - Output file content:
+
+/*@
+  logic integer sum_of_odd_divisors(integer n) =
+    \sum(1, n, \lambda integer i; (n % i == 0 && i % 2 != 0) ? i : 0);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+*/
+int foo204(int n) {
+    int sum = 0;
+
+    /*@
+      loop invariant 1 <= i <= n + 1;
+      loop invariant n == \at(n,Pre);
+      loop assigns i, sum;
+      loop variant n - i;
+    */
+    for (int i = 1; i <= n; i++) {
+        if (n % i == 0) {
+            if (i % 2 != 0) {
+                sum += i;
+            }
+        }
+    }
+
+    return sum;
+}
+
+2026-05-15 02:22:50,298 - INFO  - ==================================================
+2026-05-15 02:22:50,298 - INFO  - first_pass:
+2026-05-15 02:22:50,298 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 02:22:50,298 - INFO  - ==================================================
+2026-05-15 02:22:50,298 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 02:22:50,299 - INFO  - Total execution time: 665.92 seconds (11.10 minutes)
+2026-05-15 02:22:50,299 - INFO  - ==================================================
+2026-05-15 02:22:50,299 - INFO  - ==================================================
+2026-05-15 02:22:50,299 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 02:22:50,299 - INFO  - Total API calls: 14
+2026-05-15 02:22:50,299 - INFO  - Total prompt tokens (input): 59,998
+2026-05-15 02:22:50,299 - INFO  - Total completion tokens (output): 8,912
+2026-05-15 02:22:50,299 - INFO  - Total tokens: 68,910
+2026-05-15 02:22:50,299 - INFO  - Average prompt tokens per call: 4285.6
+2026-05-15 02:22:50,299 - INFO  - Average completion tokens per call: 636.6
+2026-05-15 02:22:50,300 - INFO  - Average total tokens per call: 4922.1
+2026-05-15 02:22:50,300 - INFO  - ==================================================

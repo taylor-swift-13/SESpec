@@ -1,0 +1,1721 @@
+2026-05-15 00:28:03,648 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782
+2026-05-15 00:28:03,649 - INFO  - 
+🚀 Starting generation of function: foo84
+2026-05-15 00:28:03,649 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 00:28:03,649 - INFO  - ==================================================
+
+2026-05-15 00:28:04,004 - INFO  - [auto only_loop] False — foo84 returns 'int'
+2026-05-15 00:28:04,005 - INFO  - Initial pending functions: ['foo84']
+2026-05-15 00:28:04,005 - INFO  - 
+GENERATE ANNOTATION FOR foo84
+2026-05-15 00:28:04,005 - INFO  - ==================================================
+
+2026-05-15 00:28:04,005 - INFO  - Function foo84 has been initialized
+2026-05-15 00:28:04,006 - INFO  - Starting to generate annotation code for foo84
+2026-05-15 00:28:04,092 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo84
+2026-05-15 00:28:04,093 - INFO  - ==================================================
+
+2026-05-15 00:28:04,184 - INFO  - Variable Maps:[{}]
+2026-05-15 00:28:04,184 - INFO  - Path conditions: [None]
+2026-05-15 00:28:04,184 - INFO  - Pre condition: emp
+2026-05-15 00:28:04,184 - INFO  - Loop Condition: remaining <= array
+2026-05-15 00:28:04,186 - INFO  - Array Names: ['args']
+2026-05-15 00:28:04,186 - INFO  - Updated Loop Conditions: ['remaining <= array']
+2026-05-15 00:28:04,186 - INFO  - Global Unchanged Variables: []
+2026-05-15 00:28:04,186 - INFO  - Non Inductive Variables: []
+2026-05-15 00:28:04,188 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-15 00:28:04,190 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 00:28:04,192 - INFO  - examples category: array
+2026-05-15 00:28:04,192 - INFO  - examples:
+2026-05-15 00:28:04,192 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-15 00:28:26,596 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-15 00:28:40,741 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=3
+2026-05-15 00:28:40,741 - INFO  - [inv-gen] converged at refine 2
+2026-05-15 00:28:42,393 - INFO  - ACSL format loop invariant
+2026-05-15 00:28:42,393 - INFO  - /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+2026-05-15 00:28:42,395 - INFO  - QCP format loop invariant
+2026-05-15 00:28:42,395 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (1 <= remaining && remaining <= array + 1) &&
+(1 <= find && find <= remaining) &&
+(forall (k:Z), 0 <= k && k < array => args_l[k] == args_l[k]@pre
+          loop assigns remaining, find)
+    */
+    
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+2026-05-15 00:28:44,061 - INFO  - CORRECT INVARIANT
+2026-05-15 00:28:44,062 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo84
+2026-05-15 00:28:44,062 - INFO  - ==================================================
+
+2026-05-15 00:28:44,073 - INFO  - Starting to generate ACSL specification for foo84
+2026-05-15 00:28:57,547 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c:9: 
+  syntax error:
+  Location: line 9, between columns 11 and 13, before or at token: >=
+  7     /* Note: To avoid inventing \max logic, we simplify the second disjunct: if all k match then result == array */
+  8       ensures
+  9         (array >= 2) ==>
+        ^^^^^^^^^^^^^^^^^^^^
+  10          (
+  11            (\exists integer i; 1 <= i <= array &&
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 00:28:57,547 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=1
+2026-05-15 00:29:23,959 - INFO  - syntax Correct
+2026-05-15 00:29:34,928 - INFO  - Loop Invariant:
+2026-05-15 00:29:34,928 - INFO  - [True, True, True]
+2026-05-15 00:29:34,929 - INFO  - 
+2026-05-15 00:29:34,929 - INFO  - Assertion:
+2026-05-15 00:29:34,929 - INFO  - []
+2026-05-15 00:29:34,929 - INFO  - 
+2026-05-15 00:29:34,929 - INFO  - Assigns:
+2026-05-15 00:29:34,929 - INFO  - [True, True, True, True]
+2026-05-15 00:29:34,929 - INFO  - 
+2026-05-15 00:29:34,929 - INFO  - Post Condition:
+2026-05-15 00:29:34,930 - INFO  - [False]
+2026-05-15 00:29:34,930 - INFO  - 
+2026-05-15 00:29:34,930 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-15 00:29:34,931 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;            // optional:sanity, mentions only parameter
+  requires \valid(args + (0..args_len-1));
+  requires 0 <= array;               // array is a parameter; ensure non-negative if desired
+  assigns \nothing;                  // function only returns or modifies locals; caller-visible state unchanged
+  ensures (array >= 2) ==>
+      (
+        (\exists integer i [POSTCONDITION FAILED]; 1 <= i <= array &&
+           (args[i-1] != i) &&
+           (\forall integer j; 1 <= j < i ==> args[j-1] == j) &&
+           \result == i
+        )
+        ||
+        (
+          (\forall integer k; 1 <= k <= array ==> args[k-1] == k) &&
+          \result == array
+        )
+      );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:29:45,012 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;
+  requires \valid(args + (0..args_len-1));
+  requires 0 <= array;
+  assigns \nothing;
+  ensures
+    array <= 1 ==> \result == 1;
+  ensures
+    array >= 1 ==> 1 <= \result <= array;
+  ensures
+    \result < array ==> args[\result - 1] != \result;
+  ensures
+    \result > 1 ==> (\forall integer j; 1 <= j < \result ==> args[j-1] == j);
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:29:55,931 - INFO  - syntax Correct
+2026-05-15 00:30:06,815 - INFO  - Loop Invariant:
+2026-05-15 00:30:06,815 - INFO  - [True, True, True]
+2026-05-15 00:30:06,815 - INFO  - 
+2026-05-15 00:30:06,815 - INFO  - Assertion:
+2026-05-15 00:30:06,816 - INFO  - []
+2026-05-15 00:30:06,816 - INFO  - 
+2026-05-15 00:30:06,816 - INFO  - Assigns:
+2026-05-15 00:30:06,816 - INFO  - [True, True, True, True]
+2026-05-15 00:30:06,816 - INFO  - 
+2026-05-15 00:30:06,816 - INFO  - Post Condition:
+2026-05-15 00:30:06,816 - INFO  - [True, False, False, False]
+2026-05-15 00:30:06,816 - INFO  - 
+2026-05-15 00:30:06,817 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.73, satisfy=0.00) clauses=8
+2026-05-15 00:30:06,817 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;
+  requires \valid(args + (0..args_len-1));
+  requires 0 <= array;
+  assigns \nothing;
+  ensures
+    array <= 1 ==> \result == 1;
+  ensures array >= 1 ==> 1 <= \result <= array [POSTCONDITION FAILED];
+  ensures \result < array ==> args[\result - 1] != \result [POSTCONDITION FAILED];
+  ensures \result > 1 ==> (\forall integer j [POSTCONDITION FAILED]; 1 <= j < \result ==> args[j-1] == j);
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:30:14,999 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;
+  requires \valid(args + (0..args_len-1));
+  requires 0 <= array;
+  assigns \nothing;
+  ensures
+    array <= 1 ==> \result == 1;
+  ensures
+    array >= 1 ==> 1 <= \result <= array;
+  ensures
+    \result < array ==> args[\result - 1] != \result;
+  ensures
+    \result > 1 ==> (\forall integer j; 1 <= j < \result ==> args[j-1] == j);
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:30:25,952 - INFO  - syntax Correct
+2026-05-15 00:30:36,756 - INFO  - Loop Invariant:
+2026-05-15 00:30:36,756 - INFO  - [True, True, True]
+2026-05-15 00:30:36,756 - INFO  - 
+2026-05-15 00:30:36,756 - INFO  - Assertion:
+2026-05-15 00:30:36,756 - INFO  - []
+2026-05-15 00:30:36,757 - INFO  - 
+2026-05-15 00:30:36,757 - INFO  - Assigns:
+2026-05-15 00:30:36,757 - INFO  - [True, True, True, True]
+2026-05-15 00:30:36,757 - INFO  - 
+2026-05-15 00:30:36,757 - INFO  - Post Condition:
+2026-05-15 00:30:36,757 - INFO  - [True, False, False, False]
+2026-05-15 00:30:36,757 - INFO  - 
+2026-05-15 00:30:36,758 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.73, satisfy=0.00) clauses=8
+2026-05-15 00:30:36,758 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 00:30:47,600 - INFO  - syntax Correct
+2026-05-15 00:30:58,689 - INFO  - Loop Invariant:
+2026-05-15 00:30:58,690 - INFO  - [True, True, True]
+2026-05-15 00:30:58,690 - INFO  - 
+2026-05-15 00:30:58,690 - INFO  - Assertion:
+2026-05-15 00:30:58,690 - INFO  - []
+2026-05-15 00:30:58,690 - INFO  - 
+2026-05-15 00:30:58,690 - INFO  - Assigns:
+2026-05-15 00:30:58,690 - INFO  - [True, True, True, True]
+2026-05-15 00:30:58,691 - INFO  - 
+2026-05-15 00:30:58,691 - INFO  - Post Condition:
+2026-05-15 00:30:58,691 - INFO  - [False]
+2026-05-15 00:30:58,691 - INFO  - 
+2026-05-15 00:30:58,691 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-15 00:30:58,692 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;            // optional:sanity, mentions only parameter
+  requires \valid(args + (0..args_len-1));
+  requires 0 <= array;               // array is a parameter; ensure non-negative if desired
+  assigns \nothing;                  // function only returns or modifies locals; caller-visible state unchanged
+  ensures (array >= 2) ==>
+      (
+        (\exists integer i [POSTCONDITION FAILED]; 1 <= i <= array &&
+           (args[i-1] != i) &&
+           (\forall integer j; 1 <= j < i ==> args[j-1] == j) &&
+           \result == i
+        )
+        ||
+        (
+          (\forall integer k; 1 <= k <= array ==> args[k-1] == k) &&
+          \result == array
+        )
+      );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:31:10,558 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;
+  requires 0 <= array <= args_len;
+  requires \valid(args + (0..array-1));
+  assigns \nothing;
+  ensures (array >= 2) ==>
+      (
+        (\exists integer i; 1 <= i <= array &&
+           (args[i-1] != i) &&
+           (\forall integer j; 1 <= j < i ==> args[j-1] == j) &&
+           \result == i
+        )
+        ||
+        (
+          (\forall integer k; 1 <= k <= array ==> args[k-1] == k) &&
+          \result == array
+        )
+      );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:31:21,238 - INFO  - syntax Correct
+2026-05-15 00:31:32,053 - INFO  - Loop Invariant:
+2026-05-15 00:31:32,054 - INFO  - [True, True, True]
+2026-05-15 00:31:32,054 - INFO  - 
+2026-05-15 00:31:32,054 - INFO  - Assertion:
+2026-05-15 00:31:32,054 - INFO  - []
+2026-05-15 00:31:32,054 - INFO  - 
+2026-05-15 00:31:32,054 - INFO  - Assigns:
+2026-05-15 00:31:32,054 - INFO  - [True, True, True, True]
+2026-05-15 00:31:32,054 - INFO  - 
+2026-05-15 00:31:32,054 - INFO  - Post Condition:
+2026-05-15 00:31:32,055 - INFO  - [False]
+2026-05-15 00:31:32,055 - INFO  - 
+2026-05-15 00:31:32,055 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-15 00:31:32,055 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 00:31:42,867 - INFO  - syntax Correct
+2026-05-15 00:31:53,579 - INFO  - Loop Invariant:
+2026-05-15 00:31:53,580 - INFO  - [True, True, True]
+2026-05-15 00:31:53,580 - INFO  - 
+2026-05-15 00:31:53,580 - INFO  - Assertion:
+2026-05-15 00:31:53,580 - INFO  - []
+2026-05-15 00:31:53,580 - INFO  - 
+2026-05-15 00:31:53,580 - INFO  - Assigns:
+2026-05-15 00:31:53,580 - INFO  - [True, True, True, True]
+2026-05-15 00:31:53,580 - INFO  - 
+2026-05-15 00:31:53,580 - INFO  - Post Condition:
+2026-05-15 00:31:53,581 - INFO  - [False]
+2026-05-15 00:31:53,581 - INFO  - 
+2026-05-15 00:31:53,581 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-15 00:31:53,581 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;            // optional:sanity, mentions only parameter
+  requires \valid(args + (0..args_len-1));
+  requires 0 <= array;               // array is a parameter; ensure non-negative if desired
+  assigns \nothing;                  // function only returns or modifies locals; caller-visible state unchanged
+  ensures (array >= 2) ==>
+      (
+        (\exists integer i [POSTCONDITION FAILED]; 1 <= i <= array &&
+           (args[i-1] != i) &&
+           (\forall integer j; 1 <= j < i ==> args[j-1] == j) &&
+           \result == i
+        )
+        ||
+        (
+          (\forall integer k; 1 <= k <= array ==> args[k-1] == k) &&
+          \result == array
+        )
+      );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:32:05,270 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;
+  requires \valid(args + (0..args_len-1));
+  requires 0 <= array;
+  requires args_len >= array;
+  assigns \nothing;
+  ensures (array >= 2) ==>
+      (
+        (\exists integer i; 1 <= i <= array &&
+           (args[i-1] != i) &&
+           (\forall integer j; 1 <= j < i ==> args[j-1] == j) &&
+           \result == i
+        )
+        ||
+        (
+          (\forall integer k; 1 <= k <= array ==> args[k-1] == k) &&
+          \result == array
+        )
+      );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:32:16,077 - INFO  - syntax Correct
+2026-05-15 00:32:26,835 - INFO  - Loop Invariant:
+2026-05-15 00:32:26,836 - INFO  - [True, True, True]
+2026-05-15 00:32:26,836 - INFO  - 
+2026-05-15 00:32:26,836 - INFO  - Assertion:
+2026-05-15 00:32:26,836 - INFO  - []
+2026-05-15 00:32:26,836 - INFO  - 
+2026-05-15 00:32:26,836 - INFO  - Assigns:
+2026-05-15 00:32:26,836 - INFO  - [True, True, True, True]
+2026-05-15 00:32:26,836 - INFO  - 
+2026-05-15 00:32:26,836 - INFO  - Post Condition:
+2026-05-15 00:32:26,837 - INFO  - [False]
+2026-05-15 00:32:26,837 - INFO  - 
+2026-05-15 00:32:26,837 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=6
+2026-05-15 00:32:26,837 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;
+  requires \valid(args + (0..args_len-1));
+  requires 0 <= array;
+  requires args_len >= array;
+  assigns \nothing;
+  ensures (array >= 2) ==>
+      (
+        (\exists integer i [POSTCONDITION FAILED]; 1 <= i <= array &&
+           (args[i-1] != i) &&
+           (\forall integer j; 1 <= j < i ==> args[j-1] == j) &&
+           \result == i
+        )
+        ||
+        (
+          (\forall integer k; 1 <= k <= array ==> args[k-1] == k) &&
+          \result == array
+        )
+      );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:32:36,103 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;
+  requires \valid(args + (0..args_len-1));
+  requires 0 <= array;
+  requires args_len >= array;
+  assigns \nothing;
+  ensures array >= 2 ==> (1 <= \result <= array);
+  ensures (array >= 2 && (\exists integer i; 1 <= i <= array &&
+           (\forall integer j; 1 <= j < i ==> args[j-1] == j) &&
+           args[i-1] != i))
+          ==> (\exists integer i; 1 <= i <= array &&
+                (\forall integer j; 1 <= j < i ==> args[j-1] == j) &&
+                args[i-1] != i &&
+                \result == i);
+  ensures (array >= 2 && (\forall integer k; 1 <= k <= array ==> args[k-1] == k))
+          ==> \result == array;
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:32:46,938 - INFO  - syntax Correct
+2026-05-15 00:32:57,890 - INFO  - Loop Invariant:
+2026-05-15 00:32:57,890 - INFO  - [True, True, True]
+2026-05-15 00:32:57,890 - INFO  - 
+2026-05-15 00:32:57,890 - INFO  - Assertion:
+2026-05-15 00:32:57,890 - INFO  - []
+2026-05-15 00:32:57,891 - INFO  - 
+2026-05-15 00:32:57,891 - INFO  - Assigns:
+2026-05-15 00:32:57,891 - INFO  - [True, True, True, True]
+2026-05-15 00:32:57,891 - INFO  - 
+2026-05-15 00:32:57,891 - INFO  - Post Condition:
+2026-05-15 00:32:57,891 - INFO  - [False, False, False]
+2026-05-15 00:32:57,891 - INFO  - 
+2026-05-15 00:32:57,892 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=8
+2026-05-15 00:32:57,892 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires args_len >= 0;
+  requires \valid(args + (0..args_len-1));
+  requires 0 <= array;
+  requires args_len >= array;
+  assigns \nothing;
+  ensures array >= 2 ==> (1 <= \result <= array) [POSTCONDITION FAILED];
+  ensures (array >= 2 && (\exists integer i [POSTCONDITION FAILED]; 1 <= i <= array &&
+           (\forall integer j; 1 <= j < i ==> args[j-1] == j) &&
+           args[i-1] != i))
+          ==> (\exists integer i; 1 <= i <= array &&
+                (\forall integer j; 1 <= j < i ==> args[j-1] == j) &&
+                args[i-1] != i &&
+                \result == i);
+  ensures (array >= 2 && (\forall integer k [POSTCONDITION FAILED]; 1 <= k <= array ==> args[k-1] == k))
+          ==> \result == array;
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:33:09,625 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/* If every element 1..array matches, we return array */
+  ensures (array >= 2 && (\forall integer k; 1 <= k && k <= array ==> args[k-1] == k))
+         ==> \result == array;
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:33:09,846 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c:8: 
+  syntax error:
+  Location: line 8, between columns 17 and 19, before or at token: >=
+  6     
+  7     /* If every element 1..array matches, we return array */
+  8       ensures (array >= 2 && (\forall integer k; 1 <= k && k <= array ==> args[k-1] == k))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  9              ==> \result == array;
+  10    */
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 00:33:09,846 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=1
+2026-05-15 00:33:09,846 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 00:33:09,847 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.875, 0.0), clauses=6)
+2026-05-15 00:33:20,627 - INFO  - syntax Correct
+2026-05-15 00:33:31,707 - INFO  - Loop Invariant:
+2026-05-15 00:33:31,708 - INFO  - [True, True, True]
+2026-05-15 00:33:31,708 - INFO  - 
+2026-05-15 00:33:31,708 - INFO  - Assertion:
+2026-05-15 00:33:31,708 - INFO  - []
+2026-05-15 00:33:31,708 - INFO  - 
+2026-05-15 00:33:31,708 - INFO  - Assigns:
+2026-05-15 00:33:31,708 - INFO  - [True, True, True, True]
+2026-05-15 00:33:31,708 - INFO  - 
+2026-05-15 00:33:31,708 - INFO  - Post Condition:
+2026-05-15 00:33:31,708 - INFO  - [False]
+2026-05-15 00:33:31,708 - INFO  - 
+2026-05-15 00:33:32,021 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c:13: Warning: 
+  unexpected token '('
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 00:33:32,022 - INFO  - 
+SPECIFICATION FOR foo84
+2026-05-15 00:33:32,022 - INFO  - ==================================================
+
+2026-05-15 00:33:32,022 - INFO  - 
+QCP Specification for function foo84:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+2026-05-15 00:33:32,122 - INFO  - 
+VERIFICATION FOR foo84
+2026-05-15 00:33:32,122 - INFO  - ==================================================
+
+2026-05-15 00:33:32,122 - INFO  - TRY TIME: 0
+2026-05-15 00:33:32,458 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c:13: Warning: 
+  unexpected token '('
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 00:33:54,697 - INFO  - syntax Correct
+2026-05-15 00:34:05,899 - INFO  - Loop Invariant:
+2026-05-15 00:34:05,899 - INFO  - [True, True, True]
+2026-05-15 00:34:05,899 - INFO  - 
+2026-05-15 00:34:05,899 - INFO  - Assertion:
+2026-05-15 00:34:05,899 - INFO  - []
+2026-05-15 00:34:05,900 - INFO  - 
+2026-05-15 00:34:05,900 - INFO  - Assigns:
+2026-05-15 00:34:05,900 - INFO  - [True, True, True, True]
+2026-05-15 00:34:05,900 - INFO  - 
+2026-05-15 00:34:05,900 - INFO  - Post Condition:
+2026-05-15 00:34:05,900 - INFO  - [False, True, False]
+2026-05-15 00:34:05,900 - INFO  - 
+2026-05-15 00:34:05,901 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-15 00:34:05,901 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@ 
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures \result >= 1 && \result <= array [POSTCONDITION FAILED];
+  ensures (\exists integer i; 1 <= i <= \result - 1 ==> args[i-1] == \at(args[i-1], Pre));
+  ensures ( (\result <= array && args[\result-1] != \at(args[\result-1], Pre)) || (\result == array && (\forall integer k [POSTCONDITION FAILED]; 0 <= k < array ==> args[k] == \at(args[k], Pre))) );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:34:13,864 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures 1 <= \result <= array;
+  ensures \forall integer k; 0 <= k <= \result-2 ==> args[k] == \at(args[k], Pre);
+  ensures ( (\result < array && args[\result-1] != \at(args[\result-1], Pre)) 
+            || (\result == array && (\forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre))) );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:34:25,181 - INFO  - syntax Correct
+2026-05-15 00:34:36,246 - INFO  - Loop Invariant:
+2026-05-15 00:34:36,247 - INFO  - [True, True, True]
+2026-05-15 00:34:36,247 - INFO  - 
+2026-05-15 00:34:36,247 - INFO  - Assertion:
+2026-05-15 00:34:36,247 - INFO  - []
+2026-05-15 00:34:36,247 - INFO  - 
+2026-05-15 00:34:36,247 - INFO  - Assigns:
+2026-05-15 00:34:36,247 - INFO  - [True, True, True, True]
+2026-05-15 00:34:36,247 - INFO  - 
+2026-05-15 00:34:36,247 - INFO  - Post Condition:
+2026-05-15 00:34:36,247 - INFO  - [False, True, False]
+2026-05-15 00:34:36,247 - INFO  - 
+2026-05-15 00:34:36,248 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-15 00:34:36,248 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures 1 <= \result <= array [POSTCONDITION FAILED];
+  ensures \forall integer k; 0 <= k <= \result-2 ==> args[k] == \at(args[k], Pre);
+  ensures ( (\result < array && args[\result-1] != \at(args[\result-1], Pre)) 
+            || (\result == array && (\forall integer k [POSTCONDITION FAILED]; 0 <= k < array ==> args[k] == \at(args[k], Pre))) );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:34:44,883 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures 1 <= \result && \result <= array;
+  ensures \forall integer k; 0 <= k <= \result-2 ==> args[k] == \at(args[k], Pre);
+  ensures ( (\result < array && args[\result-1] != \at(args[\result-1], Pre)) 
+            || (\result == array && (\forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre))) );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:34:56,047 - INFO  - syntax Correct
+2026-05-15 00:35:07,173 - INFO  - Loop Invariant:
+2026-05-15 00:35:07,173 - INFO  - [True, True, True]
+2026-05-15 00:35:07,173 - INFO  - 
+2026-05-15 00:35:07,173 - INFO  - Assertion:
+2026-05-15 00:35:07,173 - INFO  - []
+2026-05-15 00:35:07,173 - INFO  - 
+2026-05-15 00:35:07,173 - INFO  - Assigns:
+2026-05-15 00:35:07,174 - INFO  - [True, True, True, True]
+2026-05-15 00:35:07,174 - INFO  - 
+2026-05-15 00:35:07,174 - INFO  - Post Condition:
+2026-05-15 00:35:07,174 - INFO  - [False, True, False]
+2026-05-15 00:35:07,174 - INFO  - 
+2026-05-15 00:35:07,175 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-15 00:35:07,175 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 00:35:18,035 - INFO  - syntax Correct
+2026-05-15 00:35:28,950 - INFO  - Loop Invariant:
+2026-05-15 00:35:28,950 - INFO  - [True, True, True]
+2026-05-15 00:35:28,950 - INFO  - 
+2026-05-15 00:35:28,950 - INFO  - Assertion:
+2026-05-15 00:35:28,950 - INFO  - []
+2026-05-15 00:35:28,951 - INFO  - 
+2026-05-15 00:35:28,951 - INFO  - Assigns:
+2026-05-15 00:35:28,951 - INFO  - [True, True, True, True]
+2026-05-15 00:35:28,951 - INFO  - 
+2026-05-15 00:35:28,951 - INFO  - Post Condition:
+2026-05-15 00:35:28,951 - INFO  - [False, True, False]
+2026-05-15 00:35:28,951 - INFO  - 
+2026-05-15 00:35:28,952 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-15 00:35:28,952 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@ 
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures \result >= 1 && \result <= array [POSTCONDITION FAILED];
+  ensures (\exists integer i; 1 <= i <= \result - 1 ==> args[i-1] == \at(args[i-1], Pre));
+  ensures ( (\result <= array && args[\result-1] != \at(args[\result-1], Pre)) || (\result == array && (\forall integer k [POSTCONDITION FAILED]; 0 <= k < array ==> args[k] == \at(args[k], Pre))) );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:35:35,965 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures 1 <= \result <= array;
+  ensures (\result < array ==> args[\result-1] != \at(args[\result-1], Pre));
+  ensures (\result == array ==> (\forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre)));
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:35:46,813 - INFO  - syntax Correct
+2026-05-15 00:35:57,899 - INFO  - Loop Invariant:
+2026-05-15 00:35:57,900 - INFO  - [True, True, True]
+2026-05-15 00:35:57,900 - INFO  - 
+2026-05-15 00:35:57,900 - INFO  - Assertion:
+2026-05-15 00:35:57,900 - INFO  - []
+2026-05-15 00:35:57,900 - INFO  - 
+2026-05-15 00:35:57,900 - INFO  - Assigns:
+2026-05-15 00:35:57,900 - INFO  - [True, True, True, True]
+2026-05-15 00:35:57,900 - INFO  - 
+2026-05-15 00:35:57,901 - INFO  - Post Condition:
+2026-05-15 00:35:57,901 - INFO  - [False, False, True]
+2026-05-15 00:35:57,901 - INFO  - 
+2026-05-15 00:35:57,901 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-15 00:35:57,901 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 00:36:08,657 - INFO  - syntax Correct
+2026-05-15 00:36:19,362 - INFO  - Loop Invariant:
+2026-05-15 00:36:19,362 - INFO  - [True, True, True]
+2026-05-15 00:36:19,362 - INFO  - 
+2026-05-15 00:36:19,362 - INFO  - Assertion:
+2026-05-15 00:36:19,362 - INFO  - []
+2026-05-15 00:36:19,362 - INFO  - 
+2026-05-15 00:36:19,362 - INFO  - Assigns:
+2026-05-15 00:36:19,362 - INFO  - [True, True, True, True]
+2026-05-15 00:36:19,362 - INFO  - 
+2026-05-15 00:36:19,363 - INFO  - Post Condition:
+2026-05-15 00:36:19,363 - INFO  - [False, True, False]
+2026-05-15 00:36:19,363 - INFO  - 
+2026-05-15 00:36:19,363 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-15 00:36:19,363 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@ 
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures \result >= 1 && \result <= array [POSTCONDITION FAILED];
+  ensures (\exists integer i; 1 <= i <= \result - 1 ==> args[i-1] == \at(args[i-1], Pre));
+  ensures ( (\result <= array && args[\result-1] != \at(args[\result-1], Pre)) || (\result == array && (\forall integer k [POSTCONDITION FAILED]; 0 <= k < array ==> args[k] == \at(args[k], Pre))) );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:36:28,865 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures 1 <= \result <= array;
+  ensures (\forall integer k; 0 <= k < \result-1 ==> args[k] == \at(args[k], Pre));
+  ensures ( (\result < array && args[\result-1] != \at(args[\result-1], Pre))
+            || (\result == array && (\forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre))) );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:36:39,754 - INFO  - syntax Correct
+2026-05-15 00:36:50,442 - INFO  - Loop Invariant:
+2026-05-15 00:36:50,443 - INFO  - [True, True, True]
+2026-05-15 00:36:50,443 - INFO  - 
+2026-05-15 00:36:50,443 - INFO  - Assertion:
+2026-05-15 00:36:50,443 - INFO  - []
+2026-05-15 00:36:50,443 - INFO  - 
+2026-05-15 00:36:50,443 - INFO  - Assigns:
+2026-05-15 00:36:50,443 - INFO  - [True, True, True, True]
+2026-05-15 00:36:50,443 - INFO  - 
+2026-05-15 00:36:50,444 - INFO  - Post Condition:
+2026-05-15 00:36:50,444 - INFO  - [False, True, False]
+2026-05-15 00:36:50,444 - INFO  - 
+2026-05-15 00:36:50,444 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-15 00:36:50,444 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 00:37:01,204 - INFO  - syntax Correct
+2026-05-15 00:37:11,897 - INFO  - Loop Invariant:
+2026-05-15 00:37:11,897 - INFO  - [True, True, True]
+2026-05-15 00:37:11,897 - INFO  - 
+2026-05-15 00:37:11,897 - INFO  - Assertion:
+2026-05-15 00:37:11,897 - INFO  - []
+2026-05-15 00:37:11,897 - INFO  - 
+2026-05-15 00:37:11,897 - INFO  - Assigns:
+2026-05-15 00:37:11,897 - INFO  - [True, True, True, True]
+2026-05-15 00:37:11,898 - INFO  - 
+2026-05-15 00:37:11,898 - INFO  - Post Condition:
+2026-05-15 00:37:11,898 - INFO  - [False, True, False]
+2026-05-15 00:37:11,898 - INFO  - 
+2026-05-15 00:37:11,898 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-15 00:37:11,898 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@ 
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures \result >= 1 && \result <= array [POSTCONDITION FAILED];
+  ensures (\exists integer i; 1 <= i <= \result - 1 ==> args[i-1] == \at(args[i-1], Pre));
+  ensures ( (\result <= array && args[\result-1] != \at(args[\result-1], Pre)) || (\result == array && (\forall integer k [POSTCONDITION FAILED]; 0 <= k < array ==> args[k] == \at(args[k], Pre))) );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:37:20,499 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures 1 <= \result && \result <= array;
+  ensures (\exists integer i; 1 <= i && i <= \result - 1 && args[i-1] == \at(args[i-1], Pre))
+    || (\result == 1 && (\forall integer k; 0 <= k < 0 ==> args[k] == \at(args[k], Pre)));
+  ensures ( (\result <= array && args[\result-1] != \at(args[\result-1], Pre)) 
+            || (\result == array && (\forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre))) );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:37:31,464 - INFO  - syntax Correct
+2026-05-15 00:37:42,381 - INFO  - Loop Invariant:
+2026-05-15 00:37:42,381 - INFO  - [True, True, True]
+2026-05-15 00:37:42,381 - INFO  - 
+2026-05-15 00:37:42,381 - INFO  - Assertion:
+2026-05-15 00:37:42,382 - INFO  - []
+2026-05-15 00:37:42,382 - INFO  - 
+2026-05-15 00:37:42,382 - INFO  - Assigns:
+2026-05-15 00:37:42,382 - INFO  - [True, True, True, True]
+2026-05-15 00:37:42,382 - INFO  - 
+2026-05-15 00:37:42,382 - INFO  - Post Condition:
+2026-05-15 00:37:42,382 - INFO  - [False, True, False]
+2026-05-15 00:37:42,382 - INFO  - 
+2026-05-15 00:37:42,382 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-15 00:37:42,382 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 00:37:53,164 - INFO  - syntax Correct
+2026-05-15 00:38:03,880 - INFO  - Loop Invariant:
+2026-05-15 00:38:03,880 - INFO  - [True, True, True]
+2026-05-15 00:38:03,880 - INFO  - 
+2026-05-15 00:38:03,880 - INFO  - Assertion:
+2026-05-15 00:38:03,880 - INFO  - []
+2026-05-15 00:38:03,880 - INFO  - 
+2026-05-15 00:38:03,880 - INFO  - Assigns:
+2026-05-15 00:38:03,880 - INFO  - [True, True, True, True]
+2026-05-15 00:38:03,880 - INFO  - 
+2026-05-15 00:38:03,881 - INFO  - Post Condition:
+2026-05-15 00:38:03,881 - INFO  - [False, True, False]
+2026-05-15 00:38:03,881 - INFO  - 
+2026-05-15 00:38:03,881 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=7
+2026-05-15 00:38:03,881 - INFO  - postconditon before refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@ 
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures \result >= 1 && \result <= array [POSTCONDITION FAILED];
+  ensures (\exists integer i; 1 <= i <= \result - 1 ==> args[i-1] == \at(args[i-1], Pre));
+  ensures ( (\result <= array && args[\result-1] != \at(args[\result-1], Pre)) || (\result == array && (\forall integer k [POSTCONDITION FAILED]; 0 <= k < array ==> args[k] == \at(args[k], Pre))) );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:38:15,152 - INFO  - postconditon after refine: 
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures 1 <= \result && \result <= array;
+  ensures (
+            (\result < array &&
+              (\forall integer k; 0 <= k < \result-1 ==> args[k] == \at(args[k], Pre)) &&
+              args[\result-1] != \at(args[\result-1], Pre)
+            )
+            ||
+            (\result == array &&
+              (\forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre))
+            )
+          );
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:38:15,154 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8, 0.0), clauses=7)
+2026-05-15 00:38:26,000 - INFO  - syntax Correct
+2026-05-15 00:38:36,920 - INFO  - Loop Invariant:
+2026-05-15 00:38:36,920 - INFO  - [True, True, True]
+2026-05-15 00:38:36,920 - INFO  - 
+2026-05-15 00:38:36,920 - INFO  - Assertion:
+2026-05-15 00:38:36,921 - INFO  - []
+2026-05-15 00:38:36,921 - INFO  - 
+2026-05-15 00:38:36,921 - INFO  - Assigns:
+2026-05-15 00:38:36,921 - INFO  - [True, True, True, True]
+2026-05-15 00:38:36,921 - INFO  - 
+2026-05-15 00:38:36,921 - INFO  - Post Condition:
+2026-05-15 00:38:36,922 - INFO  - [False, True, False]
+2026-05-15 00:38:36,922 - INFO  - 
+2026-05-15 00:38:37,978 - INFO  - syntax Correct
+2026-05-15 00:38:39,160 - INFO  - Loop Invariant:
+2026-05-15 00:38:39,160 - INFO  - [True, True, True]
+2026-05-15 00:38:39,161 - INFO  - 
+2026-05-15 00:38:39,161 - INFO  - Assertion:
+2026-05-15 00:38:39,161 - INFO  - []
+2026-05-15 00:38:39,161 - INFO  - 
+2026-05-15 00:38:39,161 - INFO  - Assigns:
+2026-05-15 00:38:39,161 - INFO  - [True, True, True, True]
+2026-05-15 00:38:39,161 - INFO  - 
+2026-05-15 00:38:39,161 - INFO  - Post Condition:
+2026-05-15 00:38:39,162 - INFO  - [True]
+2026-05-15 00:38:39,162 - INFO  - 
+2026-05-15 00:38:40,057 - INFO  - syntax Correct
+2026-05-15 00:38:41,179 - INFO  - Loop Invariant:
+2026-05-15 00:38:41,180 - INFO  - [True, True, True]
+2026-05-15 00:38:41,180 - INFO  - 
+2026-05-15 00:38:41,180 - INFO  - Assertion:
+2026-05-15 00:38:41,180 - INFO  - []
+2026-05-15 00:38:41,180 - INFO  - 
+2026-05-15 00:38:41,180 - INFO  - Assigns:
+2026-05-15 00:38:41,180 - INFO  - [True, True, True, True]
+2026-05-15 00:38:41,180 - INFO  - 
+2026-05-15 00:38:41,180 - INFO  - Post Condition:
+2026-05-15 00:38:41,180 - INFO  - [True]
+2026-05-15 00:38:41,181 - INFO  - 
+2026-05-15 00:38:41,181 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo84
+2026-05-15 00:38:41,181 - INFO  - ==================================================
+2026-05-15 00:38:41,181 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo84/20260515_002803_583377_96cb1782/output/foo84.c
+2026-05-15 00:38:41,181 - INFO  - Output file content:
+
+/*@
+  predicate valid_args(int* a, integer n) =
+    n >= 0 && \valid(a + (0..n-1));
+*/
+
+/*@ 
+  requires array >= 1;
+  requires \valid(args + (0..array-1));
+  requires args_len >= 0;
+  assigns \nothing;
+  ensures (\exists integer i; 1 <= i <= \result - 1 ==> args[i-1] == \at(args[i-1], Pre));
+*/
+int foo84(int * args, int args_len, int array) {
+
+		int find = 1;
+		if (array == 0 || array == 1) {
+			return find;
+		}
+		
+        /*@
+          loop invariant 1 <= remaining <= array + 1;
+          loop invariant 1 <= find <= remaining;
+          loop invariant \forall integer k; 0 <= k < array ==> args[k] == \at(args[k], Pre);
+          loop assigns remaining, find;
+        */
+        for (int remaining = 1; remaining <= array; remaining++) {
+			if (args[remaining - 1] == remaining) {
+				find = remaining;
+			} else if (args[remaining - 1] != remaining) {
+				return remaining;
+			}
+		}
+            
+		return find;
+}
+
+2026-05-15 00:38:41,181 - INFO  - ==================================================
+2026-05-15 00:38:41,181 - INFO  - first_pass:
+2026-05-15 00:38:41,182 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 00:38:41,182 - INFO  - ==================================================
+2026-05-15 00:38:41,182 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 00:38:41,182 - INFO  - Total execution time: 637.53 seconds (10.63 minutes)
+2026-05-15 00:38:41,182 - INFO  - ==================================================
+2026-05-15 00:38:41,182 - INFO  - ==================================================
+2026-05-15 00:38:41,182 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 00:38:41,183 - INFO  - Total API calls: 17
+2026-05-15 00:38:41,183 - INFO  - Total prompt tokens (input): 112,255
+2026-05-15 00:38:41,183 - INFO  - Total completion tokens (output): 11,224
+2026-05-15 00:38:41,183 - INFO  - Total tokens: 123,479
+2026-05-15 00:38:41,183 - INFO  - Average prompt tokens per call: 6603.2
+2026-05-15 00:38:41,183 - INFO  - Average completion tokens per call: 660.2
+2026-05-15 00:38:41,183 - INFO  - Average total tokens per call: 7263.5
+2026-05-15 00:38:41,183 - INFO  - ==================================================

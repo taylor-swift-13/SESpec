@@ -1,0 +1,395 @@
+2026-05-18 22:02:08,909 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192
+2026-05-18 22:02:08,909 - INFO  - 
+🚀 Starting generation of function: foo192
+2026-05-18 22:02:08,909 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 22:02:08,909 - INFO  - TRY TIME: 0
+2026-05-18 22:02:08,910 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 22:02:08,910 - INFO  - ==================================================
+
+2026-05-18 22:02:10,448 - INFO  - [auto only_loop] False — foo192 returns 'int'
+2026-05-18 22:02:10,449 - INFO  - Initial pending functions: ['foo192', 'malloc']
+2026-05-18 22:02:10,449 - INFO  - Now processing function malloc
+
+2026-05-18 22:02:10,449 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-18 22:02:10,449 - INFO  - 
+GENERATE ANNOTATION FOR foo192
+2026-05-18 22:02:10,449 - INFO  - ==================================================
+
+2026-05-18 22:02:10,449 - INFO  - Function foo192 has been initialized
+2026-05-18 22:02:10,449 - INFO  - Starting to generate annotation code for foo192
+2026-05-18 22:02:10,513 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo192
+2026-05-18 22:02:10,513 - INFO  - ==================================================
+
+2026-05-18 22:02:10,602 - INFO  - Variable Maps:[{}]
+2026-05-18 22:02:10,602 - INFO  - Path conditions: [None]
+2026-05-18 22:02:10,602 - INFO  - Pre condition: 
+2026-05-18 22:02:10,602 - INFO  - Loop Condition: index <= count
+2026-05-18 22:02:10,603 - INFO  - Array Names: ['w', 'C']
+2026-05-18 22:02:10,603 - INFO  - Updated Loop Conditions: ['index <= count']
+2026-05-18 22:02:10,603 - INFO  - Global Unchanged Variables: []
+2026-05-18 22:02:10,603 - INFO  - Non Inductive Variables: []
+2026-05-18 22:02:10,604 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-18 22:02:10,605 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 22:02:10,606 - INFO  - examples category: array
+2026-05-18 22:02:10,606 - INFO  - examples:
+2026-05-18 22:02:10,607 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 22:02:23,511 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 22:02:23,513 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:02:37,045 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 22:02:37,047 - INFO  - [acsl-fixer] )-drop: removed line 39: loop invariant (!(index <= count)) ==> ();
+2026-05-18 22:02:37,761 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:02:48,014 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-18 22:02:48,014 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-18 22:02:48,016 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-18 22:02:48,576 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:02:56,952 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-18 22:02:56,954 - INFO  - [acsl-fixer] )-drop: removed line 35: loop invariant (!(index <= count)) ==> ();
+2026-05-18 22:02:57,340 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:03:06,071 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 22:03:06,073 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:03:20,990 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 22:03:20,990 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-18 22:03:20,992 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=4)
+2026-05-18 22:03:21,904 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:03:29,949 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 22:03:29,951 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:03:41,206 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 22:03:41,207 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:03:54,272 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 22:03:54,272 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-18 22:03:54,273 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=3)
+2026-05-18 22:03:54,930 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:03:55,204 - INFO  - ACSL format loop invariant
+2026-05-18 22:03:55,204 - INFO  - /*@
+          loop invariant 2 <= index <= count + 1;
+          loop invariant \forall integer k; 0 <= k < index ==> w[k] == w_seq(k);
+          loop invariant \forall integer k; 0 <= k < index ==> C[k] == C_seq(k);
+          loop assigns index, w[..], C[..];
+            */
+            for (int index = 2; index <= count; index++) {
+			w[index] = w[index - 2]
+					+ 2 * C[index - 1];
+			C[index] = w[index - 1] + C[index - 2];
+		}
+2026-05-18 22:03:55,205 - INFO  - QCP format loop invariant
+2026-05-18 22:03:55,206 - INFO  - /*@ Inv
+    (2 <= index && index <= count + 1) &&
+(forall (k:Z), 0 <= k && k < index => w_l[k] == w_seq(k)) &&
+(forall (k:Z), 0 <= k && k < index => C_l[k] == C_seq(k)
+          loop assigns index, w_l[..], C_l[..])
+    */
+    
+            for (int index = 2; index <= count; index++) {
+			w[index] = w[index - 2]
+					+ 2 * C[index - 1];
+			C[index] = w[index - 1] + C[index - 2];
+		}
+2026-05-18 22:03:55,511 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo192
+2026-05-18 22:03:55,511 - INFO  - ==================================================
+
+2026-05-18 22:03:55,530 - INFO  - Starting to generate ACSL specification for foo192
+2026-05-18 22:04:04,697 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c:19: Warning: 
+  unexpected token '\at'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:04:04,698 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=3
+2026-05-18 22:04:04,698 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:04:28,440 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c:6: Warning: 
+  unbound logic function C_seq. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:04:28,441 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=3
+2026-05-18 22:04:28,442 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:04:41,590 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     
+  3     Frama-C reported "unbound logic function C_seq. Ignoring global annotation". This means the parser saw a reference to C_seq from another logic definition (w_seq), but C_seq was not defined at the time of that reference or the definitions were not visible at file scope in the correct form. In the original file both logic definitions live inside a single ACSL comment block before the #include; although ACSL normally allows multiple logic definitions in one block, the tool indicates C_seq was unbound when processing w_seq. A robust fix is to ensure each logic definition is visible at file scope and that the name C_seq is defined before any use. According to the provided pitfalls:
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:04:41,591 - INFO  - [spec-gen] refine 3/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=3
+2026-05-18 22:04:41,592 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 22:04:41,593 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=3)
+2026-05-18 22:04:41,916 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c:19: Warning: 
+  unexpected token '\at'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:04:41,918 - INFO  - 
+SPECIFICATION FOR foo192
+2026-05-18 22:04:41,918 - INFO  - ==================================================
+
+2026-05-18 22:04:41,918 - INFO  - 
+QCP Specification for function foo192:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-18 22:04:42,070 - INFO  - 
+VERIFICATION FOR foo192
+2026-05-18 22:04:42,070 - INFO  - ==================================================
+
+2026-05-18 22:04:42,347 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c:19: Warning: 
+  unexpected token '\at'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:04:59,097 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c:6: Warning: 
+  unbound logic function C_seq. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:04:59,098 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=2
+2026-05-18 22:04:59,099 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:05:09,801 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c:5: Warning: 
+  unbound logic function C_seq. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:05:09,802 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=2
+2026-05-18 22:05:09,804 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:05:20,628 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c:1: 
+  syntax error:
+  Location: line 1, between columns 0 and 2, before or at token: 1.
+  1     1. Error Analysis
+        ^^^^^^^^^^^^^^^^^
+  2     
+  3     Frama-C reported "unbound logic function C_seq. Ignoring global annotation", which means the contract referred to a logic symbol C_seq that the tool could not resolve at the point of use. In ACSL each logic-function definition must appear at file scope before any specification that uses it, and — critically — each logic declaration must be placed in its own /*@ ... */ annotation block (one logic declaration per block). The original file already had two logic declarations, but if they were accidentally combined or otherwise not visible as independent file-scope declarations Frama-C can report them as unbound.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:05:20,629 - INFO  - [spec-gen] refine 3/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=2
+2026-05-18 22:05:20,629 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 22:05:20,636 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=2)
+2026-05-18 22:05:21,485 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c:6: Warning: 
+  unbound logic function C_seq. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:05:22,473 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c:6: Warning: 
+  unbound logic function C_seq. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo192/20260518_220208_2927730_d078a192/output/foo192.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:05:22,473 - INFO  - first_pass:
+2026-05-18 22:05:22,473 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-18 22:05:22,473 - INFO  - ==================================================
+2026-05-18 22:05:22,473 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 22:05:22,473 - INFO  - Total execution time: 193.56 seconds (3.23 minutes)
+2026-05-18 22:05:22,473 - INFO  - ==================================================
+2026-05-18 22:05:22,473 - INFO  - ==================================================
+2026-05-18 22:05:22,474 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 22:05:22,474 - INFO  - Total API calls: 15
+2026-05-18 22:05:22,474 - INFO  - Total prompt tokens (input): 107,867
+2026-05-18 22:05:22,474 - INFO  - Total completion tokens (output): 10,526
+2026-05-18 22:05:22,474 - INFO  - Total tokens: 118,393
+2026-05-18 22:05:22,474 - INFO  - Average prompt tokens per call: 7191.1
+2026-05-18 22:05:22,474 - INFO  - Average completion tokens per call: 701.7
+2026-05-18 22:05:22,474 - INFO  - Average total tokens per call: 7892.9
+2026-05-18 22:05:22,474 - INFO  - ==================================================

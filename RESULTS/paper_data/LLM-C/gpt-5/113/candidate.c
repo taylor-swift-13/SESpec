@@ -1,0 +1,37 @@
+int isAscending(int * arr, int arr_len);
+
+/*@
+  ensures \result == 0 || \result == 1;
+
+  behavior small:
+    assumes arr_len < 2;
+    assigns \nothing;
+    ensures \result == 1;
+
+  behavior normal:
+    assumes arr_len >= 2;
+    requires \valid_read(arr + (0..arr_len));
+    assigns \nothing;
+    ensures \result == 1 <==> (\forall integer i; 0 <= i < arr_len; arr[i] < arr[i+1]);
+
+  complete behaviors;
+  disjoint behaviors;
+*/
+int isAscending(int * arr, int arr_len) {
+
+        int n = arr_len;
+        if (n < 2) {
+            return 1;
+        }
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] < arr[k+1];
+          loop assigns i;
+          loop variant n - i;
+        */
+        for (int i = 0; i < n; i++) {
+            if(arr[i] >= arr[i+1])
+                return 0;
+        }
+        return 1;
+}

@@ -1,0 +1,72 @@
+#include <limits.h>
+
+/*@ logic integer prod_mod(integer i, integer j) =
+    i > j ? 1 : ((i % 10) * prod_mod(i + 1, j)) % 10; */
+
+/*@ requires (n + 1 <= index) && (0 <= index) && (0 <= result && result <= 9) && (-9 <= result && result <= 9) && (c == \at(c,Pre)) && (n == \at(n,Pre)) && (index <= c + 1 ==> result >= 0 && result <= 9);
+    assigns \nothing;
+*/
+void check_A_implies_B(int c, int index, int k, int n) {
+    /*@ assert (result == 1 || result < 10); */
+    /*@ assert (\forall integer k; n + 1 <= k < index ==> result < 10); */
+    /*@ assert (result == result % 10); */
+    /*@ assert (result == 1 || result == 0 || result < 10); */
+    /*@ assert (result == (result % 10)); */
+    /*@ assert (result <= 9); */
+    /*@ assert (result < 10); */
+    /*@ assert (result % 2 == result % 2); */
+    /*@ assert (result % 10 == result); */
+    /*@ assert (n < index); */
+    /*@ assert (n + 1 <= index); */
+    /*@ assert (index >= n + 1 ==> result < 10); */
+    /*@ assert (index > n ==> result == result % 10); */
+    /*@ assert (index > n ==> result < 10); */
+    /*@ assert (index > n ==> result % 10 == result); */
+    /*@ assert (index == n + 1 || index > n); */
+    /*@ assert (index == n + 1 ==> result == 1); */
+    /*@ assert (index <= c + 1 || result < 10); */
+    /*@ assert (index <= c + 1 || 0 <= result); */
+    /*@ assert (index <= c + 1 || 0 <= index - n); */
+    /*@ assert (index <= c + 1 ==> result == result % 10); */
+    /*@ assert (index <= c + 1 ==> result < 10); */
+    /*@ assert (index - (n + 1) <= c - n || 0 <= result); */
+    /*@ assert (1 <= result || index <= c + 1); */
+    /*@ assert (1 <= result || index - (n + 1) <= c - n); */
+    /*@ assert (1 <= result || 0 <= index - n); */
+    /*@ assert (1 <= index - n); */
+    /*@ assert (1 <= index - n || index <= c + 1); */
+    /*@ assert (1 <= index - n || index - (n + 1) <= c - n); */
+    /*@ assert (1 <= index - n || 1 <= result); */
+    /*@ assert (1 <= index - n || 0 <= index); */
+    /*@ assert (1 <= index - n || 0 <= index - n); */
+    /*@ assert (0 <= result || index <= c + 1); */
+    /*@ assert (0 <= result || index - (n + 1) <= c - n); */
+    /*@ assert (0 <= result || 1 <= index - n); */
+    /*@ assert (0 <= result || 0 <= index - n); */
+    /*@ assert (0 <= index || 0 <= index - n); */
+    /*@ assert (0 <= index - n); */
+    /*@ assert (0 <= index - n || index - (n + 1) <= c - n); */
+    /*@ assert (0 <= index - (n + 1)); */
+    /*@ assert (0 < index - n); */
+    /*@ assert ((n + 1 <= index <= c + 1) ==> result < 10); */
+    /*@ assert ((index > n) ==> result < 10); */
+    /*@ assert ((index > n) ==> result % 10 == result); */
+    /*@ assert ((index > n) ==> (result < 10)); */
+    /*@ assert ((index == n + 1) || (index > n)); */
+    /*@ assert ((index == n + 1) ==> result == 1); */
+    /*@ assert ((index <= c + 1) ==> result == result % 10); */
+    /*@ assert ((index <= c + 1) ==> (result < 10)); */
+}
+
+/*@ requires (result == 1 || result < 10) && (\forall integer k; n + 1 <= k < index ==> result < 10) && (result == result % 10) && (result == 1 || result == 0 || result < 10) && (result == (result % 10)) && (result <= 9) && (result < 10) && (result % 2 == result % 2) && (result % 10 == result) && (n < index) && (n + 1 <= index) && (index >= n + 1 ==> result < 10) && (index > n ==> result == result % 10) && (index > n ==> result < 10) && (index > n ==> result % 10 == result) && (index == n + 1 || index > n) && (index == n + 1 ==> result == 1) && (index <= c + 1 || result < 10) && (index <= c + 1 || 0 <= result) && (index <= c + 1 || 0 <= index - n) && (index <= c + 1 ==> result == result % 10) && (index <= c + 1 ==> result < 10) && (index - (n + 1) <= c - n || 0 <= result) && (1 <= result || index <= c + 1) && (1 <= result || index - (n + 1) <= c - n) && (1 <= result || 0 <= index - n) && (1 <= index - n) && (1 <= index - n || index <= c + 1) && (1 <= index - n || index - (n + 1) <= c - n) && (1 <= index - n || 1 <= result) && (1 <= index - n || 0 <= index) && (1 <= index - n || 0 <= index - n) && (0 <= result || index <= c + 1) && (0 <= result || index - (n + 1) <= c - n) && (0 <= result || 1 <= index - n) && (0 <= result || 0 <= index - n) && (0 <= index || 0 <= index - n) && (0 <= index - n) && (0 <= index - n || index - (n + 1) <= c - n) && (0 <= index - (n + 1)) && (0 < index - n) && ((n + 1 <= index <= c + 1) ==> result < 10) && ((index > n) ==> result < 10) && ((index > n) ==> result % 10 == result) && ((index > n) ==> (result < 10)) && ((index == n + 1) || (index > n)) && ((index == n + 1) ==> result == 1) && ((index <= c + 1) ==> result == result % 10) && ((index <= c + 1) ==> (result < 10));
+    assigns \nothing;
+*/
+void check_B_implies_A(int c, int index, int k, int n) {
+    /*@ assert (n + 1 <= index); */
+    /*@ assert (0 <= index); */
+    /*@ assert (0 <= result && result <= 9); */
+    /*@ assert (-9 <= result && result <= 9); */
+    /*@ assert (c == \at(c,Pre)); */
+    /*@ assert (n == \at(n,Pre)); */
+    /*@ assert (index <= c + 1 ==> result >= 0 && result <= 9); */
+}

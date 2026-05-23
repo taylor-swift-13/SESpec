@@ -1,0 +1,77 @@
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  logic integer max_value(integer a, integer b) =
+    a >= b ? a : b;
+*/
+
+/*@
+  logic integer max_subarray_sum(int* array, integer begin, integer end) =
+    begin >= end ? 0 : 
+    max_value(max_subarray_sum(array, begin + 1, end), 
+              sum(array, begin, end));
+*/
+
+/*@
+  logic integer max_subarray_start(int* array, integer begin, integer end) =
+    begin >= end ? begin : 
+    (max_subarray_sum(array, begin, end) == sum(array, begin, end) ? begin : 
+     max_subarray_start(array, begin + 1, end));
+*/
+
+/*@
+  logic integer max_subarray_end(int* array, integer begin, integer end) =
+    begin >= end ? end : 
+    (max_subarray_sum(array, begin, end) == sum(array, begin, end) ? end : 
+     max_subarray_end(array, begin, end - 1));
+*/
+
+/*@
+  requires \valid(a + (0 .. a_len - 1));
+  requires a_len > 0; // Strengthened precondition: array must be non-empty
+  requires Array == a_len;
+
+  
+
+  ensures \result >= 0 && \result < a_len; // Ensures the result is a valid index
+  ensures \exists integer i, j; 0 <= i <= j < a_len && 
+           \result == i && 
+           sum(a, i, j + 1) == max_subarray_sum(a, 0, a_len); // Weakened postcondition
+*/
+int foo194(int * a, int a_len, int Array) {
+
+    int max_so_far = 0;
+    int max_ending_here = 0;
+    int max = 0;
+    int stop = 0;
+    int step = 0;
+
+    /*@
+      loop invariant max_ending_here >= 0;
+      loop invariant max_so_far >= 0;
+      loop invariant 0 <= step <= n;
+      loop invariant 0 <= stop <= n;
+      loop invariant Array == \at(Array, Pre);
+      loop invariant a_len == \at(a_len, Pre);
+      loop invariant a == \at(a, Pre);
+      loop assigns max_ending_here, max_so_far, max, stop, step;
+    */
+    for (int n = 0; n < Array; n++) {
+        max_ending_here += a[n];
+        if (max_so_far < max_ending_here) {
+            max_so_far = max_ending_here;
+            max = step;
+            stop = n;
+        }
+        if (max_ending_here < 0) {
+            max_ending_here = 0;
+            step = n + 1;
+        }
+    }
+
+    return stop - max + 1;
+}

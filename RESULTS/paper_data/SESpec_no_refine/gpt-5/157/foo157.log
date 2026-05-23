@@ -1,0 +1,786 @@
+2026-05-17 23:02:33,776 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368
+2026-05-17 23:02:33,776 - INFO  - 
+🚀 Starting generation of function: foo157
+2026-05-17 23:02:33,776 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 23:02:33,776 - INFO  - TRY TIME: 0
+2026-05-17 23:02:33,776 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 23:02:33,776 - INFO  - ==================================================
+
+2026-05-17 23:02:34,741 - INFO  - [auto only_loop] False — foo157 returns 'int'
+2026-05-17 23:02:34,741 - INFO  - Initial pending functions: ['foo157', 'malloc']
+2026-05-17 23:02:34,741 - INFO  - Now processing function malloc
+
+2026-05-17 23:02:34,741 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-17 23:02:34,741 - INFO  - 
+GENERATE ANNOTATION FOR foo157
+2026-05-17 23:02:34,741 - INFO  - ==================================================
+
+2026-05-17 23:02:34,741 - INFO  - Function foo157 has been initialized
+2026-05-17 23:02:34,741 - INFO  - Starting to generate annotation code for foo157
+2026-05-17 23:02:34,814 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo157
+2026-05-17 23:02:34,814 - INFO  - ==================================================
+
+2026-05-17 23:02:34,866 - INFO  - Variable Maps:[{}]
+2026-05-17 23:02:34,867 - INFO  - Path conditions: [None]
+2026-05-17 23:02:34,867 - INFO  - Pre condition: 
+2026-05-17 23:02:34,867 - INFO  - Loop Condition: i < n
+2026-05-17 23:02:34,868 - INFO  - Array Names: ['mpis', 'arr']
+2026-05-17 23:02:34,868 - INFO  - Updated Loop Conditions: ['i < n']
+2026-05-17 23:02:34,868 - INFO  - Global Unchanged Variables: []
+2026-05-17 23:02:34,868 - INFO  - Non Inductive Variables: []
+2026-05-17 23:02:34,868 - INFO  - Unchanged Arrays (Read-only): ['arr']
+2026-05-17 23:02:34,869 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 23:02:34,871 - INFO  - examples category: array
+2026-05-17 23:02:34,871 - INFO  - examples:
+2026-05-17 23:02:34,871 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 23:02:58,991 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:04:42,579 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 23:05:04,358 - INFO  - ACSL format loop invariant
+2026-05-17 23:05:04,359 - INFO  - /*@ 
+          loop invariant 0 <= n ==>
+                           (0 <= i <= n);
+          loop invariant mpis_len == n;
+          loop invariant \forall integer k; i <= k < n ==> \true;
+          loop assigns i, mpis[0..n-1];
+        */
+        for (int i = 0; i < n; i++) {
+            mpis[i] = arr[i];
+        }
+2026-05-17 23:05:04,360 - INFO  - QCP format loop invariant
+2026-05-17 23:05:04,360 - INFO  - /*@ Inv
+    exists  arr_l,    
+    store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (0 <= n =>
+                           (0 <= i && i <= n)) &&
+(mpis_len == n) &&
+(forall (k:Z), i <= k && k < n => \true
+          loop assigns i, mpis_l[0..n-1])
+    */
+    
+        for (int i = 0; i < n; i++) {
+            mpis[i] = arr[i];
+        }
+2026-05-17 23:05:04,387 - INFO  - Variable Maps:[{}]
+2026-05-17 23:05:04,387 - INFO  - Path conditions: [None]
+2026-05-17 23:05:04,387 - INFO  - Pre condition: 
+2026-05-17 23:05:04,387 - INFO  - Loop Condition: j < i
+2026-05-17 23:05:04,387 - INFO  - Array Names: ['mpis', 'arr']
+2026-05-17 23:05:04,388 - INFO  - Updated Loop Conditions: ['j < i']
+2026-05-17 23:05:04,388 - INFO  - Global Unchanged Variables: []
+2026-05-17 23:05:04,388 - INFO  - Non Inductive Variables: []
+2026-05-17 23:05:04,388 - INFO  - Unchanged Arrays (Read-only): ['arr']
+2026-05-17 23:05:04,388 - INFO  - [inv-gen] multi-slot mode: 1 candidate(s) (simple placeholder)
+2026-05-17 23:05:21,691 - INFO  - ACSL format loop invariant
+2026-05-17 23:05:21,691 - INFO  - /*@
+          loop invariant 0 <= j <= i;
+          loop invariant \valid(mpis + (0..n-1));
+          loop invariant \valid_read(arr + (0..arr_len-1));
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == \at(arr[k], Pre);
+          loop invariant \forall integer k; 0 <= k < i ==> mpis[k] >= arr[k];
+          loop invariant \forall integer k; j <= k < i ==> mpis[k] >= arr[k];
+          loop invariant \forall integer k; 0 <= k < j ==> mpis[k] >= arr[k];
+          loop invariant mpis[i] >= arr[i];
+          loop assigns j, mpis[i];
+            */
+            for (int j = 0; j < i; j++) {
+                if (arr[i] > arr[j] && mpis[i] < (mpis[j] * arr[i])) {
+                    mpis[i] = mpis[j] * arr[i];
+                }
+            }
+2026-05-17 23:05:21,692 - INFO  - QCP format loop invariant
+2026-05-17 23:05:21,692 - INFO  - /*@ Inv
+    exists  arr_l,    
+    store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (0 <= j && j <= i) &&
+(\valid(mpis + (0..n-1))) &&
+(\valid_read(arr + (0..arr_len-1))) &&
+(forall (k:Z), 0 <= k && k < i => arr_l[k] == arr_l[k]@pre) &&
+(forall (k:Z), 0 <= k && k < i => mpis_l[k] >= arr_l[k]) &&
+(forall (k:Z), j <= k && k < i => mpis_l[k] >= arr_l[k]) &&
+(forall (k:Z), 0 <= k && k < j => mpis_l[k] >= arr_l[k]) &&
+(mpis_l[i] >= arr_l[i]
+          loop assigns j, mpis_l[i])
+    */
+    
+            for (int j = 0; j < i; j++) {
+                if (arr[i] > arr[j] && mpis[i] < (mpis[j] * arr[i])) {
+                    mpis[i] = mpis[j] * arr[i];
+                }
+            }
+2026-05-17 23:05:21,705 - INFO  - Variable Maps:[{}]
+2026-05-17 23:05:21,705 - INFO  - Path conditions: [None]
+2026-05-17 23:05:21,705 - INFO  - Pre condition: 
+2026-05-17 23:05:21,705 - INFO  - Loop Condition: i < n
+2026-05-17 23:05:21,705 - INFO  - Array Names: ['mpis', 'arr']
+2026-05-17 23:05:21,705 - INFO  - Updated Loop Conditions: ['i < n']
+2026-05-17 23:05:21,705 - INFO  - Global Unchanged Variables: []
+2026-05-17 23:05:21,705 - INFO  - Non Inductive Variables: []
+2026-05-17 23:05:21,705 - INFO  - Unchanged Arrays (Read-only): ['arr']
+2026-05-17 23:05:21,706 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 23:05:21,709 - INFO  - examples category: array
+2026-05-17 23:05:21,709 - INFO  - examples:
+2026-05-17 23:05:21,709 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 23:06:27,333 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:06:27,955 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:06:27,956 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:06:28,608 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:06:28,609 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:06:29,264 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:06:29,598 - INFO  - ACSL format loop invariant
+2026-05-17 23:06:29,598 - INFO  - /*@
+          loop invariant 1 <= i <= n;
+          loop invariant \valid(mpis + (0..n-1));
+          loop invariant \valid_read(arr + (0..arr_len-1));
+          loop invariant \forall integer k; 0 <= k < n ==> arr[k] == \at(arr[k], Pre);
+          loop invariant \forall integer k; 0 <= k < i ==> mpis[k] >= arr[k];
+          loop assigns i, j, mpis[..];
+            */
+            for (int i = 1; i < n; i++) {
+            
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= j <= i;
+          loop invariant \valid(mpis + (0..n-1));
+          loop invariant \valid_read(arr + (0..arr_len-1));
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == \at(arr[k], Pre);
+          loop invariant \forall integer k; 0 <= k < i ==> mpis[k] >= arr[k];
+          loop invariant \forall integer k; j <= k < i ==> mpis[k] >= arr[k];
+          loop invariant \forall integer k; 0 <= k < j ==> mpis[k] >= arr[k];
+          loop invariant mpis[i] >= arr[i];
+          loop assigns j, mpis[i];
+            */
+            for (int j = 0; j < i; j++) {
+                if (arr[i] > arr[j] && mpis[i] < (mpis[j] * arr[i])) {
+                    mpis[i] = mpis[j] * arr[i];
+                }
+            }
+            
+        }
+2026-05-17 23:06:29,599 - INFO  - QCP format loop invariant
+2026-05-17 23:06:29,599 - INFO  - /*@ Inv
+    exists  arr_l,    
+    store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (1 <= i && i <= n) &&
+(\valid(mpis + (0..n-1))) &&
+(\valid_read(arr + (0..arr_len-1))) &&
+(forall (k:Z), 0 <= k && k < n => arr_l[k] == arr_l[k]@pre) &&
+(forall (k:Z), 0 <= k && k < i => mpis_l[k] >= arr_l[k]
+          loop assigns i, j, mpis_l[..])
+    */
+    
+            for (int i = 1; i < n; i++) {
+            
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= j <= i;
+          loop invariant \valid(mpis + (0..n-1));
+          loop invariant \valid_read(arr + (0..arr_len-1));
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == \at(arr[k], Pre);
+          loop invariant \forall integer k; 0 <= k < i ==> mpis[k] >= arr[k];
+          loop invariant \forall integer k; j <= k < i ==> mpis[k] >= arr[k];
+          loop invariant \forall integer k; 0 <= k < j ==> mpis[k] >= arr[k];
+          loop invariant mpis[i] >= arr[i];
+          loop assigns j, mpis[i];
+            */
+            for (int j = 0; j < i; j++) {
+                if (arr[i] > arr[j] && mpis[i] < (mpis[j] * arr[i])) {
+                    mpis[i] = mpis[j] * arr[i];
+                }
+            }
+            
+        }
+2026-05-17 23:06:29,613 - INFO  - Variable Maps:[{}]
+2026-05-17 23:06:29,613 - INFO  - Path conditions: [None]
+2026-05-17 23:06:29,613 - INFO  - Pre condition: 
+2026-05-17 23:06:29,613 - INFO  - Loop Condition: i < n
+2026-05-17 23:06:29,613 - INFO  - Array Names: ['mpis']
+2026-05-17 23:06:29,613 - INFO  - Updated Loop Conditions: ['i < n']
+2026-05-17 23:06:29,613 - INFO  - Global Unchanged Variables: []
+2026-05-17 23:06:29,614 - INFO  - Non Inductive Variables: []
+2026-05-17 23:06:29,615 - INFO  - Unchanged Arrays (Read-only): ['mpis']
+2026-05-17 23:06:29,615 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 23:06:29,619 - INFO  - examples category: array
+2026-05-17 23:06:29,619 - INFO  - examples:
+2026-05-17 23:06:29,619 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 23:07:43,076 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:07:43,501 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:07:43,502 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:07:43,938 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:07:43,939 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:07:44,369 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 23:07:44,635 - INFO  - ACSL format loop invariant
+2026-05-17 23:07:44,635 - INFO  - /*@
+          loop invariant 1 <= i <= n;
+          loop invariant \valid_read(mpis + (0..n-1));
+          loop invariant \forall integer k; 0 <= k < n ==> mpis[k] == \at(mpis[k], Pre);
+          loop invariant \forall integer k; 0 <= k < i ==> mpis[k] <= max;
+          loop assigns i, max;
+            */
+            for (int i = 1; i < n; i++) {
+            if (mpis[i] > max) {
+                max = mpis[i];
+            }
+        }
+2026-05-17 23:07:44,635 - INFO  - QCP format loop invariant
+2026-05-17 23:07:44,635 - INFO  - /*@ Inv
+    exists  arr_l,    
+    store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (1 <= i && i <= n) &&
+(\valid_read(mpis + (0..n-1))) &&
+(forall (k:Z), 0 <= k && k < n => mpis_l[k] == mpis_l[k]@pre) &&
+(forall (k:Z), 0 <= k && k < i => mpis_l[k] <= max
+          loop assigns i, max)
+    */
+    
+            for (int i = 1; i < n; i++) {
+            if (mpis[i] > max) {
+                max = mpis[i];
+            }
+        }
+2026-05-17 23:07:44,839 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo157
+2026-05-17 23:07:44,839 - INFO  - ==================================================
+
+2026-05-17 23:07:44,853 - INFO  - Starting to generate ACSL specification for foo157
+2026-05-17 23:08:19,286 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:08:19,588 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c:11: Warning: 
+  unexpected token ''
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 23:08:19,593 - INFO  - 
+SPECIFICATION FOR foo157
+2026-05-17 23:08:19,595 - INFO  - ==================================================
+
+2026-05-17 23:08:19,595 - INFO  - 
+QCP Specification for function foo157:
+/*@
+With arr_l
+Require store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100
+Ensure Results(__return)
+*/
+2026-05-17 23:08:19,769 - INFO  - 
+VERIFICATION FOR foo157
+2026-05-17 23:08:19,770 - INFO  - ==================================================
+
+2026-05-17 23:08:20,054 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c:11: Warning: 
+  unexpected token ''
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 23:08:46,861 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 23:08:47,063 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c:11: Warning: 
+  unexpected token ''
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 23:08:47,307 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c:11: Warning: 
+  unexpected token ''
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157/20260517_230233_1512674_6fb93368/output/foo157.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 23:08:47,311 - INFO  - first_pass:
+2026-05-17 23:08:47,312 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-17 23:08:47,312 - INFO  - ==================================================
+2026-05-17 23:08:47,312 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 23:08:47,312 - INFO  - Total execution time: 373.54 seconds (6.23 minutes)
+2026-05-17 23:08:47,312 - INFO  - ==================================================
+2026-05-17 23:08:47,312 - INFO  - ==================================================
+2026-05-17 23:08:47,312 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 23:08:47,312 - INFO  - Total API calls: 12
+2026-05-17 23:08:47,312 - INFO  - Total prompt tokens (input): 144,639
+2026-05-17 23:08:47,312 - INFO  - Total completion tokens (output): 11,793
+2026-05-17 23:08:47,312 - INFO  - Total tokens: 156,432
+2026-05-17 23:08:47,312 - INFO  - Average prompt tokens per call: 12053.2
+2026-05-17 23:08:47,312 - INFO  - Average completion tokens per call: 982.8
+2026-05-17 23:08:47,312 - INFO  - Average total tokens per call: 13036.0
+2026-05-17 23:08:47,312 - INFO  - ==================================================

@@ -1,0 +1,49 @@
+
+/*@
+predicate NonNegative(int x) = x >= 0;
+*/
+
+/*@
+  // Defines that foo128_sofar(lmax,s) is the maximum volume found
+  // for all l in [1..lmax-1], i.e. after processing l from 1 to lmax-1.
+  logic integer max_volume_upto(integer lmax, integer s) =
+    (lmax <= 1 ? 0 :
+      (\max integer l0; 1 <= l0 < lmax ? 
+         (\max integer b0; 1 <= b0 <= s - l0 + 1 ? l0 * b0 * (s - l0 - b0) : 0) : 0));
+*/
+
+int foo128(int s) {
+
+        int foo128 = 0;
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (l <= \at(s,Pre)) ==> (((foo128 == 0)&&(s == \at(s,Pre))) || (foo128 >= 0 && foo128 == max_volume_upto(l, s)));
+          loop invariant (!(l <= \at(s,Pre))) ==> ((foo128 == 0)&&(s == \at(s,Pre)));
+          loop invariant s == \at(s,Pre);
+          loop assigns l, b, h, volume, foo128;
+            */
+            for (int l = 1; l <= s; l++) {
+            
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+            loop invariant 1 <= l <= s+1;
+            loop invariant foo128 >= 0;
+            loop invariant (\forall int l0; 1 <= l0 < l ==> 
+                              (\exists int b0,h0; 1 <= b0 <= s - l0 + 1 && h0 == s - l0 - b0 && foo128 >= l0*b0*h0));
+            loop assigns l, foo128;
+            */
+            for (int b = 1; b <= s - l + 1; b++) {
+                int h = s - l - b;
+                int volume = l * b * h;
+                if (volume > foo128) {
+                    foo128 = volume;
+                }
+            }
+            
+        }
+        return foo128;
+}

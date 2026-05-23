@@ -1,0 +1,1329 @@
+2026-05-17 11:28:04,870 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo45_c187/20260517_112804_494404_8d464ab0
+2026-05-17 11:28:04,870 - INFO  - 
+🚀 Starting generation of function: foo45_c187
+2026-05-17 11:28:04,870 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 11:28:04,870 - INFO  - TRY TIME: 0
+2026-05-17 11:28:04,870 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 11:28:04,870 - INFO  - ==================================================
+
+2026-05-17 11:28:04,974 - INFO  - [auto only_loop] False — foo45_c187 returns 'int'
+2026-05-17 11:28:04,974 - INFO  - Initial pending functions: ['foo45_c187']
+2026-05-17 11:28:04,974 - INFO  - 
+GENERATE ANNOTATION FOR foo45_c187
+2026-05-17 11:28:04,975 - INFO  - ==================================================
+
+2026-05-17 11:28:04,975 - INFO  - Function foo45_c187 has been initialized
+2026-05-17 11:28:04,975 - INFO  - Starting to generate annotation code for foo45_c187
+2026-05-17 11:28:05,012 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo45_c187
+2026-05-17 11:28:05,013 - INFO  - ==================================================
+
+2026-05-17 11:28:05,061 - INFO  - Variable Maps:[{'max': '1', 'f': 'array[0]', 'array_len': 'array_len@pre', 'array': 'array@pre', 'size': 'size@pre'}]
+2026-05-17 11:28:05,061 - INFO  - Path conditions: ['size@pre != 0 && array_len@pre > 0 && array_len@pre < 100']
+2026-05-17 11:28:05,061 - INFO  - Pre condition: size@pre != 0 && array_len@pre > 0 && array_len@pre < 100 && (max == 1) * store_int_array(array@pre, array_len@pre, array_l) * (f == array_l[0]) * (array_len == array_len@pre) * (array == array@pre) * (size == size@pre)
+2026-05-17 11:28:05,061 - INFO  - Loop Condition: c < size
+2026-05-17 11:28:05,062 - INFO  - Array Names: ['array']
+2026-05-17 11:28:05,063 - INFO  - Updated Loop Conditions: ['c < size@pre']
+2026-05-17 11:28:05,063 - INFO  - Global Unchanged Variables: ['array_len', 'array', 'size']
+2026-05-17 11:28:05,064 - INFO  - Non Inductive Variables: ['f', 'max']
+2026-05-17 11:28:05,064 - INFO  - Unchanged Arrays (Read-only): ['array']
+2026-05-17 11:28:05,066 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 11:28:05,067 - INFO  - examples category: array
+2026-05-17 11:28:05,068 - INFO  - examples:
+2026-05-17 11:28:05,068 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 11:29:12,625 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=12
+2026-05-17 11:29:42,870 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=7
+2026-05-17 11:30:15,114 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=10
+2026-05-17 11:30:50,178 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=10
+2026-05-17 11:31:19,644 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=10
+2026-05-17 11:31:54,567 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=10
+2026-05-17 11:31:54,568 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=13)
+2026-05-17 11:32:16,963 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=10
+2026-05-17 11:32:45,669 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=10
+2026-05-17 11:32:45,670 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=13)
+2026-05-17 11:33:08,990 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=10
+2026-05-17 11:33:44,907 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.91, satisfy=0.00) clauses=11
+2026-05-17 11:33:52,468 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.9090909090909091, 0.0), clauses=11)
+2026-05-17 11:34:31,967 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 11:34:39,795 - INFO  - ACSL format loop invariant
+2026-05-17 11:34:39,795 - INFO  - /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+2026-05-17 11:34:39,797 - INFO  - QCP format loop invariant
+2026-05-17 11:34:39,797 - INFO  - /*@ Inv
+    exists  array_l,    
+    store_int_array(array, array_len, array_l) && array_len > 0 && array_len < 100 &&
+    (1 <= c) &&
+(size == size@pre) &&
+(array == array@pre) &&
+(array_len == array_len@pre) &&
+(forall (k:Z), 0 <= k && k < array_len => array_l[k] == array_l[k]@pre) &&
+((c < size) => (c <= size@pre)) &&
+((c == 1) => (f == array_l[0] && max == 1)) &&
+((c >= 1) => (f == min_prefix_excl(array, c))) &&
+(forall (k:Z), 0 <= k && k < c => f <= array_l[k]) &&
+(1 <= max && max <= c
+          loop assigns c, f, max)
+    */
+    
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+2026-05-17 11:34:47,266 - INFO  - CORRECT INVARIANT
+2026-05-17 11:34:47,266 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo45_c187
+2026-05-17 11:34:47,267 - INFO  - ==================================================
+
+2026-05-17 11:34:47,288 - INFO  - Starting to generate ACSL specification for foo45_c187
+2026-05-17 11:35:12,674 - INFO  - syntax Correct
+2026-05-17 11:35:24,356 - INFO  - Loop Invariant:
+2026-05-17 11:35:24,357 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:35:24,357 - INFO  - 
+2026-05-17 11:35:24,357 - INFO  - Assertion:
+2026-05-17 11:35:24,357 - INFO  - []
+2026-05-17 11:35:24,357 - INFO  - 
+2026-05-17 11:35:24,357 - INFO  - Assigns:
+2026-05-17 11:35:24,357 - INFO  - [True, True, True]
+2026-05-17 11:35:24,357 - INFO  - 
+2026-05-17 11:35:24,358 - INFO  - Post Condition:
+2026-05-17 11:35:24,358 - INFO  - [True, False]
+2026-05-17 11:35:24,358 - INFO  - 
+2026-05-17 11:35:24,363 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=3
+2026-05-17 11:35:24,364 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \result == cnt_eq_range(\old(array), 0, \old(size), min_prefix_excl(\old(array), \old(size))) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:35:33,653 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@ 
+  requires size >= 0;
+  requires array_len >= size;
+  requires array != \null;
+  requires \valid(array + (0 .. array_len-1));
+  // Array is not modified by this function (defensive, supports invariants)
+  requires \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+  // Strengthen precondition so postcondition matches implementation:
+  // array[0] must be the minimum over the entire prefix [0,size)
+  requires size == 0 || (\forall integer k; 0 <= k < size ==> array[0] <= array[k]);
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \result == cnt_eq_range(\old(array), 0, \old(size), min_prefix_excl(\old(array), \old(size)));
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:35:48,180 - INFO  - syntax Correct
+2026-05-17 11:36:00,848 - INFO  - Loop Invariant:
+2026-05-17 11:36:00,849 - INFO  - [True, True, True, True, True, True, True, True, False, True]
+2026-05-17 11:36:00,849 - INFO  - 
+2026-05-17 11:36:00,849 - INFO  - Assertion:
+2026-05-17 11:36:00,849 - INFO  - []
+2026-05-17 11:36:00,849 - INFO  - 
+2026-05-17 11:36:00,849 - INFO  - Assigns:
+2026-05-17 11:36:00,849 - INFO  - [True, True, True]
+2026-05-17 11:36:00,849 - INFO  - 
+2026-05-17 11:36:00,850 - INFO  - Post Condition:
+2026-05-17 11:36:00,850 - INFO  - [True, False]
+2026-05-17 11:36:00,850 - INFO  - 
+2026-05-17 11:36:00,850 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.87, satisfy=0.00) clauses=9
+2026-05-17 11:36:00,850 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@ 
+  requires size >= 0;
+  requires array_len >= size;
+  requires array != \null;
+  requires \valid(array + (0 .. array_len-1));
+  // Array is not modified by this function (defensive, supports invariants)
+  requires \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+  // Strengthen precondition so postcondition matches implementation:
+  // array[0] must be the minimum over the entire prefix [0,size)
+  requires size == 0 || (\forall integer k; 0 <= k < size ==> array[0] <= array[k]);
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \result == cnt_eq_range(\old(array), 0, \old(size), min_prefix_excl(\old(array), \old(size))) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:36:10,230 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \result == cnt_eq_range(\old(array), 0, \old(size), min_prefix_excl(\old(array), \old(size)));
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c <= size;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          // f is minimum of the prefix and is attained
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant c >= 1 ==> (\exists integer i; 0 <= i < c && array[i] == f);
+          // max counts exactly how many elements in [0,c) equal f
+          loop invariant c >= 1 ==> max == cnt_eq_range(array, 0, c, f);
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:36:25,224 - INFO  - syntax Correct
+2026-05-17 11:36:39,165 - INFO  - Loop Invariant:
+2026-05-17 11:36:39,166 - INFO  - [False, True, True, True, True, True, False, True, False, True]
+2026-05-17 11:36:39,166 - INFO  - 
+2026-05-17 11:36:39,166 - INFO  - Assertion:
+2026-05-17 11:36:39,166 - INFO  - []
+2026-05-17 11:36:39,166 - INFO  - 
+2026-05-17 11:36:39,166 - INFO  - Assigns:
+2026-05-17 11:36:39,166 - INFO  - [True, True, True]
+2026-05-17 11:36:39,166 - INFO  - 
+2026-05-17 11:36:39,166 - INFO  - Post Condition:
+2026-05-17 11:36:39,166 - INFO  - [True, True]
+2026-05-17 11:36:39,166 - INFO  - 
+2026-05-17 11:36:39,167 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=3
+2026-05-17 11:36:39,167 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 11:36:53,182 - INFO  - syntax Correct
+2026-05-17 11:37:05,511 - INFO  - Loop Invariant:
+2026-05-17 11:37:05,516 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:37:05,516 - INFO  - 
+2026-05-17 11:37:05,516 - INFO  - Assertion:
+2026-05-17 11:37:05,516 - INFO  - []
+2026-05-17 11:37:05,516 - INFO  - 
+2026-05-17 11:37:05,516 - INFO  - Assigns:
+2026-05-17 11:37:05,517 - INFO  - [True, True, True]
+2026-05-17 11:37:05,517 - INFO  - 
+2026-05-17 11:37:05,518 - INFO  - Post Condition:
+2026-05-17 11:37:05,518 - INFO  - [True, False]
+2026-05-17 11:37:05,518 - INFO  - 
+2026-05-17 11:37:05,519 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=3
+2026-05-17 11:37:05,522 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \result == cnt_eq_range(\old(array), 0, \old(size), min_prefix_excl(\old(array), \old(size))) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:37:13,332 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \result == cnt_eq_range(\old(array), 0, \old(size), min_prefix_excl(\old(array), \old(size - 1)));
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:37:28,174 - INFO  - syntax Correct
+2026-05-17 11:37:40,323 - INFO  - Loop Invariant:
+2026-05-17 11:37:40,323 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:37:40,323 - INFO  - 
+2026-05-17 11:37:40,323 - INFO  - Assertion:
+2026-05-17 11:37:40,323 - INFO  - []
+2026-05-17 11:37:40,323 - INFO  - 
+2026-05-17 11:37:40,323 - INFO  - Assigns:
+2026-05-17 11:37:40,323 - INFO  - [True, True, True]
+2026-05-17 11:37:40,323 - INFO  - 
+2026-05-17 11:37:40,324 - INFO  - Post Condition:
+2026-05-17 11:37:40,324 - INFO  - [True, False]
+2026-05-17 11:37:40,324 - INFO  - 
+2026-05-17 11:37:40,324 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=3
+2026-05-17 11:37:40,325 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 11:37:55,160 - INFO  - syntax Correct
+2026-05-17 11:38:06,971 - INFO  - Loop Invariant:
+2026-05-17 11:38:06,972 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:38:06,972 - INFO  - 
+2026-05-17 11:38:06,972 - INFO  - Assertion:
+2026-05-17 11:38:06,972 - INFO  - []
+2026-05-17 11:38:06,972 - INFO  - 
+2026-05-17 11:38:06,972 - INFO  - Assigns:
+2026-05-17 11:38:06,972 - INFO  - [True, True, True]
+2026-05-17 11:38:06,972 - INFO  - 
+2026-05-17 11:38:06,972 - INFO  - Post Condition:
+2026-05-17 11:38:06,972 - INFO  - [True, False]
+2026-05-17 11:38:06,972 - INFO  - 
+2026-05-17 11:38:06,973 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=3
+2026-05-17 11:38:06,973 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \result == cnt_eq_range(\old(array), 0, \old(size), min_prefix_excl(\old(array), \old(size))) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:38:15,002 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires size >= 0;
+  requires array_len >= 0;
+  requires size <= array_len;
+  requires size == 0 || \valid(array + (0 .. size - 1));
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \result == cnt_eq_range(\old(array), 0, \old(size), min_prefix_excl(\old(array), \old(size)));
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:38:29,182 - INFO  - syntax Correct
+2026-05-17 11:38:41,356 - INFO  - Loop Invariant:
+2026-05-17 11:38:41,356 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:38:41,356 - INFO  - 
+2026-05-17 11:38:41,356 - INFO  - Assertion:
+2026-05-17 11:38:41,357 - INFO  - []
+2026-05-17 11:38:41,357 - INFO  - 
+2026-05-17 11:38:41,357 - INFO  - Assigns:
+2026-05-17 11:38:41,357 - INFO  - [True, True, True]
+2026-05-17 11:38:41,357 - INFO  - 
+2026-05-17 11:38:41,357 - INFO  - Post Condition:
+2026-05-17 11:38:41,357 - INFO  - [True, False]
+2026-05-17 11:38:41,357 - INFO  - 
+2026-05-17 11:38:41,358 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-17 11:38:41,358 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires size >= 0;
+  requires array_len >= 0;
+  requires size <= array_len;
+  requires size == 0 || \valid(array + (0 .. size - 1));
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \result == cnt_eq_range(\old(array), 0, \old(size), min_prefix_excl(\old(array), \old(size))) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:38:49,434 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires size >= 0;
+  requires array_len >= 0;
+  requires size <= array_len;
+  requires size == 0 || \valid(array + (0 .. size - 1));
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==>
+           \result == cnt_eq_range(\at(array,Pre), 0, \old(size),
+                                     min_prefix_excl(\at(array,Pre), \old(size)));
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:39:04,225 - INFO  - syntax Correct
+2026-05-17 11:39:16,775 - INFO  - Loop Invariant:
+2026-05-17 11:39:16,775 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:39:16,775 - INFO  - 
+2026-05-17 11:39:16,776 - INFO  - Assertion:
+2026-05-17 11:39:16,776 - INFO  - []
+2026-05-17 11:39:16,776 - INFO  - 
+2026-05-17 11:39:16,776 - INFO  - Assigns:
+2026-05-17 11:39:16,776 - INFO  - [True, True, True]
+2026-05-17 11:39:16,776 - INFO  - 
+2026-05-17 11:39:16,776 - INFO  - Post Condition:
+2026-05-17 11:39:16,777 - INFO  - [True, False]
+2026-05-17 11:39:16,777 - INFO  - 
+2026-05-17 11:39:16,777 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-17 11:39:16,777 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires size >= 0;
+  requires array_len >= 0;
+  requires size <= array_len;
+  requires size == 0 || \valid(array + (0 .. size - 1));
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==>
+           \result == cnt_eq_range(\at(array,Pre), 0, \old(size),
+                                     min_prefix_excl(\at(array,Pre), \old(size))) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:39:25,906 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires size >= 0;
+  requires array_len >= 0;
+  requires size <= array_len;
+  requires size == 0 || \valid(array + (0 .. size - 1));
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures size > 0 ==>
+           \result == cnt_eq_range(\at(array,Pre), 0, size,
+                                     min_prefix_excl(\at(array,Pre), size));
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:39:40,184 - INFO  - syntax Correct
+2026-05-17 11:39:52,124 - INFO  - Loop Invariant:
+2026-05-17 11:39:52,124 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:39:52,124 - INFO  - 
+2026-05-17 11:39:52,124 - INFO  - Assertion:
+2026-05-17 11:39:52,125 - INFO  - []
+2026-05-17 11:39:52,125 - INFO  - 
+2026-05-17 11:39:52,125 - INFO  - Assigns:
+2026-05-17 11:39:52,125 - INFO  - [True, True, True]
+2026-05-17 11:39:52,125 - INFO  - 
+2026-05-17 11:39:52,125 - INFO  - Post Condition:
+2026-05-17 11:39:52,125 - INFO  - [True, False]
+2026-05-17 11:39:52,125 - INFO  - 
+2026-05-17 11:39:52,126 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-17 11:39:52,126 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 11:40:06,175 - INFO  - syntax Correct
+2026-05-17 11:40:18,281 - INFO  - Loop Invariant:
+2026-05-17 11:40:18,282 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:40:18,282 - INFO  - 
+2026-05-17 11:40:18,282 - INFO  - Assertion:
+2026-05-17 11:40:18,282 - INFO  - []
+2026-05-17 11:40:18,282 - INFO  - 
+2026-05-17 11:40:18,283 - INFO  - Assigns:
+2026-05-17 11:40:18,283 - INFO  - [True, True, True]
+2026-05-17 11:40:18,283 - INFO  - 
+2026-05-17 11:40:18,283 - INFO  - Post Condition:
+2026-05-17 11:40:18,283 - INFO  - [True, False]
+2026-05-17 11:40:18,283 - INFO  - 
+2026-05-17 11:40:18,284 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=7
+2026-05-17 11:40:18,290 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires size >= 0;
+  requires array_len >= 0;
+  requires size <= array_len;
+  requires size == 0 || \valid(array + (0 .. size - 1));
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \result == cnt_eq_range(\old(array), 0, \old(size), min_prefix_excl(\old(array), \old(size))) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:40:30,394 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires size >= 0;
+  requires array_len >= 0;
+  requires size <= array_len;
+  requires size == 0 || \valid(array + (0 .. size - 1));
+  ensures \result == 0 ==> \old(size) == 0;
+  ensures \old(size) != 0 ==> \exists integer v; 
+            v == min_prefix_excl(\old(array), \old(size)) &&
+            \result == cnt_eq_range(\old(array), 0, \old(size), v);
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:40:30,403 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9333333333333333, 0.0), clauses=7)
+2026-05-17 11:40:45,140 - INFO  - syntax Correct
+2026-05-17 11:40:57,034 - INFO  - Loop Invariant:
+2026-05-17 11:40:57,034 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:40:57,034 - INFO  - 
+2026-05-17 11:40:57,034 - INFO  - Assertion:
+2026-05-17 11:40:57,034 - INFO  - []
+2026-05-17 11:40:57,035 - INFO  - 
+2026-05-17 11:40:57,035 - INFO  - Assigns:
+2026-05-17 11:40:57,035 - INFO  - [True, True, True]
+2026-05-17 11:40:57,035 - INFO  - 
+2026-05-17 11:40:57,035 - INFO  - Post Condition:
+2026-05-17 11:40:57,035 - INFO  - [True, False]
+2026-05-17 11:40:57,035 - INFO  - 
+2026-05-17 11:41:00,210 - INFO  - syntax Correct
+2026-05-17 11:41:07,251 - INFO  - Loop Invariant:
+2026-05-17 11:41:07,251 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:41:07,251 - INFO  - 
+2026-05-17 11:41:07,251 - INFO  - Assertion:
+2026-05-17 11:41:07,251 - INFO  - []
+2026-05-17 11:41:07,252 - INFO  - 
+2026-05-17 11:41:07,252 - INFO  - Assigns:
+2026-05-17 11:41:07,252 - INFO  - [True, True, True]
+2026-05-17 11:41:07,252 - INFO  - 
+2026-05-17 11:41:07,252 - INFO  - Post Condition:
+2026-05-17 11:41:07,252 - INFO  - [True]
+2026-05-17 11:41:07,252 - INFO  - 
+2026-05-17 11:41:07,258 - INFO  - 
+SPECIFICATION FOR foo45_c187
+2026-05-17 11:41:07,260 - INFO  - ==================================================
+
+2026-05-17 11:41:07,260 - INFO  - 
+QCP Specification for function foo45_c187:
+/*@
+With array_l
+Require store_int_array(array, array_len, array_l) && array_len > 0 && array_len < 100
+Ensure Results(__return)
+*/
+2026-05-17 11:41:08,118 - INFO  - 
+VERIFICATION FOR foo45_c187
+2026-05-17 11:41:08,119 - INFO  - ==================================================
+
+2026-05-17 11:41:11,324 - INFO  - syntax Correct
+2026-05-17 11:41:20,508 - INFO  - Loop Invariant:
+2026-05-17 11:41:20,508 - INFO  - [True, True, True, True, True, True, True, True, True, True]
+2026-05-17 11:41:20,508 - INFO  - 
+2026-05-17 11:41:20,508 - INFO  - Assertion:
+2026-05-17 11:41:20,508 - INFO  - []
+2026-05-17 11:41:20,508 - INFO  - 
+2026-05-17 11:41:20,508 - INFO  - Assigns:
+2026-05-17 11:41:20,508 - INFO  - [True, True, True]
+2026-05-17 11:41:20,508 - INFO  - 
+2026-05-17 11:41:20,508 - INFO  - Post Condition:
+2026-05-17 11:41:20,508 - INFO  - [True]
+2026-05-17 11:41:20,508 - INFO  - 
+2026-05-17 11:41:20,508 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo45_c187
+2026-05-17 11:41:20,509 - INFO  - ==================================================
+2026-05-17 11:41:20,509 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo45_c187/20260517_112804_494404_8d464ab0/output/foo45_c187.c
+2026-05-17 11:41:20,509 - INFO  - Output file content:
+
+/*@ 
+  logic integer min_prefix_excl(int* a, integer hi) =
+    hi <= 0 ? a[0]
+            : (min_prefix_excl(a, hi - 1) < a[hi - 1] ? min_prefix_excl(a, hi - 1) : a[hi - 1]);
+*/
+
+/*@
+  logic integer cnt_eq_range(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : cnt_eq_range(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires size >= 0;
+  requires array_len >= 0;
+  requires size <= array_len;
+  requires size == 0 || \valid(array + (0 .. size - 1));
+  ensures \result == 0 ==> \old(size) == 0;
+  assigns \nothing;
+*/
+int foo45_c187(int size, int * array, int array_len) {
+
+		if (size == 0) {
+			return 0;
+		}
+
+		int f = array[0];
+		int max = 1;
+
+        /*@
+          loop invariant 1 <= c;
+          loop invariant size == \at(size,Pre);
+          loop invariant array == \at(array,Pre);
+          loop invariant array_len == \at(array_len,Pre);
+          loop invariant \forall integer k; 0 <= k < array_len ==> array[k] == \at(array[k], Pre);
+          loop invariant (c < size) ==> (c <= \at(size,Pre));
+          loop invariant (c == 1) ==> (f == array[0] && max == 1);
+          loop invariant (c >= 1) ==> (f == min_prefix_excl(array, c));
+          loop invariant \forall integer k; 0 <= k < c ==> f <= array[k];
+          loop invariant 1 <= max <= c;
+          loop assigns c, f, max;
+        */
+        for (int c = 1; c < size; c++) {
+			if (f > array[c]) {
+				f = array[c];
+				max = 1;
+			} else if (f == array[c]) {
+				max++;
+			}
+		}
+            
+		return max;
+}
+
+2026-05-17 11:41:20,509 - INFO  - ==================================================
+2026-05-17 11:41:20,514 - INFO  - first_pass:
+2026-05-17 11:41:20,514 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 11:41:20,514 - INFO  - ==================================================
+2026-05-17 11:41:20,514 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 11:41:20,514 - INFO  - Total execution time: 795.64 seconds (13.26 minutes)
+2026-05-17 11:41:20,514 - INFO  - ==================================================
+2026-05-17 11:41:20,515 - INFO  - ==================================================
+2026-05-17 11:41:20,515 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 11:41:20,515 - INFO  - Total API calls: 19
+2026-05-17 11:41:20,515 - INFO  - Total prompt tokens (input): 189,446
+2026-05-17 11:41:20,515 - INFO  - Total completion tokens (output): 13,106
+2026-05-17 11:41:20,515 - INFO  - Total tokens: 202,552
+2026-05-17 11:41:20,515 - INFO  - Average prompt tokens per call: 9970.8
+2026-05-17 11:41:20,515 - INFO  - Average completion tokens per call: 689.8
+2026-05-17 11:41:20,515 - INFO  - Average total tokens per call: 10660.6
+2026-05-17 11:41:20,515 - INFO  - ==================================================

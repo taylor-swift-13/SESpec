@@ -1,0 +1,1018 @@
+2026-05-17 11:48:41,592 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo255_c363/20260517_114841_582541_978043eb
+2026-05-17 11:48:41,593 - INFO  - 
+🚀 Starting generation of function: foo255_c363
+2026-05-17 11:48:41,593 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 11:48:41,593 - INFO  - TRY TIME: 0
+2026-05-17 11:48:41,593 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 11:48:41,593 - INFO  - ==================================================
+
+2026-05-17 11:48:55,867 - INFO  - [auto only_loop] False — foo255_c363 returns 'int'
+2026-05-17 11:48:55,870 - INFO  - Initial pending functions: ['foo255_c363']
+2026-05-17 11:48:55,870 - INFO  - 
+GENERATE ANNOTATION FOR foo255_c363
+2026-05-17 11:48:55,871 - INFO  - ==================================================
+
+2026-05-17 11:48:55,871 - INFO  - Function foo255_c363 has been initialized
+2026-05-17 11:48:55,871 - INFO  - Starting to generate annotation code for foo255_c363
+2026-05-17 11:48:56,140 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo255_c363
+2026-05-17 11:48:56,146 - INFO  - ==================================================
+
+2026-05-17 11:48:56,491 - INFO  - Variable Maps:[{'total': '0', 'average': '0', 'size': 'size@pre'}]
+2026-05-17 11:48:56,502 - INFO  - Path conditions: [None]
+2026-05-17 11:48:56,502 - INFO  - Pre condition: (total == 0) * (average == 0) * (size == size@pre)
+2026-05-17 11:48:56,503 - INFO  - Loop Condition: c <= size
+2026-05-17 11:48:56,504 - INFO  - Array Names: []
+2026-05-17 11:48:56,504 - INFO  - Updated Loop Conditions: ['c <= size@pre']
+2026-05-17 11:48:56,505 - INFO  - Global Unchanged Variables: ['size']
+2026-05-17 11:48:56,506 - INFO  - Non Inductive Variables: []
+2026-05-17 11:48:56,506 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 11:48:56,512 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 11:48:56,542 - INFO  - examples category: numeric
+2026-05-17 11:48:56,543 - INFO  - examples:
+2026-05-17 11:48:56,543 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-17 11:49:49,312 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-17 11:49:49,489 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 11:50:33,508 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:51:16,390 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:52:06,263 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:52:06,265 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 11:52:34,525 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:53:24,898 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 11:53:24,900 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 11:54:02,329 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:54:51,971 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=7
+2026-05-17 11:54:51,974 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 11:55:24,576 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:56:07,266 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 11:56:15,650 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8571428571428571, 0.0), clauses=7)
+2026-05-17 11:57:19,287 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 11:57:31,461 - INFO  - ACSL format loop invariant
+2026-05-17 11:57:31,462 - INFO  - /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+2026-05-17 11:57:31,474 - INFO  - QCP format loop invariant
+2026-05-17 11:57:31,478 - INFO  - /*@ Inv
+    (1 <= c) &&
+(size == size@pre) &&
+(total == count_evens_upto(c - 1)) &&
+(average == sum_evens_upto(c - 1)) &&
+(0 <= total && total <= c - 1) &&
+(0 <= average
+      loop assigns c, average, total)
+    */
+    
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+2026-05-17 11:57:46,625 - INFO  - CORRECT INVARIANT
+2026-05-17 11:57:46,631 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo255_c363
+2026-05-17 11:57:46,631 - INFO  - ==================================================
+
+2026-05-17 11:57:46,744 - INFO  - Starting to generate ACSL specification for foo255_c363
+2026-05-17 11:58:01,107 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo255_c363/20260517_114841_582541_978043eb/output/foo255_c363.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo255_c363/20260517_114841_582541_978043eb/output/foo255_c363.c:7: Warning: 
+  unbound logic function sum_evens_upto. Ignoring logic specification of function foo255_c363
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo255_c363/20260517_114841_582541_978043eb/output/foo255_c363.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 11:58:01,120 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 11:58:27,196 - INFO  - syntax Correct
+2026-05-17 11:58:41,896 - INFO  - Loop Invariant:
+2026-05-17 11:58:41,898 - INFO  - [True, True, True, True, True, True]
+2026-05-17 11:58:41,898 - INFO  - 
+2026-05-17 11:58:41,898 - INFO  - Assertion:
+2026-05-17 11:58:41,900 - INFO  - []
+2026-05-17 11:58:41,900 - INFO  - 
+2026-05-17 11:58:41,901 - INFO  - Assigns:
+2026-05-17 11:58:41,906 - INFO  - [True, True]
+2026-05-17 11:58:41,906 - INFO  - 
+2026-05-17 11:58:41,911 - INFO  - Post Condition:
+2026-05-17 11:58:41,912 - INFO  - [False]
+2026-05-17 11:58:41,912 - INFO  - 
+2026-05-17 11:58:41,916 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=2
+2026-05-17 11:58:41,928 - INFO  - postconditon before refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  assigns \nothing;
+  ensures count_evens_upto(size) > 0 ==> \result == sum_evens_upto(size) / count_evens_upto(size) [POSTCONDITION FAILED];
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 11:58:49,300 - INFO  - postconditon after refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures \result == sum_evens_upto(size) / count_evens_upto(size);
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 11:59:06,209 - INFO  - syntax Correct
+2026-05-17 11:59:19,398 - INFO  - Loop Invariant:
+2026-05-17 11:59:19,399 - INFO  - [True, True, True, True, True, True]
+2026-05-17 11:59:19,399 - INFO  - 
+2026-05-17 11:59:19,400 - INFO  - Assertion:
+2026-05-17 11:59:19,400 - INFO  - []
+2026-05-17 11:59:19,400 - INFO  - 
+2026-05-17 11:59:19,400 - INFO  - Assigns:
+2026-05-17 11:59:19,400 - INFO  - [True, True]
+2026-05-17 11:59:19,400 - INFO  - 
+2026-05-17 11:59:19,402 - INFO  - Post Condition:
+2026-05-17 11:59:19,402 - INFO  - [False]
+2026-05-17 11:59:19,402 - INFO  - 
+2026-05-17 11:59:19,403 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=3
+2026-05-17 11:59:19,403 - INFO  - postconditon before refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures \result == sum_evens_upto(size) / count_evens_upto(size) [POSTCONDITION FAILED];
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 11:59:30,675 - INFO  - postconditon after refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures count_evens_upto(size) > 0;
+  ensures \result == sum_evens_upto(\at(size,Pre)) / count_evens_upto(\at(size,Pre));
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 11:59:46,214 - INFO  - syntax Correct
+2026-05-17 11:59:58,710 - INFO  - Loop Invariant:
+2026-05-17 11:59:58,732 - INFO  - [True, True, True, True, True, True]
+2026-05-17 11:59:58,732 - INFO  - 
+2026-05-17 11:59:58,732 - INFO  - Assertion:
+2026-05-17 11:59:58,732 - INFO  - []
+2026-05-17 11:59:58,732 - INFO  - 
+2026-05-17 11:59:58,732 - INFO  - Assigns:
+2026-05-17 11:59:58,732 - INFO  - [True, True]
+2026-05-17 11:59:58,732 - INFO  - 
+2026-05-17 11:59:58,742 - INFO  - Post Condition:
+2026-05-17 11:59:58,742 - INFO  - [True, False]
+2026-05-17 11:59:58,742 - INFO  - 
+2026-05-17 11:59:58,756 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=4
+2026-05-17 11:59:58,762 - INFO  - postconditon before refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures count_evens_upto(size) > 0;
+  ensures \result == sum_evens_upto(\at(size,Pre)) / count_evens_upto(\at(size,Pre)) [POSTCONDITION FAILED];
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 12:00:06,634 - INFO  - postconditon after refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures \result * count_evens_upto(size) <= sum_evens_upto(size);
+  ensures sum_evens_upto(size) < (\result + 1) * count_evens_upto(size);
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 12:00:27,809 - INFO  - syntax Correct
+2026-05-17 12:00:40,919 - INFO  - Loop Invariant:
+2026-05-17 12:00:40,920 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:00:40,920 - INFO  - 
+2026-05-17 12:00:40,920 - INFO  - Assertion:
+2026-05-17 12:00:40,921 - INFO  - []
+2026-05-17 12:00:40,921 - INFO  - 
+2026-05-17 12:00:40,921 - INFO  - Assigns:
+2026-05-17 12:00:40,921 - INFO  - [True, True]
+2026-05-17 12:00:40,922 - INFO  - 
+2026-05-17 12:00:40,925 - INFO  - Post Condition:
+2026-05-17 12:00:40,925 - INFO  - [False, False]
+2026-05-17 12:00:40,925 - INFO  - 
+2026-05-17 12:00:40,926 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=4
+2026-05-17 12:00:40,926 - INFO  - postconditon before refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures \result * count_evens_upto(size) <= sum_evens_upto(size) [POSTCONDITION FAILED];
+  ensures sum_evens_upto(size) < (\result + 1) * count_evens_upto(size) [POSTCONDITION FAILED];
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 12:00:57,227 - INFO  - postconditon after refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures \result * count_evens_upto(size) <= sum_evens_upto(size) [POSTCONDITION FAILED];
+  ensures sum_evens_upto(size) < (\result + 1) * count_evens_upto(size) [POSTCONDITION FAILED];
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 12:00:57,588 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo255_c363/20260517_114841_582541_978043eb/output/foo255_c363.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo255_c363/20260517_114841_582541_978043eb/output/foo255_c363.c:11: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo255_c363/20260517_114841_582541_978043eb/output/foo255_c363.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:00:57,589 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 12:00:57,589 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 12:01:08,660 - INFO  - syntax Correct
+2026-05-17 12:01:20,575 - INFO  - Loop Invariant:
+2026-05-17 12:01:20,576 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:01:20,576 - INFO  - 
+2026-05-17 12:01:20,577 - INFO  - Assertion:
+2026-05-17 12:01:20,577 - INFO  - []
+2026-05-17 12:01:20,577 - INFO  - 
+2026-05-17 12:01:20,577 - INFO  - Assigns:
+2026-05-17 12:01:20,577 - INFO  - [True, True]
+2026-05-17 12:01:20,577 - INFO  - 
+2026-05-17 12:01:20,592 - INFO  - Post Condition:
+2026-05-17 12:01:20,593 - INFO  - [True, False]
+2026-05-17 12:01:20,593 - INFO  - 
+2026-05-17 12:01:20,598 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=4
+2026-05-17 12:01:20,599 - INFO  - postconditon before refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures count_evens_upto(size) > 0;
+  ensures \result == sum_evens_upto(\at(size,Pre)) / count_evens_upto(\at(size,Pre)) [POSTCONDITION FAILED];
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 12:01:30,026 - INFO  - postconditon after refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires size >= 0;
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures \result == sum_evens_upto(size) / count_evens_upto(size);
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 12:01:45,202 - INFO  - syntax Correct
+2026-05-17 12:01:57,363 - INFO  - Loop Invariant:
+2026-05-17 12:01:57,363 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:01:57,363 - INFO  - 
+2026-05-17 12:01:57,363 - INFO  - Assertion:
+2026-05-17 12:01:57,363 - INFO  - []
+2026-05-17 12:01:57,363 - INFO  - 
+2026-05-17 12:01:57,363 - INFO  - Assigns:
+2026-05-17 12:01:57,363 - INFO  - [True, True]
+2026-05-17 12:01:57,363 - INFO  - 
+2026-05-17 12:01:57,364 - INFO  - Post Condition:
+2026-05-17 12:01:57,364 - INFO  - [False]
+2026-05-17 12:01:57,364 - INFO  - 
+2026-05-17 12:01:57,364 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=4
+2026-05-17 12:01:57,364 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 12:02:12,151 - INFO  - syntax Correct
+2026-05-17 12:02:23,727 - INFO  - Loop Invariant:
+2026-05-17 12:02:23,728 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:02:23,728 - INFO  - 
+2026-05-17 12:02:23,728 - INFO  - Assertion:
+2026-05-17 12:02:23,728 - INFO  - []
+2026-05-17 12:02:23,728 - INFO  - 
+2026-05-17 12:02:23,728 - INFO  - Assigns:
+2026-05-17 12:02:23,734 - INFO  - [True, True]
+2026-05-17 12:02:23,734 - INFO  - 
+2026-05-17 12:02:23,742 - INFO  - Post Condition:
+2026-05-17 12:02:23,743 - INFO  - [True, False]
+2026-05-17 12:02:23,743 - INFO  - 
+2026-05-17 12:02:23,744 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=4
+2026-05-17 12:02:23,750 - INFO  - postconditon before refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures count_evens_upto(size) > 0;
+  ensures \result == sum_evens_upto(\at(size,Pre)) / count_evens_upto(\at(size,Pre)) [POSTCONDITION FAILED];
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 12:02:33,155 - INFO  - postconditon after refine: 
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures count_evens_upto(size) > 0;
+  ensures 0 <= \result;
+  ensures \result <= sum_evens_upto(\at(size,Pre)) / count_evens_upto(\at(size,Pre));
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 12:02:49,231 - INFO  - syntax Correct
+2026-05-17 12:03:03,416 - INFO  - Loop Invariant:
+2026-05-17 12:03:03,417 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:03:03,417 - INFO  - 
+2026-05-17 12:03:03,417 - INFO  - Assertion:
+2026-05-17 12:03:03,417 - INFO  - []
+2026-05-17 12:03:03,417 - INFO  - 
+2026-05-17 12:03:03,417 - INFO  - Assigns:
+2026-05-17 12:03:03,417 - INFO  - [True, True]
+2026-05-17 12:03:03,417 - INFO  - 
+2026-05-17 12:03:03,418 - INFO  - Post Condition:
+2026-05-17 12:03:03,418 - INFO  - [True, False, False]
+2026-05-17 12:03:03,418 - INFO  - 
+2026-05-17 12:03:03,420 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=5
+2026-05-17 12:03:03,426 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 12:03:03,430 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9, 0.0), clauses=4)
+2026-05-17 12:03:18,209 - INFO  - syntax Correct
+2026-05-17 12:03:31,098 - INFO  - Loop Invariant:
+2026-05-17 12:03:31,100 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:03:31,101 - INFO  - 
+2026-05-17 12:03:31,102 - INFO  - Assertion:
+2026-05-17 12:03:31,102 - INFO  - []
+2026-05-17 12:03:31,102 - INFO  - 
+2026-05-17 12:03:31,102 - INFO  - Assigns:
+2026-05-17 12:03:31,102 - INFO  - [True, True]
+2026-05-17 12:03:31,102 - INFO  - 
+2026-05-17 12:03:31,103 - INFO  - Post Condition:
+2026-05-17 12:03:31,104 - INFO  - [True, False]
+2026-05-17 12:03:31,104 - INFO  - 
+2026-05-17 12:03:34,723 - INFO  - syntax Correct
+2026-05-17 12:03:38,431 - INFO  - Loop Invariant:
+2026-05-17 12:03:38,432 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:03:38,432 - INFO  - 
+2026-05-17 12:03:38,432 - INFO  - Assertion:
+2026-05-17 12:03:38,432 - INFO  - []
+2026-05-17 12:03:38,432 - INFO  - 
+2026-05-17 12:03:38,432 - INFO  - Assigns:
+2026-05-17 12:03:38,432 - INFO  - [True, True]
+2026-05-17 12:03:38,432 - INFO  - 
+2026-05-17 12:03:38,432 - INFO  - Post Condition:
+2026-05-17 12:03:38,432 - INFO  - [True]
+2026-05-17 12:03:38,438 - INFO  - 
+2026-05-17 12:03:38,455 - INFO  - 
+SPECIFICATION FOR foo255_c363
+2026-05-17 12:03:38,456 - INFO  - ==================================================
+
+2026-05-17 12:03:38,466 - INFO  - 
+QCP Specification for function foo255_c363:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 12:04:00,029 - INFO  - 
+VERIFICATION FOR foo255_c363
+2026-05-17 12:04:00,039 - INFO  - ==================================================
+
+2026-05-17 12:04:03,894 - INFO  - syntax Correct
+2026-05-17 12:04:07,335 - INFO  - Loop Invariant:
+2026-05-17 12:04:07,335 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:04:07,335 - INFO  - 
+2026-05-17 12:04:07,335 - INFO  - Assertion:
+2026-05-17 12:04:07,335 - INFO  - []
+2026-05-17 12:04:07,336 - INFO  - 
+2026-05-17 12:04:07,336 - INFO  - Assigns:
+2026-05-17 12:04:07,336 - INFO  - [True, True]
+2026-05-17 12:04:07,336 - INFO  - 
+2026-05-17 12:04:07,336 - INFO  - Post Condition:
+2026-05-17 12:04:07,336 - INFO  - [True]
+2026-05-17 12:04:07,336 - INFO  - 
+2026-05-17 12:04:07,336 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo255_c363
+2026-05-17 12:04:07,336 - INFO  - ==================================================
+2026-05-17 12:04:07,336 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo255_c363/20260517_114841_582541_978043eb/output/foo255_c363.c
+2026-05-17 12:04:07,337 - INFO  - Output file content:
+
+/*@ logic integer count_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? 1 : 0) + count_evens_upto(n - 1)); */
+
+/*@ logic integer sum_evens_upto(integer n) =
+      n <= 0 ? 0 : ((n % 2 == 0 ? n : 0) + sum_evens_upto(n - 1)); */
+
+/*@
+  requires count_evens_upto(size) > 0;
+  assigns \nothing;
+  ensures count_evens_upto(size) > 0;
+*/
+int foo255_c363(int size) {
+
+    int average = 0;
+    int total = 0;
+
+    /*@
+      loop invariant 1 <= c;
+      loop invariant size == \at(size,Pre);
+      loop invariant total == count_evens_upto(c - 1);
+      loop invariant average == sum_evens_upto(c - 1);
+      loop invariant 0 <= total <= c - 1;
+      loop invariant 0 <= average;
+      loop assigns c, average, total;
+    */
+    for (int c = 1; c <= size; c++) {
+        if (c % 2 == 0) {
+            average += c;
+            total++;
+        }
+    }
+
+    return average / total;
+}
+
+2026-05-17 12:04:07,337 - INFO  - ==================================================
+2026-05-17 12:04:07,337 - INFO  - first_pass:
+2026-05-17 12:04:07,337 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 12:04:07,338 - INFO  - ==================================================
+2026-05-17 12:04:07,338 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 12:04:07,338 - INFO  - Total execution time: 925.74 seconds (15.43 minutes)
+2026-05-17 12:04:07,338 - INFO  - ==================================================
+2026-05-17 12:04:07,338 - INFO  - ==================================================
+2026-05-17 12:04:07,338 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 12:04:07,338 - INFO  - Total API calls: 17
+2026-05-17 12:04:07,338 - INFO  - Total prompt tokens (input): 171,312
+2026-05-17 12:04:07,338 - INFO  - Total completion tokens (output): 9,274
+2026-05-17 12:04:07,338 - INFO  - Total tokens: 180,586
+2026-05-17 12:04:07,338 - INFO  - Average prompt tokens per call: 10077.2
+2026-05-17 12:04:07,338 - INFO  - Average completion tokens per call: 545.5
+2026-05-17 12:04:07,338 - INFO  - Average total tokens per call: 10622.7
+2026-05-17 12:04:07,338 - INFO  - ==================================================

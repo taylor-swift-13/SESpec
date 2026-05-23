@@ -1,0 +1,1461 @@
+2026-05-18 21:51:07,967 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6
+2026-05-18 21:51:07,967 - INFO  - 
+🚀 Starting generation of function: foo156
+2026-05-18 21:51:07,967 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 21:51:07,967 - INFO  - TRY TIME: 0
+2026-05-18 21:51:07,967 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 21:51:07,967 - INFO  - ==================================================
+
+2026-05-18 21:51:09,962 - INFO  - [auto only_loop] False — foo156 returns 'int'
+2026-05-18 21:51:09,963 - INFO  - Initial pending functions: ['foo156', 'malloc']
+2026-05-18 21:51:09,963 - INFO  - Now processing function malloc
+
+2026-05-18 21:51:09,963 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-18 21:51:09,963 - INFO  - 
+GENERATE ANNOTATION FOR foo156
+2026-05-18 21:51:09,963 - INFO  - ==================================================
+
+2026-05-18 21:51:09,963 - INFO  - Function foo156 has been initialized
+2026-05-18 21:51:09,963 - INFO  - Starting to generate annotation code for foo156
+2026-05-18 21:51:10,051 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo156
+2026-05-18 21:51:10,051 - INFO  - ==================================================
+
+2026-05-18 21:51:10,131 - INFO  - Variable Maps:[{}]
+2026-05-18 21:51:10,131 - INFO  - Path conditions: [None]
+2026-05-18 21:51:10,131 - INFO  - Pre condition: 
+2026-05-18 21:51:10,131 - INFO  - Loop Condition: array < Array
+2026-05-18 21:51:10,133 - INFO  - Array Names: ['mpis', 'args']
+2026-05-18 21:51:10,133 - INFO  - Updated Loop Conditions: ['array < Array']
+2026-05-18 21:51:10,133 - INFO  - Global Unchanged Variables: []
+2026-05-18 21:51:10,133 - INFO  - Non Inductive Variables: []
+2026-05-18 21:51:10,134 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-18 21:51:10,137 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 21:51:10,141 - INFO  - examples category: array
+2026-05-18 21:51:10,141 - INFO  - examples:
+2026-05-18 21:51:10,141 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 21:51:20,720 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-18 21:51:20,723 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:51:31,437 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-18 21:51:31,439 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:51:42,988 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-18 21:51:42,988 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-18 21:51:42,989 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-18 21:51:43,466 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 21:51:53,703 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-18 21:51:53,704 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:52:07,010 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 21:52:07,012 - INFO  - [acsl-fixer] dedupe: dropped duplicate top-level def of 'prefix_copy' on line 9
+2026-05-18 21:52:07,698 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 21:52:41,690 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 21:52:58,787 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.0), clauses=3)
+2026-05-18 21:53:56,577 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:True | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 21:54:27,737 - INFO  - [inv-gen] refine 1/3 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=2
+2026-05-18 21:55:11,820 - INFO  - [inv-gen] refine 2/3 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=2
+2026-05-18 21:55:50,073 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=2
+2026-05-18 21:55:50,073 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=13)
+2026-05-18 21:55:50,075 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.0), clauses=2)
+2026-05-18 21:56:50,809 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:True | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 21:57:08,502 - INFO  - ACSL format loop invariant
+2026-05-18 21:57:08,503 - INFO  - /*@
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+2026-05-18 21:57:08,504 - INFO  - QCP format loop invariant
+2026-05-18 21:57:08,504 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (loop assigns array, mpis_l[0..Array-1])
+    */
+    
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+2026-05-18 21:57:08,505 - INFO  - Variable Maps:[{}]
+2026-05-18 21:57:08,505 - INFO  - Path conditions: [None]
+2026-05-18 21:57:08,505 - INFO  - Pre condition: 
+2026-05-18 21:57:08,505 - INFO  - Loop Condition: p < i
+2026-05-18 21:57:08,506 - INFO  - Array Names: ['mpis', 'args']
+2026-05-18 21:57:08,506 - INFO  - Updated Loop Conditions: ['p < i']
+2026-05-18 21:57:08,506 - INFO  - Global Unchanged Variables: []
+2026-05-18 21:57:08,506 - INFO  - Non Inductive Variables: []
+2026-05-18 21:57:08,506 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-18 21:57:08,506 - INFO  - [inv-gen] multi-slot mode: 1 candidate(s) (simple placeholder)
+2026-05-18 21:58:01,022 - INFO  - ACSL format loop invariant
+2026-05-18 21:58:01,022 - INFO  - /*@
+              loop invariant 0 <= p <= i;
+              loop invariant \forall integer k; 0 <= k < i ==> mpis[k] == (
+                \exists integer t; 0 <= t <= Array ? args[k] : args[k]); 
+              /* the above expresses that elements mpis[0..i-1] are defined (copied or updated) */
+              loop invariant \forall integer k; 0 <= k < p ==> 
+                                (mpis[i] >= mpis[k] ? mpis[i] >= mpis[k] - 0 : mpis[i] >= mpis[k]);
+              loop assigns p, mpis[0..Array-1];
+            */
+            for (int p = 0; p < i; p++) {
+            if (args[i] > args[p]
+                    && mpis[i] < (mpis[p] * args[i])) {
+                mpis[i] = mpis[p] * args[i];
+            }
+        }
+2026-05-18 21:58:01,022 - INFO  - QCP format loop invariant
+2026-05-18 21:58:01,022 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (0 <= p && p <= i) &&
+(forall (k:Z), 0 <= k && k < i => mpis_l[k] == (
+                exists (t:Z), 0 <= t && t <= Array ? args_l[k] : args_l[k]) 
+              /* the above expresses that elements mpis_l[0..i-1] are defined (copied or updated))
+    */
+    
+              loop invariant \forall integer k; 0 <= k < p ==> 
+                                (mpis[i] >= mpis[k] ? mpis[i] >= mpis[k] - 0 : mpis[i] >= mpis[k]);
+              loop assigns p, mpis[0..Array-1];
+            */
+            for (int p = 0; p < i; p++) {
+            if (args[i] > args[p]
+                    && mpis[i] < (mpis[p] * args[i])) {
+                mpis[i] = mpis[p] * args[i];
+            }
+        }
+2026-05-18 21:58:01,023 - INFO  - Variable Maps:[{}]
+2026-05-18 21:58:01,023 - INFO  - Path conditions: [None]
+2026-05-18 21:58:01,024 - INFO  - Pre condition: 
+2026-05-18 21:58:01,024 - INFO  - Loop Condition: i < Array
+2026-05-18 21:58:01,024 - INFO  - Array Names: ['mpis', 'args']
+2026-05-18 21:58:01,024 - INFO  - Updated Loop Conditions: ['i < Array']
+2026-05-18 21:58:01,024 - INFO  - Global Unchanged Variables: []
+2026-05-18 21:58:01,024 - INFO  - Non Inductive Variables: []
+2026-05-18 21:58:01,024 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-18 21:58:01,025 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 21:58:01,029 - INFO  - examples category: array
+2026-05-18 21:58:01,029 - INFO  - examples:
+2026-05-18 21:58:01,029 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 21:58:53,618 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-18 21:58:53,620 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:59:45,724 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 21:59:45,727 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'p' (assigns) on line 33
+2026-05-18 21:59:46,152 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:00:02,617 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 22:00:02,617 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=17)
+2026-05-18 22:00:02,619 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=8)
+2026-05-18 22:00:03,200 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:00:20,755 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-18 22:00:20,757 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'p' (assigns) on line 36
+2026-05-18 22:00:21,096 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:00:42,382 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-18 22:00:42,384 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'p' (assigns) on line 36
+2026-05-18 22:00:42,723 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:01:02,145 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-18 22:01:02,145 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=19)
+2026-05-18 22:01:02,147 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=8)
+2026-05-18 22:01:02,988 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:01:13,579 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 22:01:13,581 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:01:27,409 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 22:01:27,416 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'p' (assigns) on line 35
+2026-05-18 22:01:27,974 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:01:41,380 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-18 22:01:41,380 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=21)
+2026-05-18 22:01:41,388 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=6)
+2026-05-18 22:01:42,411 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:01:42,888 - INFO  - ACSL format loop invariant
+2026-05-18 22:01:42,889 - INFO  - /*@
+      loop invariant 1 <= i <= Array;
+      loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+      loop assigns i, p, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+        
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop invariant 0 <= p <= i;
+          loop invariant \forall integer k; 0 <= k < i ==> mpis[k] == mpis[k];
+            /* mpis[0..i-1] have been initialized (copied or possibly updated) */
+          loop assigns p, mpis[0..Array-1];
+        */
+        for (int p = 0; p < i; p++) {
+            if (args[i] > args[p]
+                    && mpis[i] < (mpis[p] * args[i])) {
+                mpis[i] = mpis[p] * args[i];
+            }
+        }
+            
+    }
+2026-05-18 22:01:42,890 - INFO  - QCP format loop invariant
+2026-05-18 22:01:42,890 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (1 <= i && i <= Array) &&
+(forall (k:Z), 0 <= k && k < Array => 0 <= mpis_l[k]
+      loop assigns i, p, mpis_l[0..Array-1])
+    */
+    
+    for (int i = 1; i < Array; i++) {
+        
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop invariant 0 <= p <= i;
+          loop invariant \forall integer k; 0 <= k < i ==> mpis[k] == mpis[k];
+            /* mpis[0..i-1] have been initialized (copied or possibly updated) */
+          loop assigns p, mpis[0..Array-1];
+        */
+        for (int p = 0; p < i; p++) {
+            if (args[i] > args[p]
+                    && mpis[i] < (mpis[p] * args[i])) {
+                mpis[i] = mpis[p] * args[i];
+            }
+        }
+            
+    }
+2026-05-18 22:01:42,892 - INFO  - Variable Maps:[{}]
+2026-05-18 22:01:42,892 - INFO  - Path conditions: [None]
+2026-05-18 22:01:42,893 - INFO  - Pre condition: 
+2026-05-18 22:01:42,893 - INFO  - Loop Condition: i < Array
+2026-05-18 22:01:42,894 - INFO  - Array Names: ['mpis']
+2026-05-18 22:01:42,894 - INFO  - Updated Loop Conditions: ['i < Array']
+2026-05-18 22:01:42,894 - INFO  - Global Unchanged Variables: []
+2026-05-18 22:01:42,894 - INFO  - Non Inductive Variables: []
+2026-05-18 22:01:42,896 - INFO  - Unchanged Arrays (Read-only): ['mpis']
+2026-05-18 22:01:42,897 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 22:01:42,901 - INFO  - examples category: array
+2026-05-18 22:01:42,902 - INFO  - examples:
+2026-05-18 22:01:42,902 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 22:01:53,693 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-18 22:01:53,695 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:02:09,878 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-18 22:02:09,880 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'p' (assigns) on line 36
+2026-05-18 22:02:10,249 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:03:08,588 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.44, satisfy=0.00) clauses=9
+2026-05-18 22:03:42,271 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.4444444444444444, 0.0), clauses=9)
+2026-05-18 22:04:27,105 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:04:40,816 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-18 22:04:40,817 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'p' (assigns) on line 37
+2026-05-18 22:04:41,112 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:05:00,991 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-18 22:05:00,994 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'p' (assigns) on line 39
+2026-05-18 22:05:01,692 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:06:04,558 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.55, satisfy=0.00) clauses=11
+2026-05-18 22:06:26,265 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.5454545454545454, 0.0), clauses=11)
+2026-05-18 22:07:10,247 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:07:22,693 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-18 22:07:22,695 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:07:38,718 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-18 22:07:38,719 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'p' (assigns) on line 39
+2026-05-18 22:07:38,964 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:07:57,696 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-18 22:07:57,697 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'p' (assigns) on line 39
+2026-05-18 22:07:57,935 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:08:16,899 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=11)
+2026-05-18 22:08:17,510 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:08:17,794 - INFO  - ACSL format loop invariant
+2026-05-18 22:08:17,794 - INFO  - /*@
+              loop invariant 1 <= i <= Array;
+              loop invariant \forall integer k; 0 <= k < Array ==> mpis[k] >= 0;
+              loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+              loop assigns i, num;
+            */
+            for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+2026-05-18 22:08:17,795 - INFO  - QCP format loop invariant
+2026-05-18 22:08:17,795 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (1 <= i && i <= Array) &&
+(forall (k:Z), 0 <= k && k < Array => mpis_l[k] >= 0) &&
+(forall (k:Z), 0 <= k && k < i => num >= mpis_l[k]
+              loop assigns i, num)
+    */
+    
+            for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+2026-05-18 22:08:18,105 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo156
+2026-05-18 22:08:18,105 - INFO  - ==================================================
+
+2026-05-18 22:08:18,125 - INFO  - Starting to generate ACSL specification for foo156
+2026-05-18 22:08:37,862 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c:21: Warning: 
+  unexpected token ')'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:08:37,863 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=7
+2026-05-18 22:08:37,865 - INFO  - [acsl-fixer] )-drop: removed line 21: ) in \result == ( \exists integer k; 0 <= k < Array && mpis_in_post[k] == (\max(
+2026-05-18 22:08:38,140 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c:21: Warning: 
+  unexpected token '\at'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:08:38,140 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:09:40,656 - INFO  - syntax Correct
+2026-05-18 22:10:12,251 - INFO  - Loop Invariant:
+2026-05-18 22:10:12,251 - INFO  - [True, False, False, False, False, True, True, True, True, True]
+2026-05-18 22:10:12,251 - INFO  - Loop Invariant: failures:
+2026-05-18 22:10:12,251 - INFO  - Goal Preservation of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 28):
+2026-05-18 22:10:12,251 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 28
+2026-05-18 22:10:12,251 - INFO  - Error line content: loop invariant prefix_copy(args, mpis, array, Array);
+2026-05-18 22:10:12,251 - INFO  - 
+2026-05-18 22:10:12,251 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 39):
+2026-05-18 22:10:12,251 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 39
+2026-05-18 22:10:12,252 - INFO  - Error line content: loop invariant 1 <= i <= Array;
+2026-05-18 22:10:12,252 - INFO  - 
+2026-05-18 22:10:12,252 - INFO  - Goal Preservation of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 40):
+2026-05-18 22:10:12,252 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 40
+2026-05-18 22:10:12,252 - INFO  - Error line content: loop invariant prefix_copy(args, mpis, Array, Array);
+2026-05-18 22:10:12,252 - INFO  - 
+2026-05-18 22:10:12,252 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 40):
+2026-05-18 22:10:12,252 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 40
+2026-05-18 22:10:12,252 - INFO  - Error line content: loop invariant prefix_copy(args, mpis, Array, Array);
+2026-05-18 22:10:12,252 - INFO  - 
+2026-05-18 22:10:12,252 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 41):
+2026-05-18 22:10:12,253 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 41
+2026-05-18 22:10:12,253 - INFO  - Error line content: loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+2026-05-18 22:10:12,253 - INFO  - 
+2026-05-18 22:10:12,253 - INFO  - 
+2026-05-18 22:10:12,253 - INFO  - Assertion:
+2026-05-18 22:10:12,253 - INFO  - []
+2026-05-18 22:10:12,253 - INFO  - 
+2026-05-18 22:10:12,253 - INFO  - Assigns:
+2026-05-18 22:10:12,253 - INFO  - [False, False, True, False, False, True]
+2026-05-18 22:10:12,253 - INFO  - Assigns: failures:
+2026-05-18 22:10:12,254 - INFO  - Goal Assigns nothing in 'foo156':
+2026-05-18 22:10:12,254 - INFO  - 
+2026-05-18 22:10:12,254 - INFO  - Goal Assigns nothing in 'foo156' (1/5):
+2026-05-18 22:10:12,254 - INFO  - 
+2026-05-18 22:10:12,254 - INFO  - Goal Assigns nothing in 'foo156' (3/5):
+2026-05-18 22:10:12,254 - INFO  - 
+2026-05-18 22:10:12,254 - INFO  - Goal Assigns nothing in 'foo156' (4/5):
+2026-05-18 22:10:12,254 - INFO  - 
+2026-05-18 22:10:12,254 - INFO  - 
+2026-05-18 22:10:12,254 - INFO  - Post Condition:
+2026-05-18 22:10:12,254 - INFO  - [True, True]
+2026-05-18 22:10:12,255 - INFO  - 
+2026-05-18 22:10:12,255 - INFO  - Instance:
+2026-05-18 22:10:12,255 - INFO  - []
+2026-05-18 22:10:12,255 - INFO  - 
+2026-05-18 22:10:12,256 - INFO  - [spec-gen] refine 2/3 score=(syntax=True, satisfy=0.00, valid=0.56) clauses=8
+2026-05-18 22:10:12,256 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate prefix_copy(int* src, int* dst, integer len, integer total) =
+    0 <= len <= total && (\forall integer k; 0 <= k < len ==> dst[k] == src[k]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args != \null ==> \valid(args + (0 .. args_len-1));
+  requires 0 <= args_len;
+  requires 0 <= Array <= args_len;
+  requires Array < 100;
+  requires \forall integer i; 0 <= i < Array ==> 0 <= args[i] <= 100;
+  assigns \nothing;
+  ensures \result >= 0;
+  ensures \forall integer k; 0 <= k < Array ==> \result >= args[k];
+*/
+int foo156(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant prefix_copy(args, mpis, array, Array);
+      loop assigns array, mpis[0 .. Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+            
+    /* After the copy loop, mpis[0..Array-1] are initialized and non-negative. */
+    
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant 1 <= i <= Array;
+      loop invariant prefix_copy(args, mpis, Array, Array);
+      loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+      loop assigns i, mpis[0 .. Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+        
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop invariant 0 <= p <= i;
+          loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+          loop assigns p, mpis[0 .. Array-1];
+        */
+        for (int p = 0; p < i; p++) {
+            if (args[i] > args[p]
+                    && mpis[i] < (mpis[p] * args[i])) {
+                mpis[i] = mpis[p] * args[i];
+            }
+        }
+            
+    }
+    int num = mpis[0];
+    
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+              loop invariant 1 <= i <= Array;
+              loop invariant \forall integer k; 0 <= k < Array ==> mpis[k] >= 0;
+              loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+              loop assigns i, num;
+            */
+            for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+            
+    return num;
+}
+
+2026-05-18 22:10:56,741 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate prefix_copy(int* src, int* dst, integer len, integer total) =
+    0 <= len <= total && (\forall integer k; 0 <= k < len ==> dst[k] == src[k]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args != \null ==> \valid(args + (0 .. args_len-1));
+  requires 0 <= args_len;
+  requires 0 <= Array <= args_len;
+  requires Array < 100;
+  requires \forall integer i; 0 <= i < Array ==> 0 <= args[i] <= 100;
+  assigns \nothing;
+  ensures \result >= 0;
+  ensures \forall integer k; 0 <= k < Array ==> \result >= args[k];
+*/
+int foo156(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid(args + (0 .. args_len-1));
+      loop invariant \valid(mpis + (0 .. Array-1));
+      loop invariant prefix_copy(args, mpis, array, Array);
+      loop assigns array;
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+            
+    /* After the copy loop, mpis[0..Array-1] are initialized and non-negative. */
+    
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant 1 <= i <= Array;
+      loop invariant prefix_copy(args, mpis, Array, Array);
+      loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+      loop assigns i;
+    */
+    for (int i = 1; i < Array; i++) {
+        
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop invariant 0 <= p <= i;
+          loop invariant \valid(mpis + (0 .. Array-1));
+          loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+          loop assigns p;
+        */
+        for (int p = 0; p < i; p++) {
+            if (args[i] > args[p]
+                    && mpis[i] < (mpis[p] * args[i])) {
+                mpis[i] = mpis[p] * args[i];
+            }
+        }
+            
+    }
+    int num = mpis[0];
+    
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+              loop invariant 1 <= i <= Array;
+              loop invariant \forall integer k; 0 <= k < Array ==> mpis[k] >= 0;
+              loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+              loop assigns i, num;
+            */
+            for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+            
+    return num;
+}
+
+2026-05-18 22:11:19,909 - INFO  - syntax Correct
+2026-05-18 22:11:51,955 - INFO  - Loop Invariant:
+2026-05-18 22:11:51,955 - INFO  - [True, False, False, False, False, False, True, True, True, True, True, True, True]
+2026-05-18 22:11:51,955 - INFO  - Loop Invariant: failures:
+2026-05-18 22:11:51,955 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 28):
+2026-05-18 22:11:51,955 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 28
+2026-05-18 22:11:51,956 - INFO  - Error line content: loop invariant \valid(args + (0 .. args_len-1));
+2026-05-18 22:11:51,956 - INFO  - 
+2026-05-18 22:11:51,956 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 29):
+2026-05-18 22:11:51,956 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 29
+2026-05-18 22:11:51,956 - INFO  - Error line content: loop invariant \valid(mpis + (0 .. Array-1));
+2026-05-18 22:11:51,956 - INFO  - 
+2026-05-18 22:11:51,956 - INFO  - Goal Preservation of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 30):
+2026-05-18 22:11:51,956 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 30
+2026-05-18 22:11:51,956 - INFO  - Error line content: loop invariant prefix_copy(args, mpis, array, Array);
+2026-05-18 22:11:51,956 - INFO  - 
+2026-05-18 22:11:51,956 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 41):
+2026-05-18 22:11:51,956 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 41
+2026-05-18 22:11:51,956 - INFO  - Error line content: loop invariant 1 <= i <= Array;
+2026-05-18 22:11:51,956 - INFO  - 
+2026-05-18 22:11:51,956 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 42):
+2026-05-18 22:11:51,956 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 42
+2026-05-18 22:11:51,956 - INFO  - Error line content: loop invariant prefix_copy(args, mpis, Array, Array);
+2026-05-18 22:11:51,956 - INFO  - 
+2026-05-18 22:11:51,957 - INFO  - 
+2026-05-18 22:11:51,957 - INFO  - Assertion:
+2026-05-18 22:11:51,957 - INFO  - []
+2026-05-18 22:11:51,957 - INFO  - 
+2026-05-18 22:11:51,957 - INFO  - Assigns:
+2026-05-18 22:11:51,957 - INFO  - [False, False, True, True, True, True]
+2026-05-18 22:11:51,957 - INFO  - Assigns: failures:
+2026-05-18 22:11:51,957 - INFO  - Goal Assigns nothing in 'foo156':
+2026-05-18 22:11:51,957 - INFO  - 
+2026-05-18 22:11:51,957 - INFO  - Goal Assigns nothing in 'foo156' (1/5):
+2026-05-18 22:11:51,957 - INFO  - 
+2026-05-18 22:11:51,957 - INFO  - 
+2026-05-18 22:11:51,958 - INFO  - Post Condition:
+2026-05-18 22:11:51,958 - INFO  - [False, True]
+2026-05-18 22:11:51,958 - INFO  - Post Condition: failures:
+2026-05-18 22:11:51,958 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 16) in 'foo156':
+2026-05-18 22:11:51,958 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 16
+2026-05-18 22:11:51,958 - INFO  - Error line content: ensures \result >= 0;
+2026-05-18 22:11:51,958 - INFO  - 
+2026-05-18 22:11:51,958 - INFO  - 
+2026-05-18 22:11:51,958 - INFO  - Instance:
+2026-05-18 22:11:51,958 - INFO  - []
+2026-05-18 22:11:51,958 - INFO  - 
+2026-05-18 22:11:51,959 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.62) clauses=8
+2026-05-18 22:11:51,959 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate prefix_copy(int* src, int* dst, integer len, integer total) =
+    0 <= len <= total && (\forall integer k; 0 <= k < len ==> dst[k] == src[k]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args != \null ==> \valid(args + (0 .. args_len-1));
+  requires 0 <= args_len;
+  requires 0 <= Array <= args_len;
+  requires Array < 100;
+  requires \forall integer i; 0 <= i < Array ==> 0 <= args[i] <= 100;
+  assigns \nothing;
+  ensures \result >= 0 [POSTCONDITION FAILED];
+  ensures \forall integer k; 0 <= k < Array ==> \result >= args[k];
+*/
+int foo156(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid(args + (0 .. args_len-1));
+      loop invariant \valid(mpis + (0 .. Array-1));
+      loop invariant prefix_copy(args, mpis, array, Array);
+      loop assigns array;
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+            
+    /* After the copy loop, mpis[0..Array-1] are initialized and non-negative. */
+    
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant 1 <= i <= Array;
+      loop invariant prefix_copy(args, mpis, Array, Array);
+      loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+      loop assigns i;
+    */
+    for (int i = 1; i < Array; i++) {
+        
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop invariant 0 <= p <= i;
+          loop invariant \valid(mpis + (0 .. Array-1));
+          loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+          loop assigns p;
+        */
+        for (int p = 0; p < i; p++) {
+            if (args[i] > args[p]
+                    && mpis[i] < (mpis[p] * args[i])) {
+                mpis[i] = mpis[p] * args[i];
+            }
+        }
+            
+    }
+    int num = mpis[0];
+    
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+              loop invariant 1 <= i <= Array;
+              loop invariant \forall integer k; 0 <= k < Array ==> mpis[k] >= 0;
+              loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+              loop assigns i, num;
+            */
+            for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+            
+    return num;
+}
+
+2026-05-18 22:12:09,365 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate prefix_copy(int* src, int* dst, integer len, integer total) =
+    0 <= len <= total && (\forall integer k; 0 <= k < len ==> dst[k] == src[k]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args != \null ==> \valid(args + (0 .. args_len-1));
+  requires 0 <= args_len;
+  requires 0 <= Array <= args_len;
+  requires Array < 100;
+  requires Array > 0;
+  requires \forall integer i; 0 <= i < Array ==> 0 <= args[i] <= 100;
+  assigns \nothing;
+  ensures \result >= 0;
+  ensures \forall integer k; 0 <= k < Array ==> \result >= args[k];
+*/
+int foo156(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+        
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid(args + (0 .. args_len-1));
+      loop invariant \valid(mpis + (0 .. Array-1));
+      loop invariant prefix_copy(args, mpis, array, Array);
+      loop assigns array;
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+            
+    /* After the copy loop, mpis[0..Array-1] are initialized and non-negative. */
+    
+    /*@
+      loop invariant 1 <= i <= Array;
+      loop invariant prefix_copy(args, mpis, Array, Array);
+      loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+      loop assigns i;
+    */
+    for (int i = 1; i < Array; i++) {
+        
+        /*@
+          loop invariant 0 <= p <= i;
+          loop invariant \valid(mpis + (0 .. Array-1));
+          loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+          loop assigns p;
+        */
+        for (int p = 0; p < i; p++) {
+            if (args[i] > args[p]
+                    && mpis[i] < (mpis[p] * args[i])) {
+                mpis[i] = mpis[p] * args[i];
+            }
+        }
+            
+    }
+    int num = mpis[0];
+    
+    /*@
+      loop invariant 1 <= i <= Array;
+      loop invariant \forall integer k; 0 <= k < Array ==> mpis[k] >= 0;
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+            
+    return num;
+}
+
+2026-05-18 22:12:09,368 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.6190476190476191), clauses=8)
+2026-05-18 22:12:32,474 - INFO  - syntax Correct
+2026-05-18 22:13:04,635 - INFO  - Loop Invariant:
+2026-05-18 22:13:04,635 - INFO  - [True, False, False, False, False, False, True, True, True, True, True, True, True]
+2026-05-18 22:13:04,635 - INFO  - Loop Invariant: failures:
+2026-05-18 22:13:04,635 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 28):
+2026-05-18 22:13:04,636 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 28
+2026-05-18 22:13:04,636 - INFO  - Error line content: loop invariant \valid(args + (0 .. args_len-1));
+2026-05-18 22:13:04,636 - INFO  - 
+2026-05-18 22:13:04,636 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 29):
+2026-05-18 22:13:04,636 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 29
+2026-05-18 22:13:04,636 - INFO  - Error line content: loop invariant \valid(mpis + (0 .. Array-1));
+2026-05-18 22:13:04,636 - INFO  - 
+2026-05-18 22:13:04,636 - INFO  - Goal Preservation of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 30):
+2026-05-18 22:13:04,636 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 30
+2026-05-18 22:13:04,636 - INFO  - Error line content: loop invariant prefix_copy(args, mpis, array, Array);
+2026-05-18 22:13:04,636 - INFO  - 
+2026-05-18 22:13:04,636 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 41):
+2026-05-18 22:13:04,636 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 41
+2026-05-18 22:13:04,636 - INFO  - Error line content: loop invariant 1 <= i <= Array;
+2026-05-18 22:13:04,636 - INFO  - 
+2026-05-18 22:13:04,636 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 42):
+2026-05-18 22:13:04,636 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 42
+2026-05-18 22:13:04,636 - INFO  - Error line content: loop invariant prefix_copy(args, mpis, Array, Array);
+2026-05-18 22:13:04,636 - INFO  - 
+2026-05-18 22:13:04,636 - INFO  - 
+2026-05-18 22:13:04,636 - INFO  - Assertion:
+2026-05-18 22:13:04,636 - INFO  - []
+2026-05-18 22:13:04,636 - INFO  - 
+2026-05-18 22:13:04,636 - INFO  - Assigns:
+2026-05-18 22:13:04,636 - INFO  - [False, False, True, True, True, True]
+2026-05-18 22:13:04,636 - INFO  - Assigns: failures:
+2026-05-18 22:13:04,636 - INFO  - Goal Assigns nothing in 'foo156':
+2026-05-18 22:13:04,636 - INFO  - 
+2026-05-18 22:13:04,636 - INFO  - Goal Assigns nothing in 'foo156' (1/5):
+2026-05-18 22:13:04,637 - INFO  - 
+2026-05-18 22:13:04,637 - INFO  - 
+2026-05-18 22:13:04,637 - INFO  - Post Condition:
+2026-05-18 22:13:04,637 - INFO  - [False, True]
+2026-05-18 22:13:04,637 - INFO  - Post Condition: failures:
+2026-05-18 22:13:04,637 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 16) in 'foo156':
+2026-05-18 22:13:04,637 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 16
+2026-05-18 22:13:04,637 - INFO  - Error line content: ensures \result >= 0;
+2026-05-18 22:13:04,637 - INFO  - 
+2026-05-18 22:13:04,637 - INFO  - 
+2026-05-18 22:13:04,637 - INFO  - Instance:
+2026-05-18 22:13:04,637 - INFO  - []
+2026-05-18 22:13:04,637 - INFO  - 
+2026-05-18 22:13:37,640 - INFO  - syntax Correct
+2026-05-18 22:14:04,779 - INFO  - Loop Invariant:
+2026-05-18 22:14:04,779 - INFO  - [True, False, False, False, True, False, True, True]
+2026-05-18 22:14:04,779 - INFO  - Loop Invariant: failures:
+2026-05-18 22:14:04,779 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 37):
+2026-05-18 22:14:04,779 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 37
+2026-05-18 22:14:04,779 - INFO  - Error line content: loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+2026-05-18 22:14:04,779 - INFO  - 
+2026-05-18 22:14:04,779 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 44):
+2026-05-18 22:14:04,779 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 44
+2026-05-18 22:14:04,779 - INFO  - Error line content: loop invariant 0 <= p <= i;
+2026-05-18 22:14:04,780 - INFO  - 
+2026-05-18 22:14:04,780 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 45):
+2026-05-18 22:14:04,780 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 45
+2026-05-18 22:14:04,780 - INFO  - Error line content: loop invariant \valid(mpis + (0 .. Array-1));
+2026-05-18 22:14:04,780 - INFO  - 
+2026-05-18 22:14:04,780 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 63):
+2026-05-18 22:14:04,780 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 63
+2026-05-18 22:14:04,780 - INFO  - Error line content: loop invariant 1 <= i <= Array;
+2026-05-18 22:14:04,780 - INFO  - 
+2026-05-18 22:14:04,780 - INFO  - 
+2026-05-18 22:14:04,780 - INFO  - Assertion:
+2026-05-18 22:14:04,780 - INFO  - []
+2026-05-18 22:14:04,780 - INFO  - 
+2026-05-18 22:14:04,780 - INFO  - Assigns:
+2026-05-18 22:14:04,781 - INFO  - [False, False, True, True, True, True]
+2026-05-18 22:14:04,781 - INFO  - Assigns: failures:
+2026-05-18 22:14:04,781 - INFO  - Goal Assigns nothing in 'foo156':
+2026-05-18 22:14:04,781 - INFO  - 
+2026-05-18 22:14:04,781 - INFO  - Goal Assigns nothing in 'foo156' (1/5):
+2026-05-18 22:14:04,781 - INFO  - 
+2026-05-18 22:14:04,781 - INFO  - 
+2026-05-18 22:14:04,781 - INFO  - Post Condition:
+2026-05-18 22:14:04,781 - INFO  - [False]
+2026-05-18 22:14:04,781 - INFO  - Post Condition: failures:
+2026-05-18 22:14:04,781 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 16) in 'foo156':
+2026-05-18 22:14:04,781 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 16
+2026-05-18 22:14:04,782 - INFO  - Error line content: ensures \forall integer k; 0 <= k < Array ==> \result >= args[k];
+2026-05-18 22:14:04,782 - INFO  - 
+2026-05-18 22:14:04,782 - INFO  - 
+2026-05-18 22:14:04,782 - INFO  - Instance:
+2026-05-18 22:14:04,782 - INFO  - []
+2026-05-18 22:14:04,782 - INFO  - 
+2026-05-18 22:14:26,622 - INFO  - syntax Correct
+2026-05-18 22:14:47,795 - INFO  - Loop Invariant:
+2026-05-18 22:14:47,795 - INFO  - [True, False, False, True]
+2026-05-18 22:14:47,795 - INFO  - Loop Invariant: failures:
+2026-05-18 22:14:47,795 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 42):
+2026-05-18 22:14:47,795 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 42
+2026-05-18 22:14:47,795 - INFO  - Error line content: loop invariant \forall integer k; 0 <= k < Array ==> 0 <= mpis[k];
+2026-05-18 22:14:47,795 - INFO  - 
+2026-05-18 22:14:47,795 - INFO  - Goal Establishment of Invariant (file log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c, line 59):
+2026-05-18 22:14:47,795 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c at line: 59
+2026-05-18 22:14:47,795 - INFO  - Error line content: loop invariant \forall integer k; 0 <= k < Array ==> mpis[k] >= 0;
+2026-05-18 22:14:47,795 - INFO  - 
+2026-05-18 22:14:47,795 - INFO  - 
+2026-05-18 22:14:47,795 - INFO  - Assertion:
+2026-05-18 22:14:47,795 - INFO  - []
+2026-05-18 22:14:47,795 - INFO  - 
+2026-05-18 22:14:47,795 - INFO  - Assigns:
+2026-05-18 22:14:47,796 - INFO  - [False, False, True, True, True, True]
+2026-05-18 22:14:47,796 - INFO  - Assigns: failures:
+2026-05-18 22:14:47,796 - INFO  - Goal Assigns nothing in 'foo156':
+2026-05-18 22:14:47,796 - INFO  - 
+2026-05-18 22:14:47,796 - INFO  - Goal Assigns nothing in 'foo156' (1/5):
+2026-05-18 22:14:47,796 - INFO  - 
+2026-05-18 22:14:47,796 - INFO  - 
+2026-05-18 22:14:47,796 - INFO  - Post Condition:
+2026-05-18 22:14:47,796 - INFO  - []
+2026-05-18 22:14:47,796 - INFO  - 
+2026-05-18 22:14:47,796 - INFO  - Instance:
+2026-05-18 22:14:47,796 - INFO  - []
+2026-05-18 22:14:47,796 - INFO  - 
+2026-05-18 22:14:59,072 - INFO  - syntax Correct
+2026-05-18 22:15:10,217 - INFO  - Loop Invariant:
+2026-05-18 22:15:10,217 - INFO  - [True, True]
+2026-05-18 22:15:10,218 - INFO  - 
+2026-05-18 22:15:10,218 - INFO  - Assertion:
+2026-05-18 22:15:10,218 - INFO  - []
+2026-05-18 22:15:10,218 - INFO  - 
+2026-05-18 22:15:10,218 - INFO  - Assigns:
+2026-05-18 22:15:10,218 - INFO  - [False, False, True, True, True, True]
+2026-05-18 22:15:10,218 - INFO  - Assigns: failures:
+2026-05-18 22:15:10,218 - INFO  - Goal Assigns nothing in 'foo156':
+2026-05-18 22:15:10,218 - INFO  - 
+2026-05-18 22:15:10,218 - INFO  - Goal Assigns nothing in 'foo156' (1/5):
+2026-05-18 22:15:10,218 - INFO  - 
+2026-05-18 22:15:10,218 - INFO  - 
+2026-05-18 22:15:10,218 - INFO  - Post Condition:
+2026-05-18 22:15:10,218 - INFO  - []
+2026-05-18 22:15:10,218 - INFO  - 
+2026-05-18 22:15:10,219 - INFO  - Instance:
+2026-05-18 22:15:10,219 - INFO  - []
+2026-05-18 22:15:10,219 - INFO  - 
+2026-05-18 22:15:10,221 - INFO  - 
+SPECIFICATION FOR foo156
+2026-05-18 22:15:10,222 - INFO  - ==================================================
+
+2026-05-18 22:15:10,222 - INFO  - 
+QCP Specification for function foo156:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+2026-05-18 22:15:10,459 - INFO  - 
+VERIFICATION FOR foo156
+2026-05-18 22:15:10,460 - INFO  - ==================================================
+
+2026-05-18 22:15:21,833 - INFO  - syntax Correct
+2026-05-18 22:15:33,041 - INFO  - Loop Invariant:
+2026-05-18 22:15:33,042 - INFO  - [True, True]
+2026-05-18 22:15:33,042 - INFO  - 
+2026-05-18 22:15:33,042 - INFO  - Assertion:
+2026-05-18 22:15:33,042 - INFO  - []
+2026-05-18 22:15:33,042 - INFO  - 
+2026-05-18 22:15:33,042 - INFO  - Assigns:
+2026-05-18 22:15:33,042 - INFO  - [False, False, True, True, True, True]
+2026-05-18 22:15:33,042 - INFO  - Assigns: failures:
+2026-05-18 22:15:33,042 - INFO  - Goal Assigns nothing in 'foo156':
+2026-05-18 22:15:33,042 - INFO  - 
+2026-05-18 22:15:33,042 - INFO  - Goal Assigns nothing in 'foo156' (1/5):
+2026-05-18 22:15:33,042 - INFO  - 
+2026-05-18 22:15:33,043 - INFO  - 
+2026-05-18 22:15:33,043 - INFO  - Post Condition:
+2026-05-18 22:15:33,043 - INFO  - []
+2026-05-18 22:15:33,043 - INFO  - 
+2026-05-18 22:15:33,043 - INFO  - Instance:
+2026-05-18 22:15:33,043 - INFO  - []
+2026-05-18 22:15:33,043 - INFO  - 
+2026-05-18 22:15:53,940 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c:15: Warning: 
+  unbound logic function max_mpis_range. Ignoring logic specification of function foo156
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:15:53,941 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=6
+2026-05-18 22:15:53,943 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'max_mpis_range' (ensures) on line 15
+2026-05-18 22:15:54,312 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c:40: Warning: 
+  unbound logic variable p. Ignoring loop annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:15:54,312 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:16:23,206 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c:33: Warning: 
+  unbound logic variable p. Ignoring loop annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:16:23,207 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=5
+2026-05-18 22:16:23,208 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'p' (assigns) on line 33
+2026-05-18 22:16:23,456 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c:34: Warning: 
+  unexpected token ''
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:16:23,456 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:16:36,608 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c:33: Warning: 
+  unbound logic variable p. Ignoring loop annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:16:36,608 - INFO  - [spec-gen] refine 3/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=5
+2026-05-18 22:16:36,608 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 22:16:36,610 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=6)
+2026-05-18 22:16:36,922 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c:15: Warning: 
+  unbound logic function max_mpis_range. Ignoring logic specification of function foo156
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:16:37,255 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c:15: Warning: 
+  unbound logic function max_mpis_range. Ignoring logic specification of function foo156
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo156/20260518_215107_2896337_293144c6/output/foo156.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:16:37,256 - INFO  - first_pass:
+2026-05-18 22:16:37,256 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-18 22:16:37,256 - INFO  - ==================================================
+2026-05-18 22:16:37,256 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 22:16:37,256 - INFO  - Total execution time: 1529.29 seconds (25.49 minutes)
+2026-05-18 22:16:37,256 - INFO  - ==================================================
+2026-05-18 22:16:37,256 - INFO  - ==================================================
+2026-05-18 22:16:37,256 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 22:16:37,256 - INFO  - Total API calls: 39
+2026-05-18 22:16:37,256 - INFO  - Total prompt tokens (input): 1,087,814
+2026-05-18 22:16:37,256 - INFO  - Total completion tokens (output): 38,464
+2026-05-18 22:16:37,256 - INFO  - Total tokens: 1,126,278
+2026-05-18 22:16:37,256 - INFO  - Average prompt tokens per call: 27892.7
+2026-05-18 22:16:37,256 - INFO  - Average completion tokens per call: 986.3
+2026-05-18 22:16:37,257 - INFO  - Average total tokens per call: 28878.9
+2026-05-18 22:16:37,257 - INFO  - ==================================================

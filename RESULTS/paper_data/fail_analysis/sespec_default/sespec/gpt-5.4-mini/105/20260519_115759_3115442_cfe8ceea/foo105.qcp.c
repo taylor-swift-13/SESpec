@@ -1,0 +1,44 @@
+#include "../verification_stdlib.h"
+    #include "../verification_list.h"
+    #include "../int_array_def.h"
+
+    /*@ Extern Coq (Result: Assertion) */
+    /*@ Extern Coq (Results: Z -> Assertion) */
+
+#include <stdlib.h>
+
+int foo105(int n);
+
+int foo105(int n) 
+/*@
+
+Require emp
+Ensure Results(__return)
+*/{
+
+		if(n < 0) return -1;
+		else if(n == 0) return 0;
+
+		int *fib = (int *)malloc(sizeof(int) * (n + 1));
+int fib_len = n + 1;
+		fib[0] = 0;
+		fib[1] = 1;
+		int index = 2;
+
+	
+ 	/*@ Print user assertion at number LoopEntry_0*/ 
+/*@ Inv
+    (2 <= index && index <= fib_len) &&
+((index < fib_len) => (fib_l[index - 1] == fibo(index - 1) && fib_l[index - 2] == fibo(index - 2))) &&
+((!(index < fib_len)) => (1 == 1)) &&
+(forall (k:Z), 0 <= k && k < index => fib_l[k] == fibo(k)
+          loop assigns fib_l[0..fib_len-1], index)
+    */
+    
+            while (index < fib_len) {
+			fib[index] = fib[index - 2] + fib[index - 1];
+			index++;
+		}
+
+		return fib[n];
+}

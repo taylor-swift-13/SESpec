@@ -1,0 +1,804 @@
+2026-05-17 16:52:38,117 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f
+2026-05-17 16:52:38,117 - INFO  - 
+🚀 Starting generation of function: foo374
+2026-05-17 16:52:38,117 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 16:52:38,117 - INFO  - TRY TIME: 0
+2026-05-17 16:52:38,118 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 16:52:38,118 - INFO  - ==================================================
+
+2026-05-17 16:52:38,196 - INFO  - [auto only_loop] False — foo374 returns 'int'
+2026-05-17 16:52:38,196 - INFO  - Initial pending functions: ['foo374']
+2026-05-17 16:52:38,196 - INFO  - 
+GENERATE ANNOTATION FOR foo374
+2026-05-17 16:52:38,196 - INFO  - ==================================================
+
+2026-05-17 16:52:38,196 - INFO  - Function foo374 has been initialized
+2026-05-17 16:52:38,197 - INFO  - Starting to generate annotation code for foo374
+2026-05-17 16:52:38,231 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo374
+2026-05-17 16:52:38,231 - INFO  - ==================================================
+
+2026-05-17 16:52:38,275 - INFO  - Variable Maps:[{'div': '0', 'number': 'number@pre'}]
+2026-05-17 16:52:38,275 - INFO  - Path conditions: [None]
+2026-05-17 16:52:38,275 - INFO  - Pre condition: (div == 0) * (number == number@pre)
+2026-05-17 16:52:38,275 - INFO  - Loop Condition: c <= number
+2026-05-17 16:52:38,276 - INFO  - Array Names: []
+2026-05-17 16:52:38,276 - INFO  - Updated Loop Conditions: ['c <= number@pre']
+2026-05-17 16:52:38,276 - INFO  - Global Unchanged Variables: ['number']
+2026-05-17 16:52:38,276 - INFO  - Non Inductive Variables: []
+2026-05-17 16:52:38,276 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 16:52:38,277 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 16:52:38,279 - INFO  - examples category: numeric
+2026-05-17 16:52:38,279 - INFO  - examples:
+2026-05-17 16:52:38,279 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-17 16:52:52,881 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 16:52:52,884 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 16:53:21,959 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 16:53:36,309 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+2026-05-17 16:53:36,310 - INFO  - [inv-gen] converged at refine 3
+2026-05-17 16:53:37,856 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 16:53:39,415 - INFO  - ACSL format loop invariant
+2026-05-17 16:53:39,416 - INFO  - /*@
+	  loop invariant 1 <= c;
+	  loop invariant number == \at(number,Pre);
+	  loop invariant div >= 0;
+	  loop invariant (c <= \at(number,Pre)) ==> (div == number_of_divisors_up_to(\at(number,Pre), c-1));
+	  loop assigns c, div;
+	*/
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+2026-05-17 16:53:39,417 - INFO  - QCP format loop invariant
+2026-05-17 16:53:39,417 - INFO  - /*@ Inv
+    (1 <= c) &&
+(number == number@pre) &&
+(div >= 0) &&
+((c <= number@pre) => (div == number_of_divisors_up_to(number@pre, c-1))
+	  loop assigns c, div)
+    */
+    
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+2026-05-17 16:53:41,150 - INFO  - CORRECT INVARIANT
+2026-05-17 16:53:41,150 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo374
+2026-05-17 16:53:41,150 - INFO  - ==================================================
+
+2026-05-17 16:53:41,162 - INFO  - Starting to generate ACSL specification for foo374
+2026-05-17 16:53:48,943 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c:5: Warning: 
+  unbound logic function number_of_divisors_up_to. Ignoring logic specification of function foo374
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 16:53:48,944 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 16:53:59,442 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     
+  3     The Frama-C message reports an "unbound logic function number_of_divisors_up_to" which means the ACSL annotation references a logic symbol that is not defined anywhere in the translation unit. According to ACSL rules (see Universal pitfalls A9/A9a and rule 4), every logic function or predicate used in a contract must be declared at file scope before any contract that references it. The function-level and loop-level annotations are otherwise syntactically fine except for referring to that undefined logic function. To fix this we can either remove all references to number_of_divisors_up_to or provide a top-level definition for it.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 16:53:59,443 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 16:54:05,736 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     
+  3     The Frama-C output shows a syntax error because the previous reply included natural-language text and headings outside of ACSL comment blocks; Frama-C attempted to parse that as C and failed at the very start. The root problem reported earlier remains: the function-level and loop-level ACSL annotations refer to a logic function number_of_divisors_up_to that is not defined in the translation unit. ACSL requires that any logic function used in a contract be defined at file scope in a separate /*@ ... */ block placed before any contract that references it (see pitfalls A9/A9a and the provided rules).
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 16:54:05,737 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 16:54:05,737 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 16:54:06,008 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c:5: Warning: 
+  unbound logic function number_of_divisors_up_to. Ignoring logic specification of function foo374
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 16:54:06,009 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 16:54:14,715 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     
+  3     Frama-C reports "unbound logic function number_of_divisors_up_to", which means the ACSL contract references a logic function named number_of_divisors_up_to that is not defined anywhere in the translation unit. According to the ACSL rules, any referenced logic function must be defined in a top-level /*@ logic ... */ block (one declaration per comment block) before it is used in a function contract or loop invariant. Alternatively, the contract could be rewritten to avoid referring to an undefined logic function.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 16:54:14,716 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 16:54:14,716 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 16:54:15,049 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c:5: Warning: 
+  unbound logic function number_of_divisors_up_to. Ignoring logic specification of function foo374
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 16:54:15,049 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 16:54:35,188 - INFO  - syntax Correct
+2026-05-17 16:54:46,036 - INFO  - Loop Invariant:
+2026-05-17 16:54:46,037 - INFO  - [True, True, True, True]
+2026-05-17 16:54:46,037 - INFO  - 
+2026-05-17 16:54:46,037 - INFO  - Assertion:
+2026-05-17 16:54:46,037 - INFO  - []
+2026-05-17 16:54:46,037 - INFO  - 
+2026-05-17 16:54:46,037 - INFO  - Assigns:
+2026-05-17 16:54:46,037 - INFO  - [True]
+2026-05-17 16:54:46,037 - INFO  - 
+2026-05-17 16:54:46,038 - INFO  - Post Condition:
+2026-05-17 16:54:46,038 - INFO  - [False]
+2026-05-17 16:54:46,038 - INFO  - 
+2026-05-17 16:54:46,039 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-17 16:54:46,039 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer number_of_divisors_up_to(integer n, integer c) =
+    c <= 0 ? 0 :
+    ((n % c) == 0 ? 1 : 0) + number_of_divisors_up_to(n, c-1);
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \result == number_of_divisors_up_to(number, number) [POSTCONDITION FAILED];
+*/
+int foo374(int number) {
+
+	int div = 0;
+		
+	/*@
+	  loop invariant 1 <= c;
+	  loop invariant number == \at(number,Pre);
+	  loop invariant div >= 0;
+	  loop invariant (c <= \at(number,Pre)) ==> (div == number_of_divisors_up_to(\at(number,Pre), c-1));
+	  loop assigns c, div;
+	*/
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+            
+	return div;
+}
+
+2026-05-17 16:54:53,622 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer number_of_divisors_up_to(integer n, integer c) =
+    c <= 0 ? 0 :
+    ((n % c) == 0 ? 1 : 0) + number_of_divisors_up_to(n, c-1);
+*/
+
+/*@
+  requires number >= 1;
+  assigns \nothing;
+  ensures \result == number_of_divisors_up_to(number, number);
+*/
+int foo374(int number) {
+
+	int div = 0;
+		
+	/*@
+	  loop invariant 1 <= c;
+	  loop invariant number == \at(number,Pre);
+	  loop invariant div >= 0;
+	  loop invariant (c <= \at(number,Pre)) ==> (div == number_of_divisors_up_to(\at(number,Pre), c-1));
+	  loop assigns c, div;
+	*/
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+            
+	return div;
+}
+
+2026-05-17 16:55:04,423 - INFO  - syntax Correct
+2026-05-17 16:55:15,253 - INFO  - Loop Invariant:
+2026-05-17 16:55:15,253 - INFO  - [True, True, True, True]
+2026-05-17 16:55:15,253 - INFO  - 
+2026-05-17 16:55:15,253 - INFO  - Assertion:
+2026-05-17 16:55:15,253 - INFO  - []
+2026-05-17 16:55:15,253 - INFO  - 
+2026-05-17 16:55:15,253 - INFO  - Assigns:
+2026-05-17 16:55:15,254 - INFO  - [True]
+2026-05-17 16:55:15,254 - INFO  - 
+2026-05-17 16:55:15,254 - INFO  - Post Condition:
+2026-05-17 16:55:15,254 - INFO  - [False]
+2026-05-17 16:55:15,254 - INFO  - 
+2026-05-17 16:55:15,254 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-17 16:55:15,255 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer number_of_divisors_up_to(integer n, integer c) =
+    c <= 0 ? 0 :
+    ((n % c) == 0 ? 1 : 0) + number_of_divisors_up_to(n, c-1);
+*/
+
+/*@
+  requires number >= 1;
+  assigns \nothing;
+  ensures \result == number_of_divisors_up_to(number, number) [POSTCONDITION FAILED];
+*/
+int foo374(int number) {
+
+	int div = 0;
+		
+	/*@
+	  loop invariant 1 <= c;
+	  loop invariant number == \at(number,Pre);
+	  loop invariant div >= 0;
+	  loop invariant (c <= \at(number,Pre)) ==> (div == number_of_divisors_up_to(\at(number,Pre), c-1));
+	  loop assigns c, div;
+	*/
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+            
+	return div;
+}
+
+2026-05-17 16:55:22,379 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer number_of_divisors_up_to(integer n, integer c) =
+    c <= 0 ? 0 :
+    ((n % c) == 0 ? 1 : 0) + number_of_divisors_up_to(n, c-1);
+*/
+
+/*@
+  requires number >= 1;
+  assigns \nothing;
+  ensures \result >= 0;
+  ensures \result <= number;
+*/
+int foo374(int number) {
+
+	int div = 0;
+		
+	/*@
+	  loop invariant 1 <= c;
+	  loop invariant number == \at(number,Pre);
+	  loop invariant div >= 0;
+	  loop invariant (c <= \at(number,Pre)) ==> (div == number_of_divisors_up_to(\at(number,Pre), c-1));
+	  loop assigns c, div;
+	*/
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+            
+	return div;
+}
+
+2026-05-17 16:55:33,445 - INFO  - syntax Correct
+2026-05-17 16:55:44,309 - INFO  - Loop Invariant:
+2026-05-17 16:55:44,309 - INFO  - [True, True, True, True]
+2026-05-17 16:55:44,310 - INFO  - 
+2026-05-17 16:55:44,310 - INFO  - Assertion:
+2026-05-17 16:55:44,310 - INFO  - []
+2026-05-17 16:55:44,310 - INFO  - 
+2026-05-17 16:55:44,310 - INFO  - Assigns:
+2026-05-17 16:55:44,310 - INFO  - [True]
+2026-05-17 16:55:44,310 - INFO  - 
+2026-05-17 16:55:44,310 - INFO  - Post Condition:
+2026-05-17 16:55:44,310 - INFO  - [True, False]
+2026-05-17 16:55:44,310 - INFO  - 
+2026-05-17 16:55:44,310 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-17 16:55:44,310 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer number_of_divisors_up_to(integer n, integer c) =
+    c <= 0 ? 0 :
+    ((n % c) == 0 ? 1 : 0) + number_of_divisors_up_to(n, c-1);
+*/
+
+/*@
+  requires number >= 1;
+  assigns \nothing;
+  ensures \result >= 0;
+  ensures \result <= number [POSTCONDITION FAILED];
+*/
+int foo374(int number) {
+
+	int div = 0;
+		
+	/*@
+	  loop invariant 1 <= c;
+	  loop invariant number == \at(number,Pre);
+	  loop invariant div >= 0;
+	  loop invariant (c <= \at(number,Pre)) ==> (div == number_of_divisors_up_to(\at(number,Pre), c-1));
+	  loop assigns c, div;
+	*/
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+            
+	return div;
+}
+
+2026-05-17 16:55:52,294 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer number_of_divisors_up_to(integer n, integer c) =
+    c <= 0 ? 0 :
+    ((n % c) == 0 ? 1 : 0) + number_of_divisors_up_to(n, c-1);
+*/
+
+/*@
+  requires number >= 1;
+  assigns \nothing;
+  ensures \result >= 0;
+  ensures \result <= \at(number,Pre);
+*/
+int foo374(int number) {
+
+	int div = 0;
+		
+	/*@
+	  loop invariant 1 <= c;
+	  loop invariant number == \at(number,Pre);
+	  loop invariant div >= 0;
+	  loop invariant (c <= \at(number,Pre)) ==> (div == number_of_divisors_up_to(\at(number,Pre), c-1));
+	  loop assigns c, div;
+	*/
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+            
+	return div;
+}
+
+2026-05-17 16:56:03,109 - INFO  - syntax Correct
+2026-05-17 16:56:14,225 - INFO  - Loop Invariant:
+2026-05-17 16:56:14,225 - INFO  - [True, True, True, True]
+2026-05-17 16:56:14,225 - INFO  - 
+2026-05-17 16:56:14,225 - INFO  - Assertion:
+2026-05-17 16:56:14,225 - INFO  - []
+2026-05-17 16:56:14,225 - INFO  - 
+2026-05-17 16:56:14,225 - INFO  - Assigns:
+2026-05-17 16:56:14,226 - INFO  - [True]
+2026-05-17 16:56:14,226 - INFO  - 
+2026-05-17 16:56:14,226 - INFO  - Post Condition:
+2026-05-17 16:56:14,226 - INFO  - [True, False]
+2026-05-17 16:56:14,226 - INFO  - 
+2026-05-17 16:56:14,227 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-17 16:56:14,227 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer number_of_divisors_up_to(integer n, integer c) =
+    c <= 0 ? 0 :
+    ((n % c) == 0 ? 1 : 0) + number_of_divisors_up_to(n, c-1);
+*/
+
+/*@
+  requires number >= 1;
+  assigns \nothing;
+  ensures \result >= 0;
+  ensures \result <= \at(number,Pre) [POSTCONDITION FAILED];
+*/
+int foo374(int number) {
+
+	int div = 0;
+		
+	/*@
+	  loop invariant 1 <= c;
+	  loop invariant number == \at(number,Pre);
+	  loop invariant div >= 0;
+	  loop invariant (c <= \at(number,Pre)) ==> (div == number_of_divisors_up_to(\at(number,Pre), c-1));
+	  loop assigns c, div;
+	*/
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+            
+	return div;
+}
+
+2026-05-17 16:56:20,574 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer number_of_divisors_up_to(integer n, integer c) =
+    c <= 0 ? 0 :
+    ((n % c) == 0 ? 1 : 0) + number_of_divisors_up_to(n, c-1);
+*/
+
+/*@
+  requires number >= 1;
+  assigns \nothing;
+  ensures \result >= 0;
+  ensures \result <= number;
+*/
+int foo374(int number) {
+
+	int div = 0;
+		
+	/*@
+	  loop invariant 1 <= c;
+	  loop invariant number == \at(number,Pre);
+	  loop invariant div >= 0;
+	  loop invariant (c <= \at(number,Pre)) ==> (div == number_of_divisors_up_to(\at(number,Pre), c-1));
+	  loop assigns c, div;
+	*/
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+            
+	return div;
+}
+
+2026-05-17 16:56:20,576 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8571428571428571, 0.0), clauses=4)
+2026-05-17 16:56:32,224 - INFO  - syntax Correct
+2026-05-17 16:56:43,265 - INFO  - Loop Invariant:
+2026-05-17 16:56:43,266 - INFO  - [True, True, True, True]
+2026-05-17 16:56:43,266 - INFO  - 
+2026-05-17 16:56:43,266 - INFO  - Assertion:
+2026-05-17 16:56:43,266 - INFO  - []
+2026-05-17 16:56:43,266 - INFO  - 
+2026-05-17 16:56:43,266 - INFO  - Assigns:
+2026-05-17 16:56:43,266 - INFO  - [True]
+2026-05-17 16:56:43,266 - INFO  - 
+2026-05-17 16:56:43,267 - INFO  - Post Condition:
+2026-05-17 16:56:43,267 - INFO  - [True, False]
+2026-05-17 16:56:43,267 - INFO  - 
+2026-05-17 16:56:44,095 - INFO  - syntax Correct
+2026-05-17 16:56:45,100 - INFO  - Loop Invariant:
+2026-05-17 16:56:45,101 - INFO  - [True, True, True, True]
+2026-05-17 16:56:45,101 - INFO  - 
+2026-05-17 16:56:45,101 - INFO  - Assertion:
+2026-05-17 16:56:45,101 - INFO  - []
+2026-05-17 16:56:45,101 - INFO  - 
+2026-05-17 16:56:45,101 - INFO  - Assigns:
+2026-05-17 16:56:45,101 - INFO  - [True]
+2026-05-17 16:56:45,101 - INFO  - 
+2026-05-17 16:56:45,101 - INFO  - Post Condition:
+2026-05-17 16:56:45,102 - INFO  - [True]
+2026-05-17 16:56:45,102 - INFO  - 
+2026-05-17 16:56:45,104 - INFO  - 
+SPECIFICATION FOR foo374
+2026-05-17 16:56:45,104 - INFO  - ==================================================
+
+2026-05-17 16:56:45,104 - INFO  - 
+QCP Specification for function foo374:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 16:56:45,187 - INFO  - 
+VERIFICATION FOR foo374
+2026-05-17 16:56:45,187 - INFO  - ==================================================
+
+2026-05-17 16:56:46,035 - INFO  - syntax Correct
+2026-05-17 16:56:47,029 - INFO  - Loop Invariant:
+2026-05-17 16:56:47,029 - INFO  - [True, True, True, True]
+2026-05-17 16:56:47,030 - INFO  - 
+2026-05-17 16:56:47,030 - INFO  - Assertion:
+2026-05-17 16:56:47,030 - INFO  - []
+2026-05-17 16:56:47,030 - INFO  - 
+2026-05-17 16:56:47,030 - INFO  - Assigns:
+2026-05-17 16:56:47,030 - INFO  - [True]
+2026-05-17 16:56:47,030 - INFO  - 
+2026-05-17 16:56:47,030 - INFO  - Post Condition:
+2026-05-17 16:56:47,030 - INFO  - [True]
+2026-05-17 16:56:47,030 - INFO  - 
+2026-05-17 16:56:47,031 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo374
+2026-05-17 16:56:47,031 - INFO  - ==================================================
+2026-05-17 16:56:47,031 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo374/20260517_165238_948419_a5282e8f/output/foo374.c
+2026-05-17 16:56:47,031 - INFO  - Output file content:
+
+/*@
+  logic integer number_of_divisors_up_to(integer n, integer c) =
+    c <= 0 ? 0 :
+    ((n % c) == 0 ? 1 : 0) + number_of_divisors_up_to(n, c-1);
+*/
+
+/*@
+  requires number >= 1;
+  assigns \nothing;
+  ensures \result >= 0;
+*/
+int foo374(int number) {
+
+	int div = 0;
+		
+	/*@
+	  loop invariant 1 <= c;
+	  loop invariant number == \at(number,Pre);
+	  loop invariant div >= 0;
+	  loop invariant (c <= \at(number,Pre)) ==> (div == number_of_divisors_up_to(\at(number,Pre), c-1));
+	  loop assigns c, div;
+	*/
+	for (int c = 1; c <= number; c++) {
+		if (number % c == 0) {
+			div++;
+		}
+	}
+            
+	return div;
+}
+
+2026-05-17 16:56:47,031 - INFO  - ==================================================
+2026-05-17 16:56:47,031 - INFO  - first_pass:
+2026-05-17 16:56:47,031 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 16:56:47,031 - INFO  - ==================================================
+2026-05-17 16:56:47,032 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 16:56:47,032 - INFO  - Total execution time: 248.91 seconds (4.15 minutes)
+2026-05-17 16:56:47,032 - INFO  - ==================================================
+2026-05-17 16:56:47,032 - INFO  - ==================================================
+2026-05-17 16:56:47,032 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 16:56:47,032 - INFO  - Total API calls: 14
+2026-05-17 16:56:47,032 - INFO  - Total prompt tokens (input): 108,002
+2026-05-17 16:56:47,032 - INFO  - Total completion tokens (output): 6,848
+2026-05-17 16:56:47,032 - INFO  - Total tokens: 114,850
+2026-05-17 16:56:47,033 - INFO  - Average prompt tokens per call: 7714.4
+2026-05-17 16:56:47,033 - INFO  - Average completion tokens per call: 489.1
+2026-05-17 16:56:47,033 - INFO  - Average total tokens per call: 8203.6
+2026-05-17 16:56:47,033 - INFO  - ==================================================

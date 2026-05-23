@@ -1,0 +1,958 @@
+2026-05-17 04:38:02,802 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo13_c162/20260517_043802_240700_f3d085ad
+2026-05-17 04:38:02,802 - INFO  - 
+🚀 Starting generation of function: foo13_c162
+2026-05-17 04:38:02,802 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 04:38:02,802 - INFO  - TRY TIME: 0
+2026-05-17 04:38:02,803 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 04:38:02,803 - INFO  - ==================================================
+
+2026-05-17 04:38:03,978 - INFO  - [auto only_loop] False — foo13_c162 returns 'int'
+2026-05-17 04:38:03,978 - INFO  - Initial pending functions: ['foo13_c162']
+2026-05-17 04:38:03,979 - INFO  - 
+GENERATE ANNOTATION FOR foo13_c162
+2026-05-17 04:38:03,979 - INFO  - ==================================================
+
+2026-05-17 04:38:03,979 - INFO  - Function foo13_c162 has been initialized
+2026-05-17 04:38:03,979 - INFO  - Starting to generate annotation code for foo13_c162
+2026-05-17 04:38:04,045 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo13_c162
+2026-05-17 04:38:04,045 - INFO  - ==================================================
+
+2026-05-17 04:38:04,151 - INFO  - Variable Maps:[{'i': '0', 'n': 'n@pre', 'arr_len': 'arr_len@pre', 'arr': 'arr@pre'}]
+2026-05-17 04:38:04,151 - INFO  - Path conditions: ['arr_len@pre > 0 && arr_len@pre < 100']
+2026-05-17 04:38:04,151 - INFO  - Pre condition: arr_len@pre > 0 && arr_len@pre < 100 && (i == 0) * (n == n@pre) * (arr_len == arr_len@pre) * (arr == arr@pre) * store_int_array(arr@pre, arr_len@pre, arr_l)
+2026-05-17 04:38:04,151 - INFO  - Loop Condition: i < n
+2026-05-17 04:38:04,152 - INFO  - Array Names: ['arr']
+2026-05-17 04:38:04,152 - INFO  - Updated Loop Conditions: ['0 < n@pre']
+2026-05-17 04:38:04,153 - INFO  - Global Unchanged Variables: ['n', 'arr_len', 'arr']
+2026-05-17 04:38:04,153 - INFO  - Non Inductive Variables: []
+2026-05-17 04:38:04,154 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 04:38:04,156 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 04:38:04,158 - INFO  - examples category: array
+2026-05-17 04:38:04,159 - INFO  - examples:
+2026-05-17 04:38:04,159 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 04:38:20,172 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 04:38:26,362 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 04:38:55,364 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:39:28,527 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 04:40:01,477 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+2026-05-17 04:40:01,485 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 04:40:25,680 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:41:01,265 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=6
+2026-05-17 04:41:01,267 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 04:41:24,450 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:41:54,632 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-17 04:41:54,638 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 04:42:20,797 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:42:30,157 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8571428571428571, 0.0), clauses=7)
+2026-05-17 04:42:53,935 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 04:42:54,598 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 04:43:26,934 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 04:43:37,283 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=6
+2026-05-17 04:43:37,284 - INFO  - [inv-gen] converged at refine 3
+2026-05-17 04:43:41,094 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 04:43:44,714 - INFO  - ACSL format loop invariant
+2026-05-17 04:43:44,715 - INFO  - /*@
+          loop invariant 0 <= i <= n;
+          loop invariant n >= 0;
+          loop invariant n == \at(n,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant n == 0 || \valid(arr + (0 .. n-1));
+          loop assigns arr[0..n-1], i;
+            */
+            while (i < n) {
+            if (arr[i] <= 0 || arr[i] > n || arr[i] == i + 1) {
+                i++;
+            } else {
+                int temp = arr[i];
+                arr[i] = arr[temp - 1];
+                arr[temp - 1] = temp;
+            }
+        }
+2026-05-17 04:43:44,717 - INFO  - QCP format loop invariant
+2026-05-17 04:43:44,717 - INFO  - /*@ Inv
+    exists  arr_l,    
+    store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (0 <= i && i <= n) &&
+(n >= 0) &&
+(n == n@pre) &&
+(arr_len == arr_len@pre) &&
+(arr == arr@pre) &&
+(n == 0 || \valid(arr + (0 .. n-1))
+          loop assigns arr_l[0..n-1], i)
+    */
+    
+            while (i < n) {
+            if (arr[i] <= 0 || arr[i] > n || arr[i] == i + 1) {
+                i++;
+            } else {
+                int temp = arr[i];
+                arr[i] = arr[temp - 1];
+                arr[temp - 1] = temp;
+            }
+        }
+2026-05-17 04:43:44,750 - INFO  - Variable Maps:[{}]
+2026-05-17 04:43:44,750 - INFO  - Path conditions: [None]
+2026-05-17 04:43:44,750 - INFO  - Pre condition: 
+2026-05-17 04:43:44,751 - INFO  - Loop Condition: i < n
+2026-05-17 04:43:44,751 - INFO  - Array Names: ['arr']
+2026-05-17 04:43:44,751 - INFO  - Updated Loop Conditions: ['i < n']
+2026-05-17 04:43:44,751 - INFO  - Global Unchanged Variables: []
+2026-05-17 04:43:44,751 - INFO  - Non Inductive Variables: []
+2026-05-17 04:43:44,752 - INFO  - Unchanged Arrays (Read-only): ['arr']
+2026-05-17 04:43:44,753 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 04:43:44,759 - INFO  - examples category: array
+2026-05-17 04:43:44,760 - INFO  - examples:
+2026-05-17 04:43:44,760 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 04:44:09,563 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-17 04:44:41,457 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=9
+2026-05-17 04:45:01,213 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=8
+2026-05-17 04:45:01,214 - INFO  - [inv-gen] converged at refine 3
+2026-05-17 04:45:06,226 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 04:45:16,788 - INFO  - ACSL format loop invariant
+2026-05-17 04:45:16,788 - INFO  - /*@
+          loop invariant 0 <= i <= n;
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == k + 1;
+          loop assigns i;
+            */
+            for (i = 0; i < n; i++) {
+            if (arr[i] != i + 1) {
+                return i + 1;
+            }
+        }
+2026-05-17 04:45:16,789 - INFO  - QCP format loop invariant
+2026-05-17 04:45:16,789 - INFO  - /*@ Inv
+    exists  arr_l,    
+    store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (0 <= i && i <= n) &&
+(forall (k:Z), 0 <= k && k < i => arr_l[k] == k + 1
+          loop assigns i)
+    */
+    
+            for (i = 0; i < n; i++) {
+            if (arr[i] != i + 1) {
+                return i + 1;
+            }
+        }
+2026-05-17 04:45:22,327 - INFO  - CORRECT INVARIANT
+2026-05-17 04:45:22,327 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo13_c162
+2026-05-17 04:45:22,328 - INFO  - ==================================================
+
+2026-05-17 04:45:22,380 - INFO  - Starting to generate ACSL specification for foo13_c162
+2026-05-17 04:45:56,262 - INFO  - syntax Correct
+2026-05-17 04:46:08,330 - INFO  - Loop Invariant:
+2026-05-17 04:46:08,339 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:46:08,339 - INFO  - 
+2026-05-17 04:46:08,339 - INFO  - Assertion:
+2026-05-17 04:46:08,339 - INFO  - []
+2026-05-17 04:46:08,339 - INFO  - 
+2026-05-17 04:46:08,340 - INFO  - Assigns:
+2026-05-17 04:46:08,340 - INFO  - [True, True, True, True, True]
+2026-05-17 04:46:08,340 - INFO  - 
+2026-05-17 04:46:08,341 - INFO  - Post Condition:
+2026-05-17 04:46:08,341 - INFO  - [True, False, False, False]
+2026-05-17 04:46:08,341 - INFO  - 
+2026-05-17 04:46:08,342 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=8
+2026-05-17 04:46:08,342 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+        
+/*@
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires n >= 0;
+  requires n == 0 || \valid(arr + (0 .. n-1));
+  assigns arr[0 .. n-1];
+  ensures 1 <= \result <= n + 1;
+  ensures \result <= n ==> count_eq(arr, 0, n, \result) == 0 [POSTCONDITION FAILED];
+  ensures \result <= n ==> \forall integer k [POSTCONDITION FAILED]; 1 <= k < \result ==> count_eq(arr, 0, n, k) >= 1;
+  ensures \result == n + 1 ==> \forall integer k [POSTCONDITION FAILED]; 1 <= k <= n ==> count_eq(arr, 0, n, k) >= 1;
+*/
+int foo13_c162(int * arr, int arr_len, int n) {
+
+        int i = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= i <= n;
+          loop invariant n >= 0;
+          loop invariant n == \at(n,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant n == 0 || \valid(arr + (0 .. n-1));
+          loop assigns arr[0..n-1], i;
+            */
+            while (i < n) {
+            if (arr[i] <= 0 || arr[i] > n || arr[i] == i + 1) {
+                i++;
+            } else {
+                int temp = arr[i];
+                arr[i] = arr[temp - 1];
+                arr[temp - 1] = temp;
+            }
+        }
+            
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= i <= n;
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == k + 1;
+          loop assigns i;
+            */
+            for (i = 0; i < n; i++) {
+            if (arr[i] != i + 1) {
+                return i + 1;
+            }
+        }
+            
+        return n + 1;
+}
+
+2026-05-17 04:46:18,481 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+        
+/*@
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires n >= 0;
+  requires n == 0 || \valid(arr + (0 .. n-1));
+  assigns arr[0 .. n-1];
+  ensures 1 <= \result <= n + 1;
+  ensures \result <= n ==> arr[\result - 1] != \result;
+  ensures \result <= n ==> \forall integer k; 1 <= k < \result ==> arr[k - 1] == k;
+  ensures \result == n + 1 ==> \forall integer k; 1 <= k <= n ==> arr[k - 1] == k;
+*/
+int foo13_c162(int * arr, int arr_len, int n) {
+
+        int i = 0;
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant n >= 0;
+          loop invariant n == \at(n,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant n == 0 || \valid(arr + (0 .. n-1));
+          loop assigns arr[0..n-1], i;
+        */
+        while (i < n) {
+            if (arr[i] <= 0 || arr[i] > n || arr[i] == i + 1) {
+                i++;
+            } else {
+                int temp = arr[i];
+                arr[i] = arr[temp - 1];
+                arr[temp - 1] = temp;
+            }
+        }
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == k + 1;
+          loop assigns i;
+        */
+        for (i = 0; i < n; i++) {
+            if (arr[i] != i + 1) {
+                return i + 1;
+            }
+        }
+            
+        return n + 1;
+}
+
+2026-05-17 04:46:28,386 - INFO  - syntax Correct
+2026-05-17 04:46:41,424 - INFO  - Loop Invariant:
+2026-05-17 04:46:41,425 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:46:41,425 - INFO  - 
+2026-05-17 04:46:41,425 - INFO  - Assertion:
+2026-05-17 04:46:41,425 - INFO  - []
+2026-05-17 04:46:41,425 - INFO  - 
+2026-05-17 04:46:41,425 - INFO  - Assigns:
+2026-05-17 04:46:41,425 - INFO  - [True, True, True, True, True]
+2026-05-17 04:46:41,425 - INFO  - 
+2026-05-17 04:46:41,427 - INFO  - Post Condition:
+2026-05-17 04:46:41,427 - INFO  - [True, True, False, False]
+2026-05-17 04:46:41,427 - INFO  - 
+2026-05-17 04:46:41,428 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=8
+2026-05-17 04:46:41,428 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+        
+/*@
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires n >= 0;
+  requires n == 0 || \valid(arr + (0 .. n-1));
+  assigns arr[0 .. n-1];
+  ensures 1 <= \result <= n + 1;
+  ensures \result <= n ==> arr[\result - 1] != \result;
+  ensures \result <= n ==> \forall integer k [POSTCONDITION FAILED]; 1 <= k < \result ==> arr[k - 1] == k;
+  ensures \result == n + 1 ==> \forall integer k [POSTCONDITION FAILED]; 1 <= k <= n ==> arr[k - 1] == k;
+*/
+int foo13_c162(int * arr, int arr_len, int n) {
+
+        int i = 0;
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant n >= 0;
+          loop invariant n == \at(n,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant n == 0 || \valid(arr + (0 .. n-1));
+          loop assigns arr[0..n-1], i;
+        */
+        while (i < n) {
+            if (arr[i] <= 0 || arr[i] > n || arr[i] == i + 1) {
+                i++;
+            } else {
+                int temp = arr[i];
+                arr[i] = arr[temp - 1];
+                arr[temp - 1] = temp;
+            }
+        }
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == k + 1;
+          loop assigns i;
+        */
+        for (i = 0; i < n; i++) {
+            if (arr[i] != i + 1) {
+                return i + 1;
+            }
+        }
+            
+        return n + 1;
+}
+
+2026-05-17 04:46:57,623 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+        
+/*@
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires n >= 0;
+  requires n == 0 || \valid(arr + (0 .. n-1));
+  assigns arr[0 .. n-1];
+  ensures 1 <= \result <= n + 1;
+  ensures \result <= n ==> arr[\result - 1] != \result;
+  ensures \result <= n ==> \forall integer k; 1 <= k < \result ==> arr[k - 1] == k;
+  ensures \result == n + 1 ==> \forall integer i; 0 <= i < n ==> arr[i] == i + 1;
+*/
+int foo13_c162(int * arr, int arr_len, int n) {
+
+        int i = 0;
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant n >= 0;
+          loop invariant n == \at(n,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant n == 0 || \valid(arr + (0 .. n-1));
+          loop assigns arr[0..n-1], i;
+        */
+        while (i < n) {
+            if (arr[i] <= 0 || arr[i] > n || arr[i] == i + 1) {
+                i++;
+            } else {
+                int temp = arr[i];
+                arr[i] = arr[temp - 1];
+                arr[temp - 1] = temp;
+            }
+        }
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == k + 1;
+          loop assigns i;
+        */
+        for (i = 0; i < n; i++) {
+            if (arr[i] != i + 1) {
+                return i + 1;
+            }
+        }
+            
+        return n + 1;
+}
+
+2026-05-17 04:47:00,430 - INFO  - syntax Correct
+2026-05-17 04:47:14,495 - INFO  - Loop Invariant:
+2026-05-17 04:47:14,496 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:47:14,496 - INFO  - 
+2026-05-17 04:47:14,496 - INFO  - Assertion:
+2026-05-17 04:47:14,496 - INFO  - []
+2026-05-17 04:47:14,496 - INFO  - 
+2026-05-17 04:47:14,496 - INFO  - Assigns:
+2026-05-17 04:47:14,496 - INFO  - [True, True, True, True, True]
+2026-05-17 04:47:14,496 - INFO  - 
+2026-05-17 04:47:14,497 - INFO  - Post Condition:
+2026-05-17 04:47:14,497 - INFO  - [True, True, False, True]
+2026-05-17 04:47:14,497 - INFO  - 
+2026-05-17 04:47:14,498 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=8
+2026-05-17 04:47:14,498 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+        
+/*@
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires n >= 0;
+  requires n == 0 || \valid(arr + (0 .. n-1));
+  assigns arr[0 .. n-1];
+  ensures 1 <= \result <= n + 1;
+  ensures \result <= n ==> arr[\result - 1] != \result;
+  ensures \result <= n ==> \forall integer k [POSTCONDITION FAILED]; 1 <= k < \result ==> arr[k - 1] == k;
+  ensures \result == n + 1 ==> \forall integer i; 0 <= i < n ==> arr[i] == i + 1;
+*/
+int foo13_c162(int * arr, int arr_len, int n) {
+
+        int i = 0;
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant n >= 0;
+          loop invariant n == \at(n,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant n == 0 || \valid(arr + (0 .. n-1));
+          loop assigns arr[0..n-1], i;
+        */
+        while (i < n) {
+            if (arr[i] <= 0 || arr[i] > n || arr[i] == i + 1) {
+                i++;
+            } else {
+                int temp = arr[i];
+                arr[i] = arr[temp - 1];
+                arr[temp - 1] = temp;
+            }
+        }
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == k + 1;
+          loop assigns i;
+        */
+        for (i = 0; i < n; i++) {
+            if (arr[i] != i + 1) {
+                return i + 1;
+            }
+        }
+            
+        return n + 1;
+}
+
+2026-05-17 04:47:29,428 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+        
+/*@
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires n >= 0;
+  requires n == 0 || \valid(arr + (0 .. n-1));
+  assigns arr[0 .. n-1];
+  ensures 1 <= \result <= n + 1;
+  ensures \result <= n ==> arr[\result - 1] != \result;
+  ensures \result <= n ==> \forall integer i; 0 <= i < \result - 1 ==> arr[i] == i + 1;
+  ensures \result == n + 1 ==> \forall integer i; 0 <= i < n ==> arr[i] == i + 1;
+*/
+int foo13_c162(int * arr, int arr_len, int n) {
+
+        int i = 0;
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant n >= 0;
+          loop invariant n == \at(n,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant n == 0 || \valid(arr + (0 .. n-1));
+          loop assigns arr[0..n-1], i;
+        */
+        while (i < n) {
+            if (arr[i] <= 0 || arr[i] > n || arr[i] == i + 1) {
+                i++;
+            } else {
+                int temp = arr[i];
+                arr[i] = arr[temp - 1];
+                arr[temp - 1] = temp;
+            }
+        }
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == k + 1;
+          loop assigns i;
+        */
+        for (i = 0; i < n; i++) {
+            if (arr[i] != i + 1) {
+                return i + 1;
+            }
+        }
+            
+        return n + 1;
+}
+
+2026-05-17 04:47:31,897 - INFO  - syntax Correct
+2026-05-17 04:47:34,753 - INFO  - Loop Invariant:
+2026-05-17 04:47:34,753 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:47:34,753 - INFO  - 
+2026-05-17 04:47:34,753 - INFO  - Assertion:
+2026-05-17 04:47:34,753 - INFO  - []
+2026-05-17 04:47:34,753 - INFO  - 
+2026-05-17 04:47:34,753 - INFO  - Assigns:
+2026-05-17 04:47:34,754 - INFO  - [True, True, True, True, True]
+2026-05-17 04:47:34,754 - INFO  - 
+2026-05-17 04:47:34,754 - INFO  - Post Condition:
+2026-05-17 04:47:34,754 - INFO  - [True, True, True, True]
+2026-05-17 04:47:34,754 - INFO  - 
+2026-05-17 04:47:34,754 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=8
+2026-05-17 04:47:34,754 - INFO  - [spec-gen] converged at refine 4
+2026-05-17 04:47:34,755 - INFO  - 
+SPECIFICATION FOR foo13_c162
+2026-05-17 04:47:34,755 - INFO  - ==================================================
+
+2026-05-17 04:47:34,755 - INFO  - 
+QCP Specification for function foo13_c162:
+/*@
+With arr_l
+Require store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100
+Ensure Results(__return)
+*/
+2026-05-17 04:47:36,278 - INFO  - 
+VERIFICATION FOR foo13_c162
+2026-05-17 04:47:36,279 - INFO  - ==================================================
+
+2026-05-17 04:47:46,129 - INFO  - syntax Correct
+2026-05-17 04:47:49,907 - INFO  - Loop Invariant:
+2026-05-17 04:47:49,907 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:47:49,907 - INFO  - 
+2026-05-17 04:47:49,907 - INFO  - Assertion:
+2026-05-17 04:47:49,907 - INFO  - []
+2026-05-17 04:47:49,907 - INFO  - 
+2026-05-17 04:47:49,907 - INFO  - Assigns:
+2026-05-17 04:47:49,907 - INFO  - [True, True, True, True, True]
+2026-05-17 04:47:49,908 - INFO  - 
+2026-05-17 04:47:49,908 - INFO  - Post Condition:
+2026-05-17 04:47:49,908 - INFO  - [True, True, True, True]
+2026-05-17 04:47:49,908 - INFO  - 
+2026-05-17 04:47:49,908 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo13_c162
+2026-05-17 04:47:49,908 - INFO  - ==================================================
+2026-05-17 04:47:49,908 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo13_c162/20260517_043802_240700_f3d085ad/output/foo13_c162.c
+2026-05-17 04:47:49,909 - INFO  - Output file content:
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+        
+/*@
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires n >= 0;
+  requires n == 0 || \valid(arr + (0 .. n-1));
+  assigns arr[0 .. n-1];
+  ensures 1 <= \result <= n + 1;
+  ensures \result <= n ==> arr[\result - 1] != \result;
+  ensures \result <= n ==> \forall integer i; 0 <= i < \result - 1 ==> arr[i] == i + 1;
+  ensures \result == n + 1 ==> \forall integer i; 0 <= i < n ==> arr[i] == i + 1;
+*/
+int foo13_c162(int * arr, int arr_len, int n) {
+
+        int i = 0;
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant n >= 0;
+          loop invariant n == \at(n,Pre);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant n == 0 || \valid(arr + (0 .. n-1));
+          loop assigns arr[0..n-1], i;
+        */
+        while (i < n) {
+            if (arr[i] <= 0 || arr[i] > n || arr[i] == i + 1) {
+                i++;
+            } else {
+                int temp = arr[i];
+                arr[i] = arr[temp - 1];
+                arr[temp - 1] = temp;
+            }
+        }
+        
+        /*@
+          loop invariant 0 <= i <= n;
+          loop invariant \forall integer k; 0 <= k < i ==> arr[k] == k + 1;
+          loop assigns i;
+        */
+        for (i = 0; i < n; i++) {
+            if (arr[i] != i + 1) {
+                return i + 1;
+            }
+        }
+            
+        return n + 1;
+}
+
+2026-05-17 04:47:49,909 - INFO  - ==================================================
+2026-05-17 04:47:49,918 - INFO  - first_pass:
+2026-05-17 04:47:49,918 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 04:47:49,918 - INFO  - ==================================================
+2026-05-17 04:47:49,918 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 04:47:49,918 - INFO  - Total execution time: 587.12 seconds (9.79 minutes)
+2026-05-17 04:47:49,918 - INFO  - ==================================================
+2026-05-17 04:47:49,918 - INFO  - ==================================================
+2026-05-17 04:47:49,919 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 04:47:49,919 - INFO  - Total API calls: 21
+2026-05-17 04:47:49,919 - INFO  - Total prompt tokens (input): 360,481
+2026-05-17 04:47:49,919 - INFO  - Total completion tokens (output): 13,621
+2026-05-17 04:47:49,919 - INFO  - Total tokens: 374,102
+2026-05-17 04:47:49,919 - INFO  - Average prompt tokens per call: 17165.8
+2026-05-17 04:47:49,919 - INFO  - Average completion tokens per call: 648.6
+2026-05-17 04:47:49,919 - INFO  - Average total tokens per call: 17814.4
+2026-05-17 04:47:49,919 - INFO  - ==================================================

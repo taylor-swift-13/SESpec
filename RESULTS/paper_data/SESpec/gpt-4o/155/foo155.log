@@ -1,0 +1,1282 @@
+2026-05-17 21:11:05,598 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce
+2026-05-17 21:11:05,598 - INFO  - 
+🚀 Starting generation of function: foo155
+2026-05-17 21:11:05,603 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 21:11:05,603 - INFO  - TRY TIME: 0
+2026-05-17 21:11:05,604 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 21:11:05,604 - INFO  - ==================================================
+
+2026-05-17 21:11:07,950 - INFO  - [auto only_loop] False — foo155 returns 'int'
+2026-05-17 21:11:07,951 - INFO  - Initial pending functions: ['foo155', 'malloc']
+2026-05-17 21:11:07,959 - INFO  - Now processing function malloc
+
+2026-05-17 21:11:07,959 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-17 21:11:07,959 - INFO  - 
+GENERATE ANNOTATION FOR foo155
+2026-05-17 21:11:07,960 - INFO  - ==================================================
+
+2026-05-17 21:11:07,960 - INFO  - Function foo155 has been initialized
+2026-05-17 21:11:07,960 - INFO  - Starting to generate annotation code for foo155
+2026-05-17 21:11:08,166 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo155
+2026-05-17 21:11:08,168 - INFO  - ==================================================
+
+2026-05-17 21:11:08,389 - INFO  - Variable Maps:[{}]
+2026-05-17 21:11:08,389 - INFO  - Path conditions: [None]
+2026-05-17 21:11:08,390 - INFO  - Pre condition: 
+2026-05-17 21:11:08,390 - INFO  - Loop Condition: array < Array
+2026-05-17 21:11:08,396 - INFO  - Array Names: ['args', 'mpis']
+2026-05-17 21:11:08,397 - INFO  - Updated Loop Conditions: ['array < Array']
+2026-05-17 21:11:08,397 - INFO  - Global Unchanged Variables: []
+2026-05-17 21:11:08,397 - INFO  - Non Inductive Variables: []
+2026-05-17 21:11:08,398 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-17 21:11:08,400 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 21:11:08,413 - INFO  - examples category: array
+2026-05-17 21:11:08,414 - INFO  - examples:
+2026-05-17 21:11:08,414 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 21:11:26,564 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:11:26,574 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 27
+2026-05-17 21:11:27,516 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:11:35,814 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:11:35,816 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:11:45,624 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:11:45,624 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:11:46,482 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:11:46,484 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 27
+2026-05-17 21:11:47,528 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:11:54,260 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:11:54,260 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:11:55,084 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:11:55,086 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 27
+2026-05-17 21:11:55,783 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:12:03,831 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:12:03,831 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:12:04,561 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:12:04,575 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 27
+2026-05-17 21:12:05,500 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:12:11,614 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=12
+2026-05-17 21:12:11,614 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:12:12,588 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:12:12,589 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 27
+2026-05-17 21:12:13,488 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:12:24,163 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=13)
+2026-05-17 21:12:25,944 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:12:26,798 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:12:26,800 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 18
+2026-05-17 21:12:27,552 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:12:34,184 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:12:34,186 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:12:41,456 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:12:41,457 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:12:42,283 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:12:42,285 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 18
+2026-05-17 21:12:43,175 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:12:52,251 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:12:52,259 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:12:53,062 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:12:53,065 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 18
+2026-05-17 21:12:53,895 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:13:01,496 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:13:01,496 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:13:02,520 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:13:02,522 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 18
+2026-05-17 21:13:03,496 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:13:10,739 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:13:10,739 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:13:11,449 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:13:11,451 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 18
+2026-05-17 21:13:11,989 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:13:24,751 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=13)
+2026-05-17 21:13:26,640 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:13:27,632 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:13:27,634 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 18
+2026-05-17 21:13:28,715 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:13:37,422 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:13:37,424 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:13:42,254 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:13:42,254 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 21:13:43,048 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:13:43,050 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 18
+2026-05-17 21:13:43,932 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:13:51,937 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:13:51,939 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 21:13:52,740 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:13:52,742 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 18
+2026-05-17 21:13:53,561 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:14:04,716 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:14:04,719 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 21:14:05,800 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:14:05,802 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 18
+2026-05-17 21:14:06,672 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:14:13,612 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:14:13,612 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 21:14:14,628 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-17 21:14:14,630 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'mpis' (ensures) on line 18
+2026-05-17 21:14:15,504 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:14:22,579 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=13)
+2026-05-17 21:14:24,032 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:14:24,604 - INFO  - ACSL format loop invariant
+2026-05-17 21:14:24,604 - INFO  - /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \forall integer i; 0 <= i < array ==> mpis[i] == args[i];
+      loop invariant \forall integer i; array <= i < Array ==> mpis[i] == \at(mpis[i], Pre);
+      loop invariant unchanged_array{Pre, Here}(args, args_len);
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+2026-05-17 21:14:24,606 - INFO  - QCP format loop invariant
+2026-05-17 21:14:24,606 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (0 <= array && array <= Array) &&
+(forall (i:Z), 0 <= i && i < array => mpis_l[i] == args_l[i]) &&
+(forall (i:Z), array <= i && i < Array => mpis_l[i] == mpis_l[i]@pre) &&
+(unchanged_array{Pre, Here}(args, args_len)
+      loop assigns array, mpis_l[0..Array-1])
+    */
+    
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+2026-05-17 21:14:24,608 - INFO  - Variable Maps:[{}]
+2026-05-17 21:14:24,611 - INFO  - Path conditions: [None]
+2026-05-17 21:14:24,612 - INFO  - Pre condition: 
+2026-05-17 21:14:24,612 - INFO  - Loop Condition: k < i
+2026-05-17 21:14:24,612 - INFO  - Array Names: ['args', 'mpis']
+2026-05-17 21:14:24,612 - INFO  - Updated Loop Conditions: ['k < i']
+2026-05-17 21:14:24,612 - INFO  - Global Unchanged Variables: []
+2026-05-17 21:14:24,613 - INFO  - Non Inductive Variables: []
+2026-05-17 21:14:24,613 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-17 21:14:24,613 - INFO  - [inv-gen] multi-slot mode: 1 candidate(s) (simple placeholder)
+2026-05-17 21:14:32,916 - INFO  - ACSL format loop invariant
+2026-05-17 21:14:32,916 - INFO  - /*@
+          loop invariant 0 <= k <= i;
+          loop invariant \forall integer j; 0 <= j < i ==> \forall integer l; 0 <= l < j ==> 
+            (args[j] > args[l] && mpis[j] < (mpis[l] * args[j])) ==> mpis[j] == (mpis[l] * args[j]);
+          loop invariant unchanged_array{Pre, Here}(args, args_len);
+          loop assigns k, mpis[0..Array-1];
+        */
+        for (int k = 0; k < i; k++) {
+            /*@
+              loop invariant 0 <= k <= i;
+              loop invariant \forall integer j; 0 <= j < i ==> 
+                (args[j] > args[k] && mpis[j] < (mpis[k] * args[j])) ==> mpis[j] == (mpis[k] * args[j]);
+              loop invariant unchanged_array{Pre, Here}(args, args_len);
+              loop assigns mpis[k];
+            */
+            if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+2026-05-17 21:14:32,917 - INFO  - QCP format loop invariant
+2026-05-17 21:14:32,917 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (0 <= k && k <= i) &&
+(forall (j:Z), 0 <= j && j < i => forall (l:Z), 0 <= l && l < j => 
+            (args_l[j] > args_l[l] && mpis_l[j] < (mpis_l[l] * args_l[j])) => mpis_l[j] == (mpis_l[l] * args_l[j])) &&
+(unchanged_array{Pre, Here}(args, args_len)
+          loop assigns k, mpis_l[0..Array-1])
+    */
+    
+        for (int k = 0; k < i; k++) {
+            /*@
+              loop invariant 0 <= k <= i;
+              loop invariant \forall integer j; 0 <= j < i ==> 
+                (args[j] > args[k] && mpis[j] < (mpis[k] * args[j])) ==> mpis[j] == (mpis[k] * args[j]);
+              loop invariant unchanged_array{Pre, Here}(args, args_len);
+              loop assigns mpis[k];
+            */
+            if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+2026-05-17 21:14:32,918 - INFO  - Variable Maps:[{}]
+2026-05-17 21:14:32,918 - INFO  - Path conditions: [None]
+2026-05-17 21:14:32,918 - INFO  - Pre condition: 
+2026-05-17 21:14:32,918 - INFO  - Loop Condition: i < Array
+2026-05-17 21:14:32,918 - INFO  - Array Names: ['args', 'mpis']
+2026-05-17 21:14:32,918 - INFO  - Updated Loop Conditions: ['i < Array']
+2026-05-17 21:14:32,918 - INFO  - Global Unchanged Variables: []
+2026-05-17 21:14:32,919 - INFO  - Non Inductive Variables: []
+2026-05-17 21:14:32,919 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-17 21:14:32,924 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 21:14:32,937 - INFO  - examples category: array
+2026-05-17 21:14:32,937 - INFO  - examples:
+2026-05-17 21:14:32,937 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 21:14:53,876 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=16
+2026-05-17 21:14:53,878 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:15:02,336 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=18
+2026-05-17 21:15:02,338 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:15:12,283 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=18
+2026-05-17 21:15:12,288 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:15:24,428 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=18
+2026-05-17 21:15:24,428 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=23)
+2026-05-17 21:15:24,983 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=18
+2026-05-17 21:15:24,986 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:15:36,860 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:15:36,864 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:15:52,042 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:15:52,044 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:16:00,377 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:16:00,378 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=25)
+2026-05-17 21:16:01,032 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:16:01,034 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:16:15,704 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:16:15,704 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=25)
+2026-05-17 21:16:15,706 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=19)
+2026-05-17 21:16:16,865 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:16:17,312 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=18
+2026-05-17 21:16:17,314 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:16:31,108 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:16:31,109 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:16:46,748 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:16:46,750 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:16:56,608 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:16:56,608 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=27)
+2026-05-17 21:16:57,220 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:16:57,223 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:17:09,339 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:17:09,340 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=27)
+2026-05-17 21:17:10,216 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:17:10,218 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:17:25,370 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:17:25,371 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=27)
+2026-05-17 21:17:25,981 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:17:25,985 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:17:39,412 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:17:39,412 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=27)
+2026-05-17 21:17:39,416 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=19)
+2026-05-17 21:17:40,960 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:17:41,677 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=18
+2026-05-17 21:17:41,679 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:17:53,180 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:17:53,182 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:18:01,941 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:18:01,943 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:18:20,564 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:18:20,564 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=29)
+2026-05-17 21:18:21,340 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:18:21,342 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:18:28,820 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:18:28,820 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=29)
+2026-05-17 21:18:29,364 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:18:29,366 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:18:42,752 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:18:42,759 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=29)
+2026-05-17 21:18:43,576 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:18:43,577 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:19:00,834 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=19
+2026-05-17 21:19:00,839 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=29)
+2026-05-17 21:19:00,840 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=19)
+2026-05-17 21:19:03,322 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:19:05,373 - INFO  - ACSL format loop invariant
+2026-05-17 21:19:05,376 - INFO  - /*@
+      loop invariant 1 <= i <= Array;
+      loop invariant \forall integer j; 0 <= j < i ==> \forall integer k; 0 <= k < j ==> 
+        (args[j] > args[k] && mpis[j] < (mpis[k] * args[j])) ==> mpis[j] == (mpis[k] * args[j]);
+      loop invariant \forall integer j; 0 <= j < i ==> mpis[j] >= args[j];
+      loop invariant unchanged_array{Pre, Here}(args, args_len);
+      loop assigns i, k, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+        /*@
+          loop invariant 0 <= k <= i;
+          loop invariant \forall integer j; 0 <= j < i ==> \forall integer l; 0 <= l < j ==> 
+            (args[j] > args[l] && mpis[j] < (mpis[l] * args[j])) ==> mpis[j] == (mpis[l] * args[j]);
+          loop invariant \forall integer j; 0 <= j < i ==> mpis[j] >= args[j];
+          loop invariant unchanged_array{Pre, Here}(args, args_len);
+          loop assigns k, mpis[0..Array-1];
+        */
+        for (int k = 0; k < i; k++) {
+            /*@
+              loop invariant 0 <= k <= i;
+              loop invariant \forall integer j; 0 <= j < i ==> 
+                (args[j] > args[k] && mpis[j] < (mpis[k] * args[j])) ==> mpis[j] == (mpis[k] * args[j]);
+              loop invariant \forall integer j; 0 <= j < i ==> mpis[j] >= args[j];
+              loop invariant unchanged_array{Pre, Here}(args, args_len);
+              loop assigns mpis[i];
+            */
+            if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+2026-05-17 21:19:05,384 - INFO  - QCP format loop invariant
+2026-05-17 21:19:05,385 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (1 <= i && i <= Array) &&
+(forall (j:Z), 0 <= j && j < i => forall (k:Z), 0 <= k && k < j => 
+        (args_l[j] > args_l[k] && mpis_l[j] < (mpis_l[k] * args_l[j])) => mpis_l[j] == (mpis_l[k] * args_l[j])) &&
+(forall (j:Z), 0 <= j && j < i => mpis_l[j] >= args_l[j]) &&
+(unchanged_array{Pre, Here}(args, args_len)
+      loop assigns i, k, mpis_l[0..Array-1])
+    */
+    
+    for (int i = 1; i < Array; i++) {
+        /*@
+          loop invariant 0 <= k <= i;
+          loop invariant \forall integer j; 0 <= j < i ==> \forall integer l; 0 <= l < j ==> 
+            (args[j] > args[l] && mpis[j] < (mpis[l] * args[j])) ==> mpis[j] == (mpis[l] * args[j]);
+          loop invariant \forall integer j; 0 <= j < i ==> mpis[j] >= args[j];
+          loop invariant unchanged_array{Pre, Here}(args, args_len);
+          loop assigns k, mpis[0..Array-1];
+        */
+        for (int k = 0; k < i; k++) {
+            /*@
+              loop invariant 0 <= k <= i;
+              loop invariant \forall integer j; 0 <= j < i ==> 
+                (args[j] > args[k] && mpis[j] < (mpis[k] * args[j])) ==> mpis[j] == (mpis[k] * args[j]);
+              loop invariant \forall integer j; 0 <= j < i ==> mpis[j] >= args[j];
+              loop invariant unchanged_array{Pre, Here}(args, args_len);
+              loop assigns mpis[i];
+            */
+            if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+2026-05-17 21:19:05,394 - INFO  - Variable Maps:[{}]
+2026-05-17 21:19:05,394 - INFO  - Path conditions: [None]
+2026-05-17 21:19:05,394 - INFO  - Pre condition: 
+2026-05-17 21:19:05,396 - INFO  - Loop Condition: i < Array
+2026-05-17 21:19:05,397 - INFO  - Array Names: ['mpis']
+2026-05-17 21:19:05,402 - INFO  - Updated Loop Conditions: ['i < Array']
+2026-05-17 21:19:05,404 - INFO  - Global Unchanged Variables: []
+2026-05-17 21:19:05,405 - INFO  - Non Inductive Variables: []
+2026-05-17 21:19:05,413 - INFO  - Unchanged Arrays (Read-only): ['mpis']
+2026-05-17 21:19:05,420 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 21:19:05,456 - INFO  - examples category: array
+2026-05-17 21:19:05,456 - INFO  - examples:
+2026-05-17 21:19:05,456 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 21:19:44,798 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=22
+2026-05-17 21:19:44,806 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:19:58,897 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:19:58,904 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:20:16,497 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:20:16,498 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=35)
+2026-05-17 21:20:17,720 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=22
+2026-05-17 21:20:17,722 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:20:35,131 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:20:35,132 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=35)
+2026-05-17 21:20:36,141 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=22
+2026-05-17 21:20:36,143 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:20:51,820 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:20:51,821 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=35)
+2026-05-17 21:20:52,793 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=22
+2026-05-17 21:20:52,794 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:21:01,144 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:21:01,145 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=35)
+2026-05-17 21:21:01,884 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=22
+2026-05-17 21:21:01,886 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:21:12,664 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=22)
+2026-05-17 21:21:14,898 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:21:15,576 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=23
+2026-05-17 21:21:15,577 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:21:36,321 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:21:36,322 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:21:52,360 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:21:52,361 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=37)
+2026-05-17 21:21:53,220 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=23
+2026-05-17 21:21:53,222 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:22:08,477 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:22:08,478 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=37)
+2026-05-17 21:22:09,628 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=23
+2026-05-17 21:22:09,630 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:22:25,237 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:22:25,238 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=37)
+2026-05-17 21:22:26,165 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=23
+2026-05-17 21:22:26,166 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:22:44,773 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:22:44,774 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=37)
+2026-05-17 21:22:45,820 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=23
+2026-05-17 21:22:45,822 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:22:54,335 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=23)
+2026-05-17 21:22:57,688 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:22:59,376 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:22:59,378 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:23:15,417 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:23:15,420 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:23:33,808 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:23:33,808 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=39)
+2026-05-17 21:23:35,468 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:23:35,470 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:23:46,344 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:23:46,344 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=39)
+2026-05-17 21:23:48,238 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:23:48,240 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:24:05,216 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:24:05,227 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=39)
+2026-05-17 21:24:06,686 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:24:06,688 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:24:17,389 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:24:17,390 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=39)
+2026-05-17 21:24:18,952 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=20
+2026-05-17 21:24:18,964 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:24:29,689 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=20)
+2026-05-17 21:24:32,552 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:24:34,212 - INFO  - ACSL format loop invariant
+2026-05-17 21:24:34,212 - INFO  - /*@
+      loop invariant 1 <= i <= Array;
+      loop invariant num == max(mpis, 0, i);
+      loop invariant \forall integer j; 0 <= j < Array ==> mpis[j] >= args[j];
+      loop invariant unchanged_array{Pre, Here}(args, args_len);
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+2026-05-17 21:24:34,213 - INFO  - QCP format loop invariant
+2026-05-17 21:24:34,213 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (1 <= i && i <= Array) &&
+(num == max(mpis, 0, i)) &&
+(forall (j:Z), 0 <= j && j < Array => mpis_l[j] >= args_l[j]) &&
+(unchanged_array{Pre, Here}(args, args_len)
+      loop assigns i, num)
+    */
+    
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+2026-05-17 21:24:35,658 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo155
+2026-05-17 21:24:35,658 - INFO  - ==================================================
+
+2026-05-17 21:24:35,721 - INFO  - Starting to generate ACSL specification for foo155
+2026-05-17 21:24:53,881 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:24:53,883 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:25:06,068 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:25:06,069 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:25:17,436 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:25:17,438 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:25:17,438 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:25:18,728 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:25:18,729 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:25:28,707 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:18: Warning: 
+  unbound logic variable mpis. Ignoring logic specification of function foo155
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:25:28,708 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:25:28,708 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:25:29,772 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:25:29,773 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:25:41,072 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:66: 
+  syntax error:
+  Location: line 66, between columns 12 and 14, before or at token: if
+  64                */
+  65                // Corrected annotation: Removed invalid `if` statement
+  66                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  67                    mpis[i] = mpis[k] * args[i];
+  68                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:25:41,073 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:25:41,073 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:25:42,221 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:25:42,222 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:25:51,329 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:25:51,330 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:25:51,330 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:25:52,355 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:25:52,357 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:26:03,468 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=7)
+2026-05-17 21:26:04,788 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:26:04,791 - INFO  - 
+SPECIFICATION FOR foo155
+2026-05-17 21:26:04,791 - INFO  - ==================================================
+
+2026-05-17 21:26:04,793 - INFO  - 
+QCP Specification for function foo155:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+2026-05-17 21:26:11,380 - INFO  - 
+VERIFICATION FOR foo155
+2026-05-17 21:26:11,381 - INFO  - ==================================================
+
+2026-05-17 21:26:12,932 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:26:23,741 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:26:23,742 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:26:32,745 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:26:32,746 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:26:45,984 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:26:45,992 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:26:45,993 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:26:47,268 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:26:47,269 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:27:09,797 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:27:09,804 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:27:09,804 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:27:11,162 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:27:11,162 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:27:25,013 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:30: Warning: 
+  unbound logic variable mpis. Ignoring loop annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:27:25,016 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:27:25,018 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:27:26,278 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:27:26,280 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:27:34,887 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:19: Warning: 
+  unbound logic variable mpis. Ignoring logic specification of function foo155
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:27:34,888 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:27:34,888 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:27:36,248 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:27:36,249 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:27:46,799 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=7)
+2026-05-17 21:27:47,964 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:27:48,846 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c (with preprocessing)
+[kernel] log/sespec/gpt-4o/foo155/20260517_211105_1111998_d8b538ce/output/foo155.c:65: 
+  syntax error:
+  Location: line 65, between columns 12 and 14, before or at token: if
+  63                  loop assigns mpis[i];
+  64                */
+  65                if (args[i] > args[k] && mpis[i] < (mpis[k] * args[i])) {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  66                    mpis[i] = mpis[k] * args[i];
+  67                }
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:27:48,847 - INFO  - first_pass:
+2026-05-17 21:27:48,848 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-17 21:27:48,848 - INFO  - ==================================================
+2026-05-17 21:27:48,848 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 21:27:48,848 - INFO  - Total execution time: 1003.25 seconds (16.72 minutes)
+2026-05-17 21:27:48,848 - INFO  - ==================================================
+2026-05-17 21:27:48,848 - INFO  - ==================================================
+2026-05-17 21:27:48,848 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 21:27:48,851 - INFO  - Total API calls: 79
+2026-05-17 21:27:48,851 - INFO  - Total prompt tokens (input): 3,080,230
+2026-05-17 21:27:48,851 - INFO  - Total completion tokens (output): 84,783
+2026-05-17 21:27:48,851 - INFO  - Total tokens: 3,165,013
+2026-05-17 21:27:48,851 - INFO  - Average prompt tokens per call: 38990.3
+2026-05-17 21:27:48,851 - INFO  - Average completion tokens per call: 1073.2
+2026-05-17 21:27:48,851 - INFO  - Average total tokens per call: 40063.5
+2026-05-17 21:27:48,851 - INFO  - ==================================================

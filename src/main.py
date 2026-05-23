@@ -13,6 +13,7 @@ from LoopInvGen.syntax_checker import SyntaxChecker
 from Utils.create_post_condition import create_post, update_annotation
 from Utils.extract_all import function_info_init,free_all_tu
 from Utils.main_class import *
+from Utils.utils import source_has_acsl_assert
 from specification_verify import SpecVerifier
 from config import MainConfig,LLMConfig
 from convertor import SpecificationConvertor
@@ -768,7 +769,18 @@ class FunctionProcessor:
             valid_ = (all(post_result) and all(loop_result)
                       and all(instance_result) and all(assigns_result))
             syntax_ = syntax_error == ''
-            satisfy_ = all(assert_result)
+            # satisfy gates on ACSL `/*@ assert */` presence in source only —
+            # C library `assert(...)` macro calls do not count.
+            output_c = os.path.join(
+                self.config.output_path,
+                self.config.function_name + '.c'
+            )
+            try:
+                with open(output_c, 'r', encoding='utf-8') as fh:
+                    source_text = fh.read()
+            except OSError:
+                source_text = ''
+            satisfy_ = (not source_has_acsl_assert(source_text)) or all(assert_result)
             return syntax_, valid_, satisfy_
 
         syntax, valid, satisfy = _grade_with_spec_verifier()

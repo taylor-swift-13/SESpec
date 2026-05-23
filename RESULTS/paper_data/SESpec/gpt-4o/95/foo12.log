@@ -1,0 +1,1255 @@
+2026-05-14 23:05:37,284 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo12/20260514_230537_387733_63f0d22d
+2026-05-14 23:05:37,284 - INFO  - 
+🚀 Starting generation of function: foo12
+2026-05-14 23:05:37,284 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-14 23:05:37,284 - INFO  - ==================================================
+
+2026-05-14 23:05:38,051 - INFO  - [auto only_loop] False — foo12 returns 'int'
+2026-05-14 23:05:38,051 - INFO  - Initial pending functions: ['foo12']
+2026-05-14 23:05:38,052 - INFO  - 
+GENERATE ANNOTATION FOR foo12
+2026-05-14 23:05:38,052 - INFO  - ==================================================
+
+2026-05-14 23:05:38,052 - INFO  - Function foo12 has been initialized
+2026-05-14 23:05:38,052 - INFO  - Starting to generate annotation code for foo12
+2026-05-14 23:05:38,099 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo12
+2026-05-14 23:05:38,099 - INFO  - ==================================================
+
+2026-05-14 23:05:38,170 - INFO  - Variable Maps:[{}]
+2026-05-14 23:05:38,170 - INFO  - Path conditions: [None]
+2026-05-14 23:05:38,170 - INFO  - Pre condition: emp
+2026-05-14 23:05:38,170 - INFO  - Loop Condition: i < a_len
+2026-05-14 23:05:38,171 - INFO  - Array Names: ['b', 'a']
+2026-05-14 23:05:38,171 - INFO  - Updated Loop Conditions: ['i < a_len']
+2026-05-14 23:05:38,171 - INFO  - Global Unchanged Variables: []
+2026-05-14 23:05:38,172 - INFO  - Non Inductive Variables: []
+2026-05-14 23:05:38,173 - INFO  - Unchanged Arrays (Read-only): ['b', 'a']
+2026-05-14 23:05:38,174 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-14 23:05:38,175 - INFO  - examples category: array
+2026-05-14 23:05:38,175 - INFO  - examples:
+2026-05-14 23:05:38,175 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-14 23:06:15,387 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-14 23:07:32,428 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-14 23:08:12,671 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-14 23:08:12,672 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 23:08:34,450 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-14 23:11:20,279 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=2
+2026-05-14 23:11:20,279 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 23:11:41,557 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-14 23:12:32,969 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-14 23:12:32,969 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 23:12:54,332 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-14 23:14:11,443 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=2
+2026-05-14 23:14:11,443 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 23:14:32,854 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-14 23:15:46,800 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.75, 0.0), clauses=4)
+2026-05-14 23:16:10,965 - INFO  - ACSL format loop invariant
+2026-05-14 23:16:10,966 - INFO  - /*@
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+2026-05-14 23:16:10,967 - INFO  - QCP format loop invariant
+2026-05-14 23:16:10,967 - INFO  - /*@ Inv
+    exists  a_l b_l,    
+    store_int_array(a, a_len, a_l) && a_len > 0 && a_len < 100 && store_int_array(b, b_len, b_l) && b_len > 0 && b_len < 100 &&
+    (forall (k:Z), 0 <= k && k < i => a_l[k] == b_l[k]) &&
+(forall (k:Z), i <= k && k < a_len => a_l[k] == a_l[k]@pre) &&
+(forall (k:Z), i <= k && k < b_len => b_l[k] == b_l[k]@pre
+      loop assigns i)
+    */
+    
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+2026-05-14 23:16:12,354 - INFO  - CORRECT INVARIANT
+2026-05-14 23:16:12,354 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo12
+2026-05-14 23:16:12,354 - INFO  - ==================================================
+
+2026-05-14 23:16:12,368 - INFO  - Starting to generate ACSL specification for foo12
+2026-05-14 23:17:36,086 - INFO  - syntax Correct
+2026-05-14 23:17:47,000 - INFO  - Loop Invariant:
+2026-05-14 23:17:47,001 - INFO  - [True, True, True, True]
+2026-05-14 23:17:47,001 - INFO  - 
+2026-05-14 23:17:47,001 - INFO  - Assertion:
+2026-05-14 23:17:47,001 - INFO  - []
+2026-05-14 23:17:47,001 - INFO  - 
+2026-05-14 23:17:47,001 - INFO  - Assigns:
+2026-05-14 23:17:47,001 - INFO  - [True, True, True, True]
+2026-05-14 23:17:47,001 - INFO  - 
+2026-05-14 23:17:47,001 - INFO  - Post Condition:
+2026-05-14 23:17:47,001 - INFO  - [False, False]
+2026-05-14 23:17:47,002 - INFO  - 
+2026-05-14 23:17:47,002 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=11
+2026-05-14 23:17:47,002 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 <==> a_len != b_len || !arrays_equal(a, b, a_len) [POSTCONDITION FAILED];
+  ensures \result == 1 <==> a_len == b_len && arrays_equal(a, b, a_len) [POSTCONDITION FAILED];
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:18:56,269 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 <==> a_len != b_len || (a_len == b_len && !arrays_equal(a, b, a_len));
+  ensures \result == 1 <==> a_len == b_len && arrays_equal(a, b, a_len);
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:18:57,091 - INFO  - syntax Correct
+2026-05-14 23:19:07,785 - INFO  - Loop Invariant:
+2026-05-14 23:19:07,785 - INFO  - [True, True, True, True]
+2026-05-14 23:19:07,785 - INFO  - 
+2026-05-14 23:19:07,785 - INFO  - Assertion:
+2026-05-14 23:19:07,785 - INFO  - []
+2026-05-14 23:19:07,785 - INFO  - 
+2026-05-14 23:19:07,786 - INFO  - Assigns:
+2026-05-14 23:19:07,786 - INFO  - [True, True, True, True]
+2026-05-14 23:19:07,786 - INFO  - 
+2026-05-14 23:19:07,786 - INFO  - Post Condition:
+2026-05-14 23:19:07,786 - INFO  - [False, False]
+2026-05-14 23:19:07,786 - INFO  - 
+2026-05-14 23:19:07,786 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=11
+2026-05-14 23:19:07,786 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 <==> a_len != b_len || (a_len == b_len && !arrays_equal(a, b, a_len)) [POSTCONDITION FAILED];
+  ensures \result == 1 <==> a_len == b_len && arrays_equal(a, b, a_len) [POSTCONDITION FAILED];
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:19:22,667 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 <==> a_len != b_len || (a_len == b_len && !arrays_equal(a, b, a_len));
+  ensures \result == 1 <==> a_len == b_len && arrays_equal(a, b, a_len);
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:19:23,486 - INFO  - syntax Correct
+2026-05-14 23:19:34,158 - INFO  - Loop Invariant:
+2026-05-14 23:19:34,159 - INFO  - [True, True, True, True]
+2026-05-14 23:19:34,159 - INFO  - 
+2026-05-14 23:19:34,159 - INFO  - Assertion:
+2026-05-14 23:19:34,159 - INFO  - []
+2026-05-14 23:19:34,159 - INFO  - 
+2026-05-14 23:19:34,159 - INFO  - Assigns:
+2026-05-14 23:19:34,159 - INFO  - [True, True, True, True]
+2026-05-14 23:19:34,159 - INFO  - 
+2026-05-14 23:19:34,159 - INFO  - Post Condition:
+2026-05-14 23:19:34,159 - INFO  - [False, False]
+2026-05-14 23:19:34,159 - INFO  - 
+2026-05-14 23:19:34,159 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=11
+2026-05-14 23:19:34,159 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-14 23:19:34,985 - INFO  - syntax Correct
+2026-05-14 23:19:45,682 - INFO  - Loop Invariant:
+2026-05-14 23:19:45,682 - INFO  - [True, True, True, True]
+2026-05-14 23:19:45,682 - INFO  - 
+2026-05-14 23:19:45,682 - INFO  - Assertion:
+2026-05-14 23:19:45,682 - INFO  - []
+2026-05-14 23:19:45,682 - INFO  - 
+2026-05-14 23:19:45,682 - INFO  - Assigns:
+2026-05-14 23:19:45,682 - INFO  - [True, True, True, True]
+2026-05-14 23:19:45,682 - INFO  - 
+2026-05-14 23:19:45,683 - INFO  - Post Condition:
+2026-05-14 23:19:45,683 - INFO  - [False, False]
+2026-05-14 23:19:45,683 - INFO  - 
+2026-05-14 23:19:45,683 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=11
+2026-05-14 23:19:45,683 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 <==> a_len != b_len || !arrays_equal(a, b, a_len) [POSTCONDITION FAILED];
+  ensures \result == 1 <==> a_len == b_len && arrays_equal(a, b, a_len) [POSTCONDITION FAILED];
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:20:23,360 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 ==> (a_len != b_len || !arrays_equal(a, b, a_len));
+  ensures \result == 1 ==> (a_len == b_len && arrays_equal(a, b, a_len));
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:20:24,172 - INFO  - syntax Correct
+2026-05-14 23:20:34,828 - INFO  - Loop Invariant:
+2026-05-14 23:20:34,828 - INFO  - [True, True, True, True]
+2026-05-14 23:20:34,828 - INFO  - 
+2026-05-14 23:20:34,828 - INFO  - Assertion:
+2026-05-14 23:20:34,828 - INFO  - []
+2026-05-14 23:20:34,828 - INFO  - 
+2026-05-14 23:20:34,828 - INFO  - Assigns:
+2026-05-14 23:20:34,828 - INFO  - [True, True, True, True]
+2026-05-14 23:20:34,828 - INFO  - 
+2026-05-14 23:20:34,829 - INFO  - Post Condition:
+2026-05-14 23:20:34,829 - INFO  - [True, False]
+2026-05-14 23:20:34,829 - INFO  - 
+2026-05-14 23:20:34,829 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=11
+2026-05-14 23:20:34,829 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 ==> (a_len != b_len || !arrays_equal(a, b, a_len));
+  ensures \result == 1 ==> (a_len == b_len && arrays_equal(a, b, a_len)) [POSTCONDITION FAILED];
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:21:12,106 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 ==> (a_len != b_len || !arrays_equal(a, b, a_len));
+  ensures \result == 1 ==> (a_len == b_len && arrays_equal(a, b, a_len));
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; 0 <= k < i ==> arrays_equal(a, b, k);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:21:12,917 - INFO  - syntax Correct
+2026-05-14 23:21:23,790 - INFO  - Loop Invariant:
+2026-05-14 23:21:23,790 - INFO  - [True, True, False]
+2026-05-14 23:21:23,790 - INFO  - 
+2026-05-14 23:21:23,790 - INFO  - Assertion:
+2026-05-14 23:21:23,790 - INFO  - []
+2026-05-14 23:21:23,790 - INFO  - 
+2026-05-14 23:21:23,790 - INFO  - Assigns:
+2026-05-14 23:21:23,790 - INFO  - [True, True, True, True]
+2026-05-14 23:21:23,791 - INFO  - 
+2026-05-14 23:21:23,791 - INFO  - Post Condition:
+2026-05-14 23:21:23,791 - INFO  - [True, False]
+2026-05-14 23:21:23,791 - INFO  - 
+2026-05-14 23:21:23,791 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=11
+2026-05-14 23:21:23,791 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 ==> (a_len != b_len || !arrays_equal(a, b, a_len));
+  ensures \result == 1 ==> (a_len == b_len && arrays_equal(a, b, a_len)) [POSTCONDITION FAILED];
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; 0 <= k < i ==> arrays_equal(a, b, k);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:22:20,061 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 ==> (a_len != b_len || !arrays_equal(a, b, a_len));
+  ensures \result == 1 ==> (a_len == b_len && arrays_equal(a, b, a_len));
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:22:20,917 - INFO  - syntax Correct
+2026-05-14 23:22:31,640 - INFO  - Loop Invariant:
+2026-05-14 23:22:31,641 - INFO  - [True, True]
+2026-05-14 23:22:31,641 - INFO  - 
+2026-05-14 23:22:31,641 - INFO  - Assertion:
+2026-05-14 23:22:31,641 - INFO  - []
+2026-05-14 23:22:31,641 - INFO  - 
+2026-05-14 23:22:31,641 - INFO  - Assigns:
+2026-05-14 23:22:31,641 - INFO  - [True, True, True, True]
+2026-05-14 23:22:31,641 - INFO  - 
+2026-05-14 23:22:31,641 - INFO  - Post Condition:
+2026-05-14 23:22:31,641 - INFO  - [True, False]
+2026-05-14 23:22:31,641 - INFO  - 
+2026-05-14 23:22:31,642 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=11
+2026-05-14 23:22:31,642 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 23:22:32,556 - INFO  - syntax Correct
+2026-05-14 23:22:43,365 - INFO  - Loop Invariant:
+2026-05-14 23:22:43,366 - INFO  - [True, True, True, True]
+2026-05-14 23:22:43,366 - INFO  - 
+2026-05-14 23:22:43,366 - INFO  - Assertion:
+2026-05-14 23:22:43,366 - INFO  - []
+2026-05-14 23:22:43,366 - INFO  - 
+2026-05-14 23:22:43,366 - INFO  - Assigns:
+2026-05-14 23:22:43,367 - INFO  - [True, True, True, True]
+2026-05-14 23:22:43,367 - INFO  - 
+2026-05-14 23:22:43,367 - INFO  - Post Condition:
+2026-05-14 23:22:43,367 - INFO  - [True, False]
+2026-05-14 23:22:43,367 - INFO  - 
+2026-05-14 23:22:43,368 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=11
+2026-05-14 23:22:43,368 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 ==> (a_len != b_len || !arrays_equal(a, b, a_len));
+  ensures \result == 1 ==> (a_len == b_len && arrays_equal(a, b, a_len)) [POSTCONDITION FAILED];
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:24:11,729 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/* [POSTCONDITION FIXED] */
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop invariant arrays_equal(a, b, i); /* Explicitly connect loop progress to arrays_equal */
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:24:11,964 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo12/20260514_230537_387733_63f0d22d/output/foo12.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo12/20260514_230537_387733_63f0d22d/output/foo12.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel] log/sespec/gpt-4o/foo12/20260514_230537_387733_63f0d22d/output/foo12.c:20: 
+  syntax error:
+  Location: line 20, between columns 0 and 1, before or at token: *
+  18    
+  19    /* [POSTCONDITION FIXED] */
+  20    */
+        ^^
+  21    int foo12(int * a, int a_len, int * b, int b_len) {
+  22
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-14 23:24:11,964 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-14 23:24:11,965 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 23:24:12,880 - INFO  - syntax Correct
+2026-05-14 23:24:23,771 - INFO  - Loop Invariant:
+2026-05-14 23:24:23,771 - INFO  - [True, True, True, True]
+2026-05-14 23:24:23,771 - INFO  - 
+2026-05-14 23:24:23,771 - INFO  - Assertion:
+2026-05-14 23:24:23,771 - INFO  - []
+2026-05-14 23:24:23,771 - INFO  - 
+2026-05-14 23:24:23,771 - INFO  - Assigns:
+2026-05-14 23:24:23,771 - INFO  - [True, True, True, True]
+2026-05-14 23:24:23,771 - INFO  - 
+2026-05-14 23:24:23,772 - INFO  - Post Condition:
+2026-05-14 23:24:23,772 - INFO  - [True, False]
+2026-05-14 23:24:23,772 - INFO  - 
+2026-05-14 23:24:23,772 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=11
+2026-05-14 23:24:23,772 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 ==> (a_len != b_len || !arrays_equal(a, b, a_len));
+  ensures \result == 1 ==> (a_len == b_len && arrays_equal(a, b, a_len)) [POSTCONDITION FAILED];
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:25:20,822 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/* [POSTCONDITION FIXED] */
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; 0 <= k < i ==> arrays_equal(a, b, k);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:25:20,824 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9, 0.0), clauses=11)
+2026-05-14 23:25:21,754 - INFO  - syntax Correct
+2026-05-14 23:25:32,612 - INFO  - Loop Invariant:
+2026-05-14 23:25:32,613 - INFO  - [True, True, True, True]
+2026-05-14 23:25:32,613 - INFO  - 
+2026-05-14 23:25:32,613 - INFO  - Assertion:
+2026-05-14 23:25:32,613 - INFO  - []
+2026-05-14 23:25:32,613 - INFO  - 
+2026-05-14 23:25:32,613 - INFO  - Assigns:
+2026-05-14 23:25:32,613 - INFO  - [True, True, True, True]
+2026-05-14 23:25:32,613 - INFO  - 
+2026-05-14 23:25:32,613 - INFO  - Post Condition:
+2026-05-14 23:25:32,613 - INFO  - [True, False]
+2026-05-14 23:25:32,613 - INFO  - 
+2026-05-14 23:25:33,348 - INFO  - syntax Correct
+2026-05-14 23:25:34,356 - INFO  - Loop Invariant:
+2026-05-14 23:25:34,356 - INFO  - [True, True, True, True]
+2026-05-14 23:25:34,356 - INFO  - 
+2026-05-14 23:25:34,356 - INFO  - Assertion:
+2026-05-14 23:25:34,356 - INFO  - []
+2026-05-14 23:25:34,356 - INFO  - 
+2026-05-14 23:25:34,356 - INFO  - Assigns:
+2026-05-14 23:25:34,357 - INFO  - [True, True, True, True]
+2026-05-14 23:25:34,357 - INFO  - 
+2026-05-14 23:25:34,357 - INFO  - Post Condition:
+2026-05-14 23:25:34,357 - INFO  - [True]
+2026-05-14 23:25:34,357 - INFO  - 
+2026-05-14 23:25:34,359 - INFO  - 
+SPECIFICATION FOR foo12
+2026-05-14 23:25:34,359 - INFO  - ==================================================
+
+2026-05-14 23:25:34,359 - INFO  - 
+QCP Specification for function foo12:
+/*@
+With a_l b_l
+Require store_int_array(a, a_len, a_l) && a_len > 0 && a_len < 100 && store_int_array(b, b_len, b_l) && b_len > 0 && b_len < 100
+Ensure Results(__return)
+*/
+2026-05-14 23:25:34,445 - INFO  - 
+VERIFICATION FOR foo12
+2026-05-14 23:25:34,445 - INFO  - ==================================================
+
+2026-05-14 23:25:34,446 - INFO  - TRY TIME: 0
+2026-05-14 23:25:35,167 - INFO  - syntax Correct
+2026-05-14 23:25:36,004 - INFO  - Loop Invariant:
+2026-05-14 23:25:36,004 - INFO  - [True, True, True, True]
+2026-05-14 23:25:36,004 - INFO  - 
+2026-05-14 23:25:36,004 - INFO  - Assertion:
+2026-05-14 23:25:36,004 - INFO  - []
+2026-05-14 23:25:36,004 - INFO  - 
+2026-05-14 23:25:36,004 - INFO  - Assigns:
+2026-05-14 23:25:36,004 - INFO  - [True, True, True, True]
+2026-05-14 23:25:36,005 - INFO  - 
+2026-05-14 23:25:36,005 - INFO  - Post Condition:
+2026-05-14 23:25:36,005 - INFO  - [True]
+2026-05-14 23:25:36,005 - INFO  - 
+2026-05-14 23:25:36,005 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo12
+2026-05-14 23:25:36,005 - INFO  - ==================================================
+2026-05-14 23:25:36,005 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo12/20260514_230537_387733_63f0d22d/output/foo12.c
+2026-05-14 23:25:36,005 - INFO  - Output file content:
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer array_sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : array_sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  predicate arrays_equal(int* a, int* b, integer len) =
+    \forall integer i; 0 <= i < len ==> a[i] == b[i];
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len > 0;
+  requires a_len < 100;
+  requires \valid(&b[0] + (0..b_len-1));
+  requires \forall integer i; 0 <= i < b_len ==> 0 <= b[i] <= 100;
+  requires b_len > 0;
+  requires b_len < 100;
+  assigns \nothing;
+  ensures \result == 0 ==> (a_len != b_len || !arrays_equal(a, b, a_len));
+*/
+int foo12(int * a, int a_len, int * b, int b_len) {
+
+    if(a_len != b_len) {
+        return 0;
+    }
+
+    /*@
+      loop invariant 0 <= i <= a_len;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] == b[k];
+      loop invariant \forall integer k; i <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop invariant \forall integer k; i <= k < b_len ==> b[k] == \at(b[k], Pre);
+      loop assigns i;
+      loop variant a_len - i;
+    */
+    for(int i = 0; i < a_len; i++) {
+        if(a[i] != b[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+2026-05-14 23:25:36,005 - INFO  - ==================================================
+2026-05-14 23:25:36,005 - INFO  - first_pass:
+2026-05-14 23:25:36,005 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-14 23:25:36,006 - INFO  - ==================================================
+2026-05-14 23:25:36,006 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-14 23:25:36,006 - INFO  - Total execution time: 1198.72 seconds (19.98 minutes)
+2026-05-14 23:25:36,006 - INFO  - ==================================================
+2026-05-14 23:25:36,006 - INFO  - ==================================================
+2026-05-14 23:25:36,006 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-14 23:25:36,006 - INFO  - Total API calls: 15
+2026-05-14 23:25:36,006 - INFO  - Total prompt tokens (input): 88,134
+2026-05-14 23:25:36,006 - INFO  - Total completion tokens (output): 10,903
+2026-05-14 23:25:36,006 - INFO  - Total tokens: 99,037
+2026-05-14 23:25:36,006 - INFO  - Average prompt tokens per call: 5875.6
+2026-05-14 23:25:36,006 - INFO  - Average completion tokens per call: 726.9
+2026-05-14 23:25:36,006 - INFO  - Average total tokens per call: 6602.5
+2026-05-14 23:25:36,006 - INFO  - ==================================================

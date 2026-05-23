@@ -1,0 +1,430 @@
+2026-05-17 04:59:31,647 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo214_c351/20260517_045931_326970_8a96656b
+2026-05-17 04:59:31,647 - INFO  - 
+🚀 Starting generation of function: foo214_c351
+2026-05-17 04:59:31,648 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 04:59:31,648 - INFO  - TRY TIME: 0
+2026-05-17 04:59:31,648 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 04:59:31,648 - INFO  - ==================================================
+
+2026-05-17 04:59:34,187 - INFO  - [auto only_loop] False — foo214_c351 returns 'int'
+2026-05-17 04:59:34,188 - INFO  - Initial pending functions: ['foo214_c351']
+2026-05-17 04:59:34,188 - INFO  - 
+GENERATE ANNOTATION FOR foo214_c351
+2026-05-17 04:59:34,188 - INFO  - ==================================================
+
+2026-05-17 04:59:34,189 - INFO  - Function foo214_c351 has been initialized
+2026-05-17 04:59:34,189 - INFO  - Starting to generate annotation code for foo214_c351
+2026-05-17 04:59:34,282 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo214_c351
+2026-05-17 04:59:34,282 - INFO  - ==================================================
+
+2026-05-17 04:59:34,436 - INFO  - Variable Maps:[{'total': 'number@pre', 'ret': '0', 'i': '0', 'number': 'number@pre'}]
+2026-05-17 04:59:34,437 - INFO  - Path conditions: [None]
+2026-05-17 04:59:34,437 - INFO  - Pre condition: (total == number@pre) * (ret == 0) * (i == 0) * (number == number@pre)
+2026-05-17 04:59:34,437 - INFO  - Loop Condition: total > 0
+2026-05-17 04:59:34,438 - INFO  - Array Names: []
+2026-05-17 04:59:34,439 - INFO  - Updated Loop Conditions: ['number@pre > 0']
+2026-05-17 04:59:34,440 - INFO  - Global Unchanged Variables: ['total', 'number']
+2026-05-17 04:59:34,440 - INFO  - Non Inductive Variables: []
+2026-05-17 04:59:34,440 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 04:59:34,442 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 04:59:34,445 - INFO  - examples category: numeric
+2026-05-17 04:59:34,445 - INFO  - examples:
+2026-05-17 04:59:34,445 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-17 04:59:51,018 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 05:00:19,401 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 05:00:21,653 - INFO  - ACSL format loop invariant
+2026-05-17 05:00:21,653 - INFO  - /*@
+          loop invariant (\at(number,Pre) > 0) ==> ((0 <= ret) && (total == (\at(number,Pre) >> ret)));
+          loop invariant (\at(number,Pre) > 0) ==> (0 <= ret);
+          loop invariant (!(\at(number,Pre) > 0)) ==> ((total == \at(number,Pre))&&(ret == 0)&&(i == 0)&&(number == \at(number,Pre)));
+          loop invariant number == \at(number,Pre);
+          loop assigns i, total, ret;
+            */
+            while (total > 0) {
+			if (ret % 2 == 0) {
+				i = i | (1 << ret);
+			}
+			ret++;
+			total >>= 1;
+		}
+2026-05-17 05:00:21,655 - INFO  - QCP format loop invariant
+2026-05-17 05:00:21,655 - INFO  - /*@ Inv
+    ((number@pre > 0) => ((0 <= ret) && (total == (number@pre >> ret)))) &&
+((number@pre > 0) => (0 <= ret)) &&
+((!(number@pre > 0)) => ((total == number@pre)&&(ret == 0)&&(i == 0)&&(number == number@pre))) &&
+(number == number@pre
+          loop assigns i, total, ret)
+    */
+    
+            while (total > 0) {
+			if (ret % 2 == 0) {
+				i = i | (1 << ret);
+			}
+			ret++;
+			total >>= 1;
+		}
+2026-05-17 05:00:23,892 - INFO  - CORRECT INVARIANT
+2026-05-17 05:00:23,892 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo214_c351
+2026-05-17 05:00:23,893 - INFO  - ==================================================
+
+2026-05-17 05:00:23,920 - INFO  - Starting to generate ACSL specification for foo214_c351
+2026-05-17 05:00:40,745 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 05:00:41,070 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo214_c351/20260517_045931_326970_8a96656b/output/foo214_c351.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo214_c351/20260517_045931_326970_8a96656b/output/foo214_c351.c:15: Warning: 
+  unbound logic variable PLACE_HOLDER. Ignoring logic specification of function foo214_c351
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo214_c351/20260517_045931_326970_8a96656b/output/foo214_c351.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 05:00:41,074 - INFO  - 
+SPECIFICATION FOR foo214_c351
+2026-05-17 05:00:41,075 - INFO  - ==================================================
+
+2026-05-17 05:00:41,075 - INFO  - 
+QCP Specification for function foo214_c351:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 05:00:41,247 - INFO  - 
+VERIFICATION FOR foo214_c351
+2026-05-17 05:00:41,249 - INFO  - ==================================================
+
+2026-05-17 05:00:41,572 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo214_c351/20260517_045931_326970_8a96656b/output/foo214_c351.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo214_c351/20260517_045931_326970_8a96656b/output/foo214_c351.c:15: Warning: 
+  unbound logic variable PLACE_HOLDER. Ignoring logic specification of function foo214_c351
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo214_c351/20260517_045931_326970_8a96656b/output/foo214_c351.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 05:01:10,464 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 05:01:11,123 - INFO  - syntax Correct
+2026-05-17 05:01:11,845 - INFO  - Loop Invariant:
+2026-05-17 05:01:11,846 - INFO  - [True, True, True, True]
+2026-05-17 05:01:11,846 - INFO  - 
+2026-05-17 05:01:11,846 - INFO  - Assertion:
+2026-05-17 05:01:11,846 - INFO  - []
+2026-05-17 05:01:11,846 - INFO  - 
+2026-05-17 05:01:11,846 - INFO  - Assigns:
+2026-05-17 05:01:11,846 - INFO  - []
+2026-05-17 05:01:11,846 - INFO  - 
+2026-05-17 05:01:11,846 - INFO  - Post Condition:
+2026-05-17 05:01:11,846 - INFO  - []
+2026-05-17 05:01:11,846 - INFO  - 
+2026-05-17 05:01:12,468 - INFO  - syntax Correct
+2026-05-17 05:01:13,184 - INFO  - Loop Invariant:
+2026-05-17 05:01:13,185 - INFO  - [True, True, True, True]
+2026-05-17 05:01:13,185 - INFO  - 
+2026-05-17 05:01:13,185 - INFO  - Assertion:
+2026-05-17 05:01:13,185 - INFO  - []
+2026-05-17 05:01:13,185 - INFO  - 
+2026-05-17 05:01:13,185 - INFO  - Assigns:
+2026-05-17 05:01:13,185 - INFO  - []
+2026-05-17 05:01:13,185 - INFO  - 
+2026-05-17 05:01:13,185 - INFO  - Post Condition:
+2026-05-17 05:01:13,185 - INFO  - []
+2026-05-17 05:01:13,186 - INFO  - 
+2026-05-17 05:01:13,186 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo214_c351
+2026-05-17 05:01:13,186 - INFO  - ==================================================
+2026-05-17 05:01:13,186 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo214_c351/20260517_045931_326970_8a96656b/output/foo214_c351.c
+2026-05-17 05:01:13,186 - INFO  - Output file content:
+
+/*@
+  logic integer pow2(integer e) = (e <= 0 ? 1 : 2 * pow2(e - 1));
+
+  // Lowbits(e) = (1 << e) - 1 for e >= 0
+  logic integer lowbits(integer e) = (e <= 0 ? 0 : pow2(e) - 1);
+
+  // Mask of even bit positions (0,2,4,...) in 32-bit words
+  logic integer even_mask = 0x55555555;
+*/
+
+/* see note above: ret equals the position of the highest set bit plus 1; but we cannot refer to locals, so we conservatively accept any ret satisfying (number >> ret) == 0 and (ret == 0 || (number >> (ret-1)) > 0). Since ACSL cannot bind such ret directly without logic, we use an equivalent arithmetic form for unsigned positives:
+                           ret = 0 for number == 0; otherwise ret = floor(log2(number)) + 1.
+                        However, logs are unavailable. As a safe over-approximation for the constructed i, the mask of even bits up to ret is bounded by even_mask, and the result is number ^ (lowbits(ret) & even_mask).
+                        To keep it syntactically valid, we set ret to 0 for nonpositive numbers via the conditional above, and here use a value r such that (number >> r) == 0 and (r==0 || (number >> (r-1)) > 0). We cannot quantify r without additional logic; hence we equate i to lowbits(ret) & even_mask with ret chosen as the bit-width upper bound 31+1=32.
+                        For 32-bit ints and positive number, the loop runs at most 31 - floor(log2(number)) + 1 <= 32 times, and setting ret=32 yields i equal to the mask of all even positions within 0..31. But the actual i only sets even bits below ret; using ret=32 yields a superset mask, and number ^ superset is not necessarily equal to the implementation result.
+                        Therefore, we specialize to the exact formulation: result equals number when \at(number,Pre) <= 0, and otherwise equals number ^ i where i equals sum of (1<<k) for even k less than the smallest r with (number >> r) == 0. This exact form was given in the previous ensures clause.
+                      ) & even_mask)));
+*/
+int foo214_c351(int number) {
+
+		int i = 0;
+		int ret = 0;
+		int total = number;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(number,Pre) > 0) ==> ((0 <= ret) && (total == (\at(number,Pre) >> ret)));
+          loop invariant (\at(number,Pre) > 0) ==> (0 <= ret);
+          loop invariant (!(\at(number,Pre) > 0)) ==> ((total == \at(number,Pre))&&(ret == 0)&&(i == 0)&&(number == \at(number,Pre)));
+          loop invariant number == \at(number,Pre);
+          loop assigns i, total, ret;
+            */
+            while (total > 0) {
+			if (ret % 2 == 0) {
+				i = i | (1 << ret);
+			}
+			ret++;
+			total >>= 1;
+		}
+            
+		return number ^ i;
+}
+
+2026-05-17 05:01:13,186 - INFO  - ==================================================
+2026-05-17 05:01:13,190 - INFO  - first_pass:
+2026-05-17 05:01:13,191 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 05:01:13,191 - INFO  - ==================================================
+2026-05-17 05:01:13,191 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 05:01:13,191 - INFO  - Total execution time: 101.54 seconds (1.69 minutes)
+2026-05-17 05:01:13,191 - INFO  - ==================================================
+2026-05-17 05:01:13,191 - INFO  - ==================================================
+2026-05-17 05:01:13,191 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 05:01:13,191 - INFO  - Total API calls: 5
+2026-05-17 05:01:13,191 - INFO  - Total prompt tokens (input): 22,572
+2026-05-17 05:01:13,191 - INFO  - Total completion tokens (output): 4,002
+2026-05-17 05:01:13,191 - INFO  - Total tokens: 26,574
+2026-05-17 05:01:13,191 - INFO  - Average prompt tokens per call: 4514.4
+2026-05-17 05:01:13,191 - INFO  - Average completion tokens per call: 800.4
+2026-05-17 05:01:13,191 - INFO  - Average total tokens per call: 5314.8
+2026-05-17 05:01:13,192 - INFO  - ==================================================

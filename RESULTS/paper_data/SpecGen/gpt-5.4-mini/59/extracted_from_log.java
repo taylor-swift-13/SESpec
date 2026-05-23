@@ -1,0 +1,41 @@
+class SVCOMP_linear_0161__243 {
+    //@ ensures \result == 0;
+    static int unknown() {
+        return 0;
+    }
+
+    //@ ensures true;
+    static void foo243() {
+
+        int x = 0;
+        int y = 0;
+
+        y = 1;
+
+        //@ maintaining true;
+        //@ decreases 1;
+        while(unknown() != 0){
+            if(x % 3 == 1){
+                x = x + 2;
+                y = 0;
+            }
+            else{
+                if(x % 3 == 2){
+                    x = x + 1;
+                    y = 0;
+                }
+                else{
+                    if(unknown() != 0){
+                        x = x + 4;
+                        y = 1;
+                    }
+                    else{
+                        x = x + 5;
+                        y = 1;
+                    }
+                }
+            }
+        }
+
+    }
+}

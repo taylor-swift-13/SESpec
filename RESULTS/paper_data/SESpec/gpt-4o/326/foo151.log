@@ -1,0 +1,1433 @@
+2026-05-15 01:49:06,136 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo151/20260515_014906_785775_468b94b5
+2026-05-15 01:49:06,137 - INFO  - 
+🚀 Starting generation of function: foo151
+2026-05-15 01:49:06,137 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 01:49:06,137 - INFO  - ==================================================
+
+2026-05-15 01:49:06,151 - INFO  - [auto only_loop] False — foo151 returns 'int'
+2026-05-15 01:49:06,151 - INFO  - Initial pending functions: ['foo151']
+2026-05-15 01:49:06,151 - INFO  - 
+GENERATE ANNOTATION FOR foo151
+2026-05-15 01:49:06,151 - INFO  - ==================================================
+
+2026-05-15 01:49:06,151 - INFO  - Function foo151 has been initialized
+2026-05-15 01:49:06,151 - INFO  - Starting to generate annotation code for foo151
+2026-05-15 01:49:06,200 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo151
+2026-05-15 01:49:06,200 - INFO  - ==================================================
+
+2026-05-15 01:49:06,264 - INFO  - Variable Maps:[{'first': '1', 'num': 'num@pre'}]
+2026-05-15 01:49:06,265 - INFO  - Path conditions: [None]
+2026-05-15 01:49:06,265 - INFO  - Pre condition: (first == 1) * (num == num@pre)
+2026-05-15 01:49:06,265 - INFO  - Loop Condition: c <= num
+2026-05-15 01:49:06,266 - INFO  - Array Names: []
+2026-05-15 01:49:06,266 - INFO  - Updated Loop Conditions: ['c <= num@pre']
+2026-05-15 01:49:06,267 - INFO  - Global Unchanged Variables: ['num']
+2026-05-15 01:49:06,267 - INFO  - Non Inductive Variables: []
+2026-05-15 01:49:06,267 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 01:49:06,268 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 01:49:06,269 - INFO  - examples category: numeric
+2026-05-15 01:49:06,269 - INFO  - examples:
+2026-05-15 01:49:06,270 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 01:49:40,099 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 01:50:16,005 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+2026-05-15 01:50:49,667 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 01:51:53,604 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-15 01:51:53,604 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 01:52:15,148 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+2026-05-15 01:53:24,028 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 01:53:24,028 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 01:53:45,425 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+2026-05-15 01:54:15,194 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 01:54:15,194 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 01:54:36,783 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+2026-05-15 01:55:06,632 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 01:55:06,632 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 01:55:06,634 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8, 0.0), clauses=5)
+2026-05-15 01:56:13,678 - INFO  - ACSL format loop invariant
+2026-05-15 01:56:13,678 - INFO  - /*@
+      loop invariant num == \at(num,Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+2026-05-15 01:56:13,680 - INFO  - QCP format loop invariant
+2026-05-15 01:56:13,680 - INFO  - /*@ Inv
+    (num == num@pre
+      loop assigns c, first)
+    */
+    
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+2026-05-15 01:56:13,698 - INFO  - Variable Maps:[{}]
+2026-05-15 01:56:13,699 - INFO  - Path conditions: [None]
+2026-05-15 01:56:13,699 - INFO  - Pre condition: 
+2026-05-15 01:56:13,699 - INFO  - Loop Condition: first > 0
+2026-05-15 01:56:13,700 - INFO  - Array Names: []
+2026-05-15 01:56:13,700 - INFO  - Updated Loop Conditions: ['first > 0']
+2026-05-15 01:56:13,700 - INFO  - Global Unchanged Variables: []
+2026-05-15 01:56:13,700 - INFO  - Non Inductive Variables: []
+2026-05-15 01:56:13,700 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 01:56:13,701 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 01:56:13,702 - INFO  - examples category: numeric
+2026-05-15 01:56:13,703 - INFO  - examples:
+2026-05-15 01:56:13,703 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 01:56:43,041 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-15 01:57:13,591 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 01:57:43,904 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-15 01:58:14,925 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 01:58:14,925 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-15 01:58:36,529 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 01:59:06,512 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 01:59:06,512 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-15 01:59:28,150 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:00:01,325 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:00:01,325 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-15 02:00:23,190 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:00:39,948 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:00:39,948 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-15 02:00:39,949 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8333333333333334, 0.0), clauses=6)
+2026-05-15 02:01:48,337 - INFO  - ACSL format loop invariant
+2026-05-15 02:01:48,337 - INFO  - /*@
+      loop invariant result >= 0;
+      loop assigns result, first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+2026-05-15 02:01:48,337 - INFO  - QCP format loop invariant
+2026-05-15 02:01:48,338 - INFO  - /*@ Inv
+    (result >= 0
+      loop assigns result, first)
+    */
+    
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+2026-05-15 02:01:50,143 - INFO  - CORRECT INVARIANT
+2026-05-15 02:01:50,144 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo151
+2026-05-15 02:01:50,144 - INFO  - ==================================================
+
+2026-05-15 02:01:50,154 - INFO  - Starting to generate ACSL specification for foo151
+2026-05-15 02:02:10,903 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo151/20260515_014906_785775_468b94b5/output/foo151.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo151/20260515_014906_785775_468b94b5/output/foo151.c:6: Warning: 
+  unbound logic function factorial. Ignoring logic specification of function foo151
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo151/20260515_014906_785775_468b94b5/output/foo151.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:02:10,904 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-15 02:02:45,872 - INFO  - syntax Correct
+2026-05-15 02:02:57,549 - INFO  - Loop Invariant:
+2026-05-15 02:02:57,550 - INFO  - [False, True, True, False, True]
+2026-05-15 02:02:57,550 - INFO  - 
+2026-05-15 02:02:57,550 - INFO  - Assertion:
+2026-05-15 02:02:57,550 - INFO  - []
+2026-05-15 02:02:57,550 - INFO  - 
+2026-05-15 02:02:57,551 - INFO  - Assigns:
+2026-05-15 02:02:57,551 - INFO  - [True, True]
+2026-05-15 02:02:57,551 - INFO  - 
+2026-05-15 02:02:57,551 - INFO  - Post Condition:
+2026-05-15 02:02:57,551 - INFO  - [True, False]
+2026-05-15 02:02:57,551 - INFO  - 
+2026-05-15 02:02:57,552 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=4
+2026-05-15 02:02:57,552 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10 [POSTCONDITION FAILED];
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:03:46,590 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10;
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+      loop variant num - c + 1;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:03:57,992 - INFO  - syntax Correct
+2026-05-15 02:04:09,008 - INFO  - Loop Invariant:
+2026-05-15 02:04:09,008 - INFO  - [False, True, True, False, True]
+2026-05-15 02:04:09,009 - INFO  - 
+2026-05-15 02:04:09,009 - INFO  - Assertion:
+2026-05-15 02:04:09,009 - INFO  - []
+2026-05-15 02:04:09,009 - INFO  - 
+2026-05-15 02:04:09,009 - INFO  - Assigns:
+2026-05-15 02:04:09,009 - INFO  - [True, True]
+2026-05-15 02:04:09,009 - INFO  - 
+2026-05-15 02:04:09,009 - INFO  - Post Condition:
+2026-05-15 02:04:09,009 - INFO  - [True, False]
+2026-05-15 02:04:09,009 - INFO  - 
+2026-05-15 02:04:09,010 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=4
+2026-05-15 02:04:09,010 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10 [POSTCONDITION FAILED];
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+      loop variant num - c + 1;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:04:25,132 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10;
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+      loop variant num - c + 1;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:04:36,582 - INFO  - syntax Correct
+2026-05-15 02:04:48,043 - INFO  - Loop Invariant:
+2026-05-15 02:04:48,043 - INFO  - [False, True, True, False, True]
+2026-05-15 02:04:48,043 - INFO  - 
+2026-05-15 02:04:48,043 - INFO  - Assertion:
+2026-05-15 02:04:48,043 - INFO  - []
+2026-05-15 02:04:48,043 - INFO  - 
+2026-05-15 02:04:48,043 - INFO  - Assigns:
+2026-05-15 02:04:48,043 - INFO  - [True, True]
+2026-05-15 02:04:48,043 - INFO  - 
+2026-05-15 02:04:48,043 - INFO  - Post Condition:
+2026-05-15 02:04:48,044 - INFO  - [True, False]
+2026-05-15 02:04:48,044 - INFO  - 
+2026-05-15 02:04:48,044 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=4
+2026-05-15 02:04:48,044 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:05:01,110 - INFO  - syntax Correct
+2026-05-15 02:05:13,185 - INFO  - Loop Invariant:
+2026-05-15 02:05:13,185 - INFO  - [False, True, True, False, True]
+2026-05-15 02:05:13,185 - INFO  - 
+2026-05-15 02:05:13,186 - INFO  - Assertion:
+2026-05-15 02:05:13,186 - INFO  - []
+2026-05-15 02:05:13,186 - INFO  - 
+2026-05-15 02:05:13,186 - INFO  - Assigns:
+2026-05-15 02:05:13,186 - INFO  - [True, True]
+2026-05-15 02:05:13,186 - INFO  - 
+2026-05-15 02:05:13,186 - INFO  - Post Condition:
+2026-05-15 02:05:13,186 - INFO  - [True, False]
+2026-05-15 02:05:13,186 - INFO  - 
+2026-05-15 02:05:13,187 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=4
+2026-05-15 02:05:13,187 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10 [POSTCONDITION FAILED];
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:05:42,261 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 0 && num <= 12; // Ensure num is within a safe range to avoid overflow
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10; // Postcondition holds for valid input
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first >= 1; // Ensure first is always positive
+      loop invariant first == factorial(c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:05:54,128 - INFO  - syntax Correct
+2026-05-15 02:06:05,333 - INFO  - Loop Invariant:
+2026-05-15 02:06:05,333 - INFO  - [False, True, True, True, True, True]
+2026-05-15 02:06:05,333 - INFO  - 
+2026-05-15 02:06:05,333 - INFO  - Assertion:
+2026-05-15 02:06:05,333 - INFO  - []
+2026-05-15 02:06:05,334 - INFO  - 
+2026-05-15 02:06:05,334 - INFO  - Assigns:
+2026-05-15 02:06:05,334 - INFO  - [True, True]
+2026-05-15 02:06:05,334 - INFO  - 
+2026-05-15 02:06:05,334 - INFO  - Post Condition:
+2026-05-15 02:06:05,334 - INFO  - [True, False]
+2026-05-15 02:06:05,334 - INFO  - 
+2026-05-15 02:06:05,334 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=4
+2026-05-15 02:06:05,335 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 0 && num <= 12; // Ensure num is within a safe range to avoid overflow
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10 [POSTCONDITION FAILED]; // Postcondition holds for valid input
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first >= 1; // Ensure first is always positive
+      loop invariant first == factorial(c - 1);
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:06:32,028 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 1 && num <= 12; // Ensure num is within a safe range to avoid overflow and loop execution
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10; // Postcondition holds for valid input
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1); // Ensure first represents factorial(c - 1)
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:06:44,900 - INFO  - syntax Correct
+2026-05-15 02:06:55,967 - INFO  - Loop Invariant:
+2026-05-15 02:06:55,967 - INFO  - [True, True, True, True, True]
+2026-05-15 02:06:55,967 - INFO  - 
+2026-05-15 02:06:55,967 - INFO  - Assertion:
+2026-05-15 02:06:55,967 - INFO  - []
+2026-05-15 02:06:55,967 - INFO  - 
+2026-05-15 02:06:55,967 - INFO  - Assigns:
+2026-05-15 02:06:55,967 - INFO  - [True, True]
+2026-05-15 02:06:55,967 - INFO  - 
+2026-05-15 02:06:55,968 - INFO  - Post Condition:
+2026-05-15 02:06:55,968 - INFO  - [True, False]
+2026-05-15 02:06:55,968 - INFO  - 
+2026-05-15 02:06:55,968 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=4
+2026-05-15 02:06:55,968 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 1 && num <= 12; // Ensure num is within a safe range to avoid overflow and loop execution
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10 [POSTCONDITION FAILED]; // Postcondition holds for valid input
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1); // Ensure first represents factorial(c - 1)
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:07:11,947 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 1 && num <= 12; // Ensure num is within a safe range to avoid overflow and loop execution
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10; // Postcondition holds for valid input
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1); // Ensure first represents factorial(c - 1)
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:07:23,029 - INFO  - syntax Correct
+2026-05-15 02:07:34,223 - INFO  - Loop Invariant:
+2026-05-15 02:07:34,223 - INFO  - [True, True, True, True, True]
+2026-05-15 02:07:34,224 - INFO  - 
+2026-05-15 02:07:34,224 - INFO  - Assertion:
+2026-05-15 02:07:34,224 - INFO  - []
+2026-05-15 02:07:34,224 - INFO  - 
+2026-05-15 02:07:34,224 - INFO  - Assigns:
+2026-05-15 02:07:34,224 - INFO  - [True, True]
+2026-05-15 02:07:34,225 - INFO  - 
+2026-05-15 02:07:34,225 - INFO  - Post Condition:
+2026-05-15 02:07:34,225 - INFO  - [True, False]
+2026-05-15 02:07:34,225 - INFO  - 
+2026-05-15 02:07:34,226 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=4
+2026-05-15 02:07:34,226 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 1 && num <= 12; // Ensure num is within a safe range to avoid overflow and loop execution
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10 [POSTCONDITION FAILED]; // Postcondition holds for valid input
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1); // Ensure first represents factorial(c - 1)
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:07:48,885 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 1 && num <= 12; // Ensure num is within a safe range to avoid overflow and loop execution
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10; // Postcondition holds for valid input
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1); // Ensure first represents factorial(c - 1)
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:08:00,345 - INFO  - syntax Correct
+2026-05-15 02:08:11,396 - INFO  - Loop Invariant:
+2026-05-15 02:08:11,396 - INFO  - [True, True, True, True, True]
+2026-05-15 02:08:11,396 - INFO  - 
+2026-05-15 02:08:11,396 - INFO  - Assertion:
+2026-05-15 02:08:11,396 - INFO  - []
+2026-05-15 02:08:11,396 - INFO  - 
+2026-05-15 02:08:11,397 - INFO  - Assigns:
+2026-05-15 02:08:11,397 - INFO  - [True, True]
+2026-05-15 02:08:11,397 - INFO  - 
+2026-05-15 02:08:11,397 - INFO  - Post Condition:
+2026-05-15 02:08:11,397 - INFO  - [True, False]
+2026-05-15 02:08:11,397 - INFO  - 
+2026-05-15 02:08:11,398 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=4
+2026-05-15 02:08:11,398 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-15 02:08:22,497 - INFO  - syntax Correct
+2026-05-15 02:08:33,433 - INFO  - Loop Invariant:
+2026-05-15 02:08:33,433 - INFO  - [True, True, True, True, True]
+2026-05-15 02:08:33,433 - INFO  - 
+2026-05-15 02:08:33,434 - INFO  - Assertion:
+2026-05-15 02:08:33,434 - INFO  - []
+2026-05-15 02:08:33,434 - INFO  - 
+2026-05-15 02:08:33,434 - INFO  - Assigns:
+2026-05-15 02:08:33,434 - INFO  - [True, True]
+2026-05-15 02:08:33,434 - INFO  - 
+2026-05-15 02:08:33,434 - INFO  - Post Condition:
+2026-05-15 02:08:33,434 - INFO  - [True, False]
+2026-05-15 02:08:33,434 - INFO  - 
+2026-05-15 02:08:33,435 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=4
+2026-05-15 02:08:33,435 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 1 && num <= 12; // Ensure num is within a safe range to avoid overflow and loop execution
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10 [POSTCONDITION FAILED]; // Postcondition holds for valid input
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1); // Ensure first represents factorial(c - 1)
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:08:54,736 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 1 && num <= 12; // Ensure num is within a safe range to avoid overflow and loop execution
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures \result == factorial(num) % 10; // Postcondition holds for valid input
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1); // Ensure first represents factorial(c - 1)
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+      loop variant num - c + 1;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:08:54,738 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8888888888888888, 0.0), clauses=4)
+2026-05-15 02:09:07,075 - INFO  - syntax Correct
+2026-05-15 02:09:18,175 - INFO  - Loop Invariant:
+2026-05-15 02:09:18,176 - INFO  - [True, True, True, True, True]
+2026-05-15 02:09:18,176 - INFO  - 
+2026-05-15 02:09:18,176 - INFO  - Assertion:
+2026-05-15 02:09:18,176 - INFO  - []
+2026-05-15 02:09:18,177 - INFO  - 
+2026-05-15 02:09:18,177 - INFO  - Assigns:
+2026-05-15 02:09:18,177 - INFO  - [True, True]
+2026-05-15 02:09:18,177 - INFO  - 
+2026-05-15 02:09:18,177 - INFO  - Post Condition:
+2026-05-15 02:09:18,178 - INFO  - [True, False]
+2026-05-15 02:09:18,178 - INFO  - 
+2026-05-15 02:09:29,434 - INFO  - syntax Correct
+2026-05-15 02:09:30,915 - INFO  - Loop Invariant:
+2026-05-15 02:09:30,916 - INFO  - [True, True, True, True, True]
+2026-05-15 02:09:30,916 - INFO  - 
+2026-05-15 02:09:30,916 - INFO  - Assertion:
+2026-05-15 02:09:30,916 - INFO  - []
+2026-05-15 02:09:30,916 - INFO  - 
+2026-05-15 02:09:30,916 - INFO  - Assigns:
+2026-05-15 02:09:30,916 - INFO  - [True, True]
+2026-05-15 02:09:30,917 - INFO  - 
+2026-05-15 02:09:30,917 - INFO  - Post Condition:
+2026-05-15 02:09:30,917 - INFO  - [True]
+2026-05-15 02:09:30,917 - INFO  - 
+2026-05-15 02:09:30,919 - INFO  - 
+SPECIFICATION FOR foo151
+2026-05-15 02:09:30,920 - INFO  - ==================================================
+
+2026-05-15 02:09:30,920 - INFO  - 
+QCP Specification for function foo151:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-15 02:09:31,029 - INFO  - 
+VERIFICATION FOR foo151
+2026-05-15 02:09:31,032 - INFO  - ==================================================
+
+2026-05-15 02:09:31,032 - INFO  - TRY TIME: 0
+2026-05-15 02:09:42,248 - INFO  - syntax Correct
+2026-05-15 02:09:43,798 - INFO  - Loop Invariant:
+2026-05-15 02:09:43,799 - INFO  - [True, True, True, True, True]
+2026-05-15 02:09:43,801 - INFO  - 
+2026-05-15 02:09:43,802 - INFO  - Assertion:
+2026-05-15 02:09:43,802 - INFO  - []
+2026-05-15 02:09:43,802 - INFO  - 
+2026-05-15 02:09:43,802 - INFO  - Assigns:
+2026-05-15 02:09:43,802 - INFO  - [True, True]
+2026-05-15 02:09:43,802 - INFO  - 
+2026-05-15 02:09:43,802 - INFO  - Post Condition:
+2026-05-15 02:09:43,802 - INFO  - [True]
+2026-05-15 02:09:43,802 - INFO  - 
+2026-05-15 02:09:43,803 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo151
+2026-05-15 02:09:43,803 - INFO  - ==================================================
+2026-05-15 02:09:43,803 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo151/20260515_014906_785775_468b94b5/output/foo151.c
+2026-05-15 02:09:43,803 - INFO  - Output file content:
+
+/*@ 
+  logic integer factorial(integer n) = 
+    (n == 0 ? 1 : n * factorial(n - 1));
+*/
+
+/*@
+  requires num >= 1 && num <= 12; // Ensure num is within a safe range to avoid overflow and loop execution
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+*/
+int foo151(int num) {
+
+    int first = 1;
+
+    /*@
+      loop invariant 2 <= c <= num + 1;
+      loop invariant first == factorial(c - 1); // Ensure first represents factorial(c - 1)
+      loop invariant num == \at(num, Pre);
+      loop assigns c, first;
+    */
+    for (int c = 2; c <= num; c++) {
+        first *= c;
+    }
+
+    int result = 0;
+
+    /*@
+      loop invariant first >= 0;
+      loop invariant result >= 0 && result < 10;
+      loop assigns result, first;
+      loop variant first;
+    */
+    while (first > 0) {
+        result = first % 10;
+        first /= 10;
+    }
+
+    return result;
+}
+
+2026-05-15 02:09:43,803 - INFO  - ==================================================
+2026-05-15 02:09:43,803 - INFO  - first_pass:
+2026-05-15 02:09:43,803 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 02:09:43,803 - INFO  - ==================================================
+2026-05-15 02:09:43,804 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 02:09:43,804 - INFO  - Total execution time: 1237.67 seconds (20.63 minutes)
+2026-05-15 02:09:43,804 - INFO  - ==================================================
+2026-05-15 02:09:43,804 - INFO  - ==================================================
+2026-05-15 02:09:43,804 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 02:09:43,804 - INFO  - Total API calls: 22
+2026-05-15 02:09:43,804 - INFO  - Total prompt tokens (input): 186,512
+2026-05-15 02:09:43,804 - INFO  - Total completion tokens (output): 10,517
+2026-05-15 02:09:43,804 - INFO  - Total tokens: 197,029
+2026-05-15 02:09:43,804 - INFO  - Average prompt tokens per call: 8477.8
+2026-05-15 02:09:43,805 - INFO  - Average completion tokens per call: 478.0
+2026-05-15 02:09:43,805 - INFO  - Average total tokens per call: 8955.9
+2026-05-15 02:09:43,805 - INFO  - ==================================================

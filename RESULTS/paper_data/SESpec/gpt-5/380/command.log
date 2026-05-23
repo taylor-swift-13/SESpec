@@ -1,0 +1,1046 @@
+$ /home/yangfp/miniconda3/envs/SpecAutoGen/bin/python main.py --config /home/yangfp/SESpec/src/results/tmp/sespec_default_sespec_380_gpt-5_20260516_144148_3149234_d330ecc0.json
+
+[stdout]
+🚀 Starting specification generation for function: foo289
+📁 Project directory: sespec
+📄 Configuration file: /home/yangfp/SESpec/src/results/tmp/sespec_default_sespec_380_gpt-5_20260516_144148_3149234_d330ecc0.json
+🤖 Using model: gpt-5
+workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60
+
+🚀 Starting generation of function: foo289
+
+OUTER PASS: 1/1
+TRY TIME: 0
+
+FUNCTION INITIALIZATION
+==================================================
+
+[auto only_loop] False — foo289 returns 'int'
+Initial pending functions: ['foo289']
+
+GENERATE ANNOTATION FOR foo289
+==================================================
+
+Function foo289 has been initialized
+Starting to generate annotation code for foo289
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/3_output/foo289.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/1_output/foo289.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/2_output/foo289.c created and written successfully.
+
+GENERATE LOOP INVARIANT FOR foo289
+==================================================
+
+Loop 0 : Outer
+Sorted indices: [0]
+LoopEntry_0:
+(sum == 0) * (number == number@pre)
+[1;31mfatal error: [0mbison: syntax error, unexpected PT_INT in /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/2_output/foo289.c:21:9
+Successfully generated /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/loop/foo289.json
+(sum == 0) * (number == number@pre)
+Variable Maps:[{'sum': '0', 'number': 'number@pre'}]
+Path conditions: [None]
+Pre condition: (sum == 0) * (number == number@pre)
+Loop Condition: i <= number / 2
+Array Names: []
+Updated Loop Conditions: ['i <= number@pre / 2']
+Global Unchanged Variables: ['number']
+Non Inductive Variables: []
+Unchanged Arrays (Read-only): []
+[inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+examples category: numeric
+examples:
+
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+[inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+[inv-gen] refine 2/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+[inv-gen] refine 3/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+[inv-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=3
+[inv-gen] converged at refine 4
+[inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+ACSL format loop invariant
+/*@
+          loop invariant 1 <= i;
+          loop invariant sum == partial_div_sum(number, i);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+            */
+            for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+QCP format loop invariant
+/*@ Inv
+    (1 <= i) &&
+(sum == partial_div_sum(number, i)) &&
+(number == number@pre
+          loop assigns i, sum)
+    */
+    
+            for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+LoopEntry_0:
+(sum == 0) * (number == number@pre)
+[1;31mfatal error: [0mbison: syntax error, unexpected PT_IDENT, expecting PT_RPAREN or PT_COLON in /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/2_output/foo289.c:24:14
+Successfully generated /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/loop/foo289.json
+CORRECT INVARIANT
+
+GENERATE FUNCTION SPECIFICATION FOR foo289
+==================================================
+
+Starting to generate ACSL specification for foo289
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:4: Warning: 
+  unbound logic function partial_div_sum. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     - Frama-C reports “unbound logic function partial_div_sum. Ignoring global annotation.” This means the annotations reference a logic function named partial_div_sum that has not been defined anywhere in the file (pitfall A9). As a result, any contract using it is ignored and treated as an error.
+  3     - The code also defines a logic function sum_divisors_upto_half that itself calls partial_div_sum, so it too becomes invalid.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     - Frama-C’s syntax error shows that non-C text (“Error Analysis: …”) was inserted directly into the C source, before any ACSL comment markers. Anything outside proper C/ACSL syntax causes a parser error at the first token (“Error Analysis”), as reported.
+  3     - Additionally, previous runs indicated “unbound logic function partial_div_sum”, meaning contracts referenced partial_div_sum without a preceding logic definition (pitfall A9/A9a). The provided loop invariants and ensures rely on this helper.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:4: Warning: 
+  unbound logic function partial_div_sum. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     - Frama-C reports “unbound logic function partial_div_sum. Ignoring global annotation”. This means the annotations reference a logic function named partial_div_sum that is not defined anywhere in the file (Universal pitfall A9/A9a).
+  3     - Both the top-level logic definition sum_divisors_upto_half and the function contract and loop invariants use partial_div_sum. Without a prior definition, Frama-C cannot parse or type-check those annotations and aborts.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:4: Warning: 
+  unbound logic function partial_div_sum. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     Frama-C reports “unbound logic function partial_div_sum” and ignores the global annotation. This occurs because the annotations reference a logic function partial_div_sum that is not defined anywhere. According to ACSL rules, any logic function used in contracts must be defined at file scope before it is referenced (Universal pitfall A9/A9a). In the provided code, both the global logic function sum_divisors_upto_half and the function contract and loop invariants refer to partial_div_sum, but no definition exists. The fix is to introduce a proper top-level ACSL logic function definition for partial_div_sum that matches the intended meaning: the sum of divisors of ‘number’ from 1 up to a bound, which is consistent with its uses in the postcondition and loop invariants. Also, ensure each logic definition is in its own /*@ ... */ block (A2), and do not use \old in loop invariants (A11). The rest of the annotations are fine once partial_div_sum is defined.
+  3
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:4: Warning: 
+  unbound logic function partial_div_sum. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     - Frama-C reports “unbound logic function partial_div_sum. Ignoring global annotation”. This means the annotations reference a logic function named partial_div_sum that is not defined anywhere in the file (Universal pitfall A9).
+  3     - The code currently defines a logic function sum_divisors_upto_half that itself uses partial_div_sum. Since partial_div_sum is not defined before its use, both this logic definition and any contract clauses using partial_div_sum are ignored and cause the fatal error.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:4: Warning: 
+  unbound logic function partial_div_sum. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+[spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=2)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:4: Warning: 
+  unbound logic function partial_div_sum. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+
+SPECIFICATION FOR foo289
+==================================================
+
+
+QCP Specification for function foo289:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+
+VERIFICATION FOR foo289
+==================================================
+
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:4: Warning: 
+  unbound logic function partial_div_sum. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:4: Warning: 
+  unbound logic function partial_div_sum. Ignoring logic specification of function foo289
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[False, False, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True]
+
+[spec-gen] refine 2/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=2
+postconditon before refine: 
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == partial_div_sum(number, 1);
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i <= number / 2 + 1;
+          loop invariant sum == partial_div_sum(number, i);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant number/2 - i + 1;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+postconditon after refine: 
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@ 
+  logic integer div_sum_upto(integer number, integer lim) =
+    lim <= 0 ? 0 :
+      div_sum_upto(number, lim - 1) + (number % lim == 0 ? lim : 0);
+*/
+/*@
+  assigns \nothing;
+  ensures \result == partial_div_sum(number, 1);
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i && i <= number / 2 + 1;
+          loop invariant sum == div_sum_upto(number, i - 1);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant (number/2 + 1) - i;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[False, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[False]
+
+[spec-gen] refine 3/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=2
+postconditon before refine: 
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@ 
+  logic integer div_sum_upto(integer number, integer lim) =
+    lim <= 0 ? 0 :
+      div_sum_upto(number, lim - 1) + (number % lim == 0 ? lim : 0);
+*/
+/*@
+  assigns \nothing;
+  ensures \result == partial_div_sum(number, 1) [POSTCONDITION FAILED];
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i && i <= number / 2 + 1;
+          loop invariant sum == div_sum_upto(number, i - 1);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant (number/2 + 1) - i;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+postconditon after refine: 
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@ 
+  logic integer div_sum_upto(integer number, integer lim) =
+    lim <= 0 ? 0 :
+      div_sum_upto(number, lim - 1) + (number % lim == 0 ? lim : 0);
+*/
+/*@
+  assigns \nothing;
+  requires number >= 0;
+  ensures \result == div_sum_upto(number, number/2);
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i && i <= number / 2 + 1;
+          loop invariant sum == div_sum_upto(number, i - 1);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant (number/2 + 1) - i;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c:15: Warning: 
+  wrong order of clause in contract: requires after post-condition, assigns or allocates.
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[False, False, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True]
+
+[spec-gen] refine 5/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=2
+postconditon before refine: 
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == partial_div_sum(number, 1);
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i <= number / 2 + 1;
+          loop invariant sum == partial_div_sum(number, i);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant number/2 - i + 1;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+postconditon after refine: 
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@ 
+  logic integer partial_div_prefix(integer number, integer cur) =
+    cur <= 1 ? 0 :
+      partial_div_prefix(number, cur - 1) + ((number % (cur - 1) == 0) ? (cur - 1) : 0);
+*/
+/*@
+  assigns \nothing;
+  ensures \result == partial_div_prefix(number, number/2 + 1);
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i <= number / 2 + 1;
+          loop invariant sum == partial_div_prefix(number, i);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant number/2 - i + 1;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[False, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True]
+
+[spec-gen] refine 6/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=2
+postconditon before refine: 
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@ 
+  logic integer partial_div_prefix(integer number, integer cur) =
+    cur <= 1 ? 0 :
+      partial_div_prefix(number, cur - 1) + ((number % (cur - 1) == 0) ? (cur - 1) : 0);
+*/
+/*@
+  assigns \nothing;
+  ensures \result == partial_div_prefix(number, number/2 + 1);
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i <= number / 2 + 1;
+          loop invariant sum == partial_div_prefix(number, i);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant number/2 - i + 1;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+postconditon after refine: 
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@ 
+  logic integer partial_div_prefix(integer number, integer cur) =
+    cur <= 1 ? 0 :
+      partial_div_prefix(number, cur - 1) + ((number % (cur - 1) == 0) ? (cur - 1) : 0);
+*/
+/*@
+  assigns \nothing;
+  ensures \result == partial_div_prefix(number, number/2 + 1);
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i;
+          loop invariant i <= number / 2 + 1;
+          loop invariant sum == partial_div_prefix(number, i);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant number/2 - i + 1;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, False, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True]
+
+[spec-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=2
+postconditon before refine: 
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@ 
+  logic integer partial_div_prefix(integer number, integer cur) =
+    cur <= 1 ? 0 :
+      partial_div_prefix(number, cur - 1) + ((number % (cur - 1) == 0) ? (cur - 1) : 0);
+*/
+/*@
+  assigns \nothing;
+  ensures \result == partial_div_prefix(number, number/2 + 1);
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i;
+          loop invariant i <= number / 2 + 1;
+          loop invariant sum == partial_div_prefix(number, i);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant number/2 - i + 1;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+postconditon after refine: 
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@ 
+  logic integer partial_div_prefix(integer number, integer cur) =
+    cur <= 1 ? 0 :
+      partial_div_prefix(number, cur - 1) + ((number % (cur - 1) == 0) ? (cur - 1) : 0);
+*/
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures \result == partial_div_prefix(number, number/2 + 1);
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i;
+          loop invariant i <= number / 2 + 1;
+          loop invariant sum == partial_div_prefix(number, i);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant number/2 - i + 1;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True]
+
+[spec-gen] refine 8/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=3
+[spec-gen] converged at refine 8
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True]
+
+
+🎯 FINAL SPECIFICATION FOR foo289
+==================================================
+Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo289/20260516_144149_3394844_5f8e8e60/output/foo289.c
+Output file content:
+
+/*@ 
+  logic integer partial_div_sum(integer number, integer cur) =
+    cur > number / 2 ? 0 :
+      (number % cur == 0 ? cur : 0) + partial_div_sum(number, cur + 1);
+*/
+
+/*@ 
+  logic integer partial_div_prefix(integer number, integer cur) =
+    cur <= 1 ? 0 :
+      partial_div_prefix(number, cur - 1) + ((number % (cur - 1) == 0) ? (cur - 1) : 0);
+*/
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures \result == partial_div_prefix(number, number/2 + 1);
+*/
+int foo289(int number) {
+
+        int sum = 0;
+        
+        /*@
+          loop invariant 1 <= i;
+          loop invariant i <= number / 2 + 1;
+          loop invariant sum == partial_div_prefix(number, i);
+          loop invariant number == \at(number,Pre);
+          loop assigns i, sum;
+          loop variant number/2 - i + 1;
+        */
+        for (int i = 1; i <= number / 2; i++) {
+            if (number % i == 0) {
+                sum += i;
+            }
+        }
+            
+        return sum;
+}
+
+==================================================
+first_pass:
+syntax=1, valid=1,satisfy=1
+==================================================
+⏰ OVERALL EXECUTION TIME STATISTICS
+Total execution time: 334.17 seconds (5.57 minutes)
+==================================================
+==================================================
+📊 TOKEN USAGE STATISTICS
+Total API calls: 20
+Total prompt tokens (input): 133,317
+Total completion tokens (output): 8,968
+Total tokens: 142,285
+Average prompt tokens per call: 6665.9
+Average completion tokens per call: 448.4
+Average total tokens per call: 7114.2
+==================================================
+✅ Generation completed!
+
+[stderr]
+

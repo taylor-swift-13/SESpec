@@ -1,0 +1,623 @@
+2026-05-15 02:18:44,348 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967
+2026-05-15 02:18:44,349 - INFO  - 
+🚀 Starting generation of function: foo224
+2026-05-15 02:18:44,349 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 02:18:44,349 - INFO  - ==================================================
+
+2026-05-15 02:18:46,863 - INFO  - [auto only_loop] False — foo224 returns 'int'
+2026-05-15 02:18:46,864 - INFO  - Initial pending functions: ['foo224']
+2026-05-15 02:18:46,864 - INFO  - 
+GENERATE ANNOTATION FOR foo224
+2026-05-15 02:18:46,864 - INFO  - ==================================================
+
+2026-05-15 02:18:46,864 - INFO  - Function foo224 has been initialized
+2026-05-15 02:18:46,864 - INFO  - Starting to generate annotation code for foo224
+2026-05-15 02:18:46,953 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo224
+2026-05-15 02:18:46,953 - INFO  - ==================================================
+
+2026-05-15 02:18:47,083 - INFO  - Variable Maps:[{'temp': 'n@pre', 'res': '0', 'count': '0', 'n': 'n@pre'}]
+2026-05-15 02:18:47,083 - INFO  - Path conditions: [None]
+2026-05-15 02:18:47,084 - INFO  - Pre condition: (temp == n@pre) * (res == 0) * (count == 0) * (n == n@pre)
+2026-05-15 02:18:47,084 - INFO  - Loop Condition: temp > 0
+2026-05-15 02:18:47,085 - INFO  - Array Names: []
+2026-05-15 02:18:47,085 - INFO  - Updated Loop Conditions: ['n@pre > 0']
+2026-05-15 02:18:47,087 - INFO  - Global Unchanged Variables: ['temp', 'res', 'n']
+2026-05-15 02:18:47,087 - INFO  - Non Inductive Variables: []
+2026-05-15 02:18:47,087 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 02:18:47,089 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 02:18:47,093 - INFO  - examples category: numeric
+2026-05-15 02:18:47,093 - INFO  - examples:
+2026-05-15 02:18:47,093 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 02:19:09,149 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:19:31,023 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:20:03,747 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:20:03,748 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:20:04,235 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:20:19,586 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:20:19,587 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:20:19,900 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:20:46,672 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:20:46,672 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:20:46,925 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:21:05,463 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:21:05,464 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:21:05,788 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:21:18,817 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-15 02:21:19,553 - INFO  - ACSL format loop invariant
+2026-05-15 02:21:19,553 - INFO  - /*@
+      loop invariant (\at(n,Pre) > 0) ==> 
+        (temp == \at(n,Pre) >> count) &&
+        (res == \at(res,Pre) | (\at(n,Pre) & ((1 << count) - 1))) &&
+        (odd_bit_set(res, count)) &&
+        (even_bit_unset(res, count));
+      loop invariant (!(\at(n,Pre) > 0)) ==> 
+        ((temp == \at(n,Pre)) && (res == 0) && (count == 0) && (n == \at(n,Pre)));
+      loop invariant temp == \at(n,Pre) >> count;
+      loop invariant res == \at(res,Pre) | (\at(n,Pre) & ((1 << count) - 1));
+      loop invariant n == \at(n,Pre);
+      loop assigns res, temp, count;
+    */
+    while (temp > 0) {
+        if (count % 2 == 1) {
+            res |= (1 << count);
+        }
+        count++;
+        temp >>= 1;
+    }
+2026-05-15 02:21:19,555 - INFO  - QCP format loop invariant
+2026-05-15 02:21:19,555 - INFO  - /*@ Inv
+    ((n@pre > 0) => 
+        (temp == n@pre >> count) &&
+        (res == res@pre | (n@pre & ((1 << count) - 1))) &&
+        (odd_bit_set(res, count)) &&
+        (even_bit_unset(res, count))) &&
+((!(n@pre > 0)) => 
+        ((temp == n@pre) && (res == 0) && (count == 0) && (n == n@pre))) &&
+(temp == n@pre >> count) &&
+(res == res@pre | (n@pre & ((1 << count) - 1))) &&
+(n == n@pre
+      loop assigns res, temp, count)
+    */
+    
+    while (temp > 0) {
+        if (count % 2 == 1) {
+            res |= (1 << count);
+        }
+        count++;
+        temp >>= 1;
+    }
+2026-05-15 02:21:19,894 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo224
+2026-05-15 02:21:19,894 - INFO  - ==================================================
+
+2026-05-15 02:21:19,930 - INFO  - Starting to generate complete annotation code for foo224
+2026-05-15 02:21:19,942 - INFO  - Starting to generate ACSL specification for foo224
+2026-05-15 02:21:44,484 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:21:44,485 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:22:33,844 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:22:33,844 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:23:09,467 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:23:09,468 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:23:09,468 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:23:09,733 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:23:09,734 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:23:58,302 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:23:58,303 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:23:58,303 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:23:58,579 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:23:58,580 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:24:33,190 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:24:33,192 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:24:33,192 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:24:33,621 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:24:33,622 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:25:15,719 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:25:15,720 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:25:15,720 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:25:15,993 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:25:15,994 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:26:00,103 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-15 02:26:00,475 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:26:00,478 - INFO  - 
+SPECIFICATION FOR foo224
+2026-05-15 02:26:00,479 - INFO  - ==================================================
+
+2026-05-15 02:26:00,479 - INFO  - 
+QCP Specification for function foo224:
+/*@
+
+Require emp
+Ensure (n <= 0 && __return == (n | 0))
+*/
+2026-05-15 02:26:01,103 - INFO  - 
+VERIFICATION FOR foo224
+2026-05-15 02:26:01,104 - INFO  - ==================================================
+
+2026-05-15 02:26:01,104 - INFO  - TRY TIME: 0
+2026-05-15 02:26:01,446 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:26:18,533 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:26:18,534 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:27:01,130 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:27:01,131 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:28:51,505 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:28:51,506 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:28:51,506 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:28:51,781 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:28:51,781 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:29:34,482 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:29:34,483 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:29:34,483 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:29:34,746 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:29:34,746 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:30:13,051 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:30:13,052 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:30:13,053 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:30:13,301 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:30:13,302 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:30:52,745 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:30:52,746 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:30:52,746 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:30:52,941 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:30:52,942 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:31:40,382 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-15 02:31:40,635 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:31:40,895 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c:8: Warning: 
+  invalid implicit conversion from 𝔹 to ℤ. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo224/20260515_021844_851875_ad34f967/output/foo224.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:31:40,895 - INFO  - first_pass:
+2026-05-15 02:31:40,895 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-15 02:31:40,895 - INFO  - ==================================================
+2026-05-15 02:31:40,895 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 02:31:40,895 - INFO  - Total execution time: 776.55 seconds (12.94 minutes)
+2026-05-15 02:31:40,895 - INFO  - ==================================================
+2026-05-15 02:31:40,896 - INFO  - ==================================================
+2026-05-15 02:31:40,896 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 02:31:40,896 - INFO  - Total API calls: 21
+2026-05-15 02:31:40,896 - INFO  - Total prompt tokens (input): 102,485
+2026-05-15 02:31:40,896 - INFO  - Total completion tokens (output): 19,410
+2026-05-15 02:31:40,896 - INFO  - Total tokens: 121,895
+2026-05-15 02:31:40,896 - INFO  - Average prompt tokens per call: 4880.2
+2026-05-15 02:31:40,896 - INFO  - Average completion tokens per call: 924.3
+2026-05-15 02:31:40,896 - INFO  - Average total tokens per call: 5804.5
+2026-05-15 02:31:40,896 - INFO  - ==================================================

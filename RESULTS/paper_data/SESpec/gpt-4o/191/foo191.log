@@ -1,0 +1,587 @@
+2026-05-17 21:41:39,969 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59
+2026-05-17 21:41:39,969 - INFO  - 
+🚀 Starting generation of function: foo191
+2026-05-17 21:41:39,969 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 21:41:39,969 - INFO  - TRY TIME: 0
+2026-05-17 21:41:39,969 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 21:41:39,969 - INFO  - ==================================================
+
+2026-05-17 21:41:40,998 - INFO  - [auto only_loop] False — foo191 returns 'int'
+2026-05-17 21:41:41,004 - INFO  - Initial pending functions: ['foo191', 'malloc']
+2026-05-17 21:41:41,004 - INFO  - Now processing function malloc
+
+2026-05-17 21:41:41,004 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-17 21:41:41,004 - INFO  - 
+GENERATE ANNOTATION FOR foo191
+2026-05-17 21:41:41,004 - INFO  - ==================================================
+
+2026-05-17 21:41:41,004 - INFO  - Function foo191 has been initialized
+2026-05-17 21:41:41,004 - INFO  - Starting to generate annotation code for foo191
+2026-05-17 21:41:41,345 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo191
+2026-05-17 21:41:41,345 - INFO  - ==================================================
+
+2026-05-17 21:41:41,733 - INFO  - Variable Maps:[{}]
+2026-05-17 21:41:41,733 - INFO  - Path conditions: [None]
+2026-05-17 21:41:41,733 - INFO  - Pre condition: 
+2026-05-17 21:41:41,733 - INFO  - Loop Condition: w <= count
+2026-05-17 21:41:41,735 - INFO  - Array Names: ['W', 'C']
+2026-05-17 21:41:41,739 - INFO  - Updated Loop Conditions: ['w <= count']
+2026-05-17 21:41:41,740 - INFO  - Global Unchanged Variables: []
+2026-05-17 21:41:41,740 - INFO  - Non Inductive Variables: []
+2026-05-17 21:41:41,740 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 21:41:41,743 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 21:41:41,751 - INFO  - examples category: array
+2026-05-17 21:41:41,751 - INFO  - examples:
+2026-05-17 21:41:41,751 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 21:41:55,773 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:41:55,778 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:42:04,132 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:04,134 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:42:11,899 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:11,899 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:42:13,075 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:13,077 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:42:20,876 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:20,876 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:42:21,872 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:21,873 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:42:28,870 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:28,870 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:42:29,868 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:29,870 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:42:36,638 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:36,643 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:42:37,598 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:37,599 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:42:44,616 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=3)
+2026-05-17 21:42:46,457 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:42:47,449 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:47,452 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:42:53,622 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:42:53,623 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:43:04,162 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:04,163 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:43:05,649 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:05,651 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:43:12,103 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:12,103 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:43:13,300 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:13,301 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:43:19,428 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:19,428 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:43:20,400 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:20,401 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:43:26,996 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:26,997 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:43:27,931 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:27,933 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:43:33,384 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=3)
+2026-05-17 21:43:35,165 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:43:36,108 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:36,109 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:43:43,403 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:43,405 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:43:51,740 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:51,740 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 21:43:52,744 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:43:52,746 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:44:56,166 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-17 21:44:56,166 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 21:44:56,795 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:44:56,796 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:45:14,290 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-17 21:45:14,291 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 21:45:15,336 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:45:15,337 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:45:32,881 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-17 21:45:32,882 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 21:45:33,720 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:45:33,732 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:45:50,056 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=3)
+2026-05-17 21:45:51,156 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:45:51,750 - INFO  - ACSL format loop invariant
+2026-05-17 21:45:51,750 - INFO  - /*@
+      loop invariant 2 <= w <= count + 1;
+      loop invariant \forall integer k; 0 <= k < w ==> W[k] == compute_W(W, C, k);
+      loop invariant \forall integer k; 0 <= k < w ==> C[k] == compute_C(W, C, k);
+      loop assigns w, W[0..count], C[0..count];
+    */
+    for (int w = 2; w <= count; w++) {
+        W[w] = W[w - 2] + 2 * C[w - 1];
+        C[w] = W[w - 1] + C[w - 2];
+    }
+2026-05-17 21:45:51,752 - INFO  - QCP format loop invariant
+2026-05-17 21:45:51,752 - INFO  - /*@ Inv
+    (2 <= w && w <= count + 1) &&
+(forall (k:Z), 0 <= k && k < w => W_l[k] == compute_W(W, C, k)) &&
+(forall (k:Z), 0 <= k && k < w => C_l[k] == compute_C(W, C, k)
+      loop assigns w, W_l[0..count], C_l[0..count])
+    */
+    
+    for (int w = 2; w <= count; w++) {
+        W[w] = W[w - 2] + 2 * C[w - 1];
+        C[w] = W[w - 1] + C[w - 2];
+    }
+2026-05-17 21:45:52,360 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo191
+2026-05-17 21:45:52,360 - INFO  - ==================================================
+
+2026-05-17 21:45:52,405 - INFO  - Starting to generate ACSL specification for foo191
+2026-05-17 21:46:09,868 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:09,870 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:46:21,996 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_W. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:21,996 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:46:28,416 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:28,417 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:46:28,417 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:46:28,990 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:28,990 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:46:35,165 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_W. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:35,165 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:46:35,166 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:46:35,816 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:35,817 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:46:42,000 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_W. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:42,001 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:46:42,007 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:46:42,788 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:42,788 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:46:49,700 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:49,702 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:46:49,702 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:46:50,642 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:50,643 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:46:58,951 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=4)
+2026-05-17 21:46:59,880 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:46:59,881 - INFO  - 
+SPECIFICATION FOR foo191
+2026-05-17 21:46:59,881 - INFO  - ==================================================
+
+2026-05-17 21:46:59,882 - INFO  - 
+QCP Specification for function foo191:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 21:47:00,303 - INFO  - 
+VERIFICATION FOR foo191
+2026-05-17 21:47:00,315 - INFO  - ==================================================
+
+2026-05-17 21:47:01,103 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:09,149 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:09,150 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:47:17,244 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:17,244 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:47:26,832 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:26,833 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:47:26,833 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:47:27,864 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:27,866 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:47:35,865 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_W. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:35,866 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:47:35,866 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:47:36,632 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:36,632 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:47:45,117 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:45,117 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:47:45,118 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:47:45,813 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:45,814 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:47:53,612 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_W. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:53,613 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:47:53,613 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:47:54,613 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:54,614 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:48:02,227 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-17 21:48:02,830 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:48:03,285 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c:6: Warning: 
+  unbound logic function compute_C. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo191/20260517_214139_1228831_33595d59/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:48:03,286 - INFO  - first_pass:
+2026-05-17 21:48:03,286 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-17 21:48:03,286 - INFO  - ==================================================
+2026-05-17 21:48:03,286 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 21:48:03,286 - INFO  - Total execution time: 383.32 seconds (6.39 minutes)
+2026-05-17 21:48:03,286 - INFO  - ==================================================
+2026-05-17 21:48:03,286 - INFO  - ==================================================
+2026-05-17 21:48:03,286 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 21:48:03,286 - INFO  - Total API calls: 30
+2026-05-17 21:48:03,286 - INFO  - Total prompt tokens (input): 265,766
+2026-05-17 21:48:03,286 - INFO  - Total completion tokens (output): 19,845
+2026-05-17 21:48:03,287 - INFO  - Total tokens: 285,611
+2026-05-17 21:48:03,287 - INFO  - Average prompt tokens per call: 8858.9
+2026-05-17 21:48:03,287 - INFO  - Average completion tokens per call: 661.5
+2026-05-17 21:48:03,287 - INFO  - Average total tokens per call: 9520.4
+2026-05-17 21:48:03,287 - INFO  - ==================================================

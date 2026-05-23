@@ -1,0 +1,369 @@
+2026-05-17 11:58:18,652 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo120_c257/20260517_115818_622727_2cd6f167
+2026-05-17 11:58:18,653 - INFO  - 
+🚀 Starting generation of function: foo120_c257
+2026-05-17 11:58:18,653 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 11:58:18,653 - INFO  - TRY TIME: 0
+2026-05-17 11:58:18,654 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 11:58:18,654 - INFO  - ==================================================
+
+2026-05-17 11:58:27,789 - INFO  - [auto only_loop] False — foo120_c257 returns 'int'
+2026-05-17 11:58:27,798 - INFO  - Initial pending functions: ['foo120_c257']
+2026-05-17 11:58:27,798 - INFO  - 
+GENERATE ANNOTATION FOR foo120_c257
+2026-05-17 11:58:27,798 - INFO  - ==================================================
+
+2026-05-17 11:58:27,798 - INFO  - Function foo120_c257 has been initialized
+2026-05-17 11:58:27,798 - INFO  - Starting to generate annotation code for foo120_c257
+2026-05-17 11:58:28,177 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo120_c257
+2026-05-17 11:58:28,178 - INFO  - ==================================================
+
+2026-05-17 11:58:28,793 - INFO  - Variable Maps:[{'top': 'args_len@pre - 1', 'ret': '0', 'array': 'array@pre', 'args_len': 'args_len@pre', 'args': 'args@pre'}]
+2026-05-17 11:58:28,806 - INFO  - Path conditions: ['args_len@pre > 0 && args_len@pre < 100']
+2026-05-17 11:58:28,807 - INFO  - Pre condition: args_len@pre > 0 && args_len@pre < 100 && (top == args_len@pre - 1) * (ret == 0) * (array == array@pre) * (args_len == args_len@pre) * (args == args@pre) * store_int_array(args@pre, args_len@pre, args_l)
+2026-05-17 11:58:28,807 - INFO  - Loop Condition: ret <= top
+2026-05-17 11:58:28,814 - INFO  - Array Names: ['args']
+2026-05-17 11:58:28,814 - INFO  - Updated Loop Conditions: ['0 <= args_len@pre - 1']
+2026-05-17 11:58:28,823 - INFO  - Global Unchanged Variables: ['array', 'args_len', 'args']
+2026-05-17 11:58:28,824 - INFO  - Non Inductive Variables: ['ret', 'top']
+2026-05-17 11:58:28,830 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 11:58:28,837 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 11:58:28,878 - INFO  - examples category: array
+2026-05-17 11:58:28,878 - INFO  - examples:
+2026-05-17 11:58:28,878 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 11:58:46,732 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 11:58:49,933 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 11:58:49,945 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 11:58:53,854 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 11:58:53,859 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 11:59:42,875 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 11:59:49,544 - INFO  - ACSL format loop invariant
+2026-05-17 11:59:49,544 - INFO  - /*@
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant ret <= top + 1;
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer v; count_eq(args, 0, args_len, v) == \at(count_eq(args, 0, args_len, v), Pre);
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+2026-05-17 11:59:49,547 - INFO  - QCP format loop invariant
+2026-05-17 11:59:49,554 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (0 <= ret && ret <= args_len@pre) &&
+(-1 <= top && top <= args_len@pre - 1) &&
+(ret <= top + 1) &&
+(array == array@pre) &&
+(args_len == args_len@pre) &&
+(args == args@pre) &&
+(forall (v:Z), count_eq(args, 0, args_len, v) == \at(count_eq(args, 0, args_len, v), Pre)
+          loop assigns ret, top)
+    */
+    
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+2026-05-17 12:00:00,484 - INFO  - CORRECT INVARIANT
+2026-05-17 12:00:00,486 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo120_c257
+2026-05-17 12:00:00,486 - INFO  - ==================================================
+
+2026-05-17 12:00:00,677 - INFO  - Starting to generate ACSL specification for foo120_c257
+2026-05-17 12:00:12,143 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-17 12:00:28,215 - INFO  - syntax Correct
+2026-05-17 12:00:41,721 - INFO  - Loop Invariant:
+2026-05-17 12:00:41,722 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 12:00:41,722 - INFO  - 
+2026-05-17 12:00:41,723 - INFO  - Assertion:
+2026-05-17 12:00:41,723 - INFO  - []
+2026-05-17 12:00:41,723 - INFO  - 
+2026-05-17 12:00:41,723 - INFO  - Assigns:
+2026-05-17 12:00:41,723 - INFO  - [True, True, True]
+2026-05-17 12:00:41,723 - INFO  - 
+2026-05-17 12:00:41,725 - INFO  - Post Condition:
+2026-05-17 12:00:41,725 - INFO  - [True, False, True, True]
+2026-05-17 12:00:41,725 - INFO  - 
+2026-05-17 12:00:45,014 - INFO  - syntax Correct
+2026-05-17 12:00:48,482 - INFO  - Loop Invariant:
+2026-05-17 12:00:48,483 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 12:00:48,483 - INFO  - 
+2026-05-17 12:00:48,483 - INFO  - Assertion:
+2026-05-17 12:00:48,483 - INFO  - []
+2026-05-17 12:00:48,484 - INFO  - 
+2026-05-17 12:00:48,484 - INFO  - Assigns:
+2026-05-17 12:00:48,484 - INFO  - [True, True, True]
+2026-05-17 12:00:48,484 - INFO  - 
+2026-05-17 12:00:48,484 - INFO  - Post Condition:
+2026-05-17 12:00:48,484 - INFO  - [True, True, True]
+2026-05-17 12:00:48,484 - INFO  - 
+2026-05-17 12:00:48,831 - INFO  - 
+SPECIFICATION FOR foo120_c257
+2026-05-17 12:00:48,840 - INFO  - ==================================================
+
+2026-05-17 12:00:48,840 - INFO  - 
+QCP Specification for function foo120_c257:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+2026-05-17 12:00:51,062 - INFO  - 
+VERIFICATION FOR foo120_c257
+2026-05-17 12:00:51,082 - INFO  - ==================================================
+
+2026-05-17 12:00:53,920 - INFO  - syntax Correct
+2026-05-17 12:00:56,108 - INFO  - Loop Invariant:
+2026-05-17 12:00:56,108 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 12:00:56,109 - INFO  - 
+2026-05-17 12:00:56,109 - INFO  - Assertion:
+2026-05-17 12:00:56,109 - INFO  - []
+2026-05-17 12:00:56,109 - INFO  - 
+2026-05-17 12:00:56,109 - INFO  - Assigns:
+2026-05-17 12:00:56,109 - INFO  - [True, True, True]
+2026-05-17 12:00:56,109 - INFO  - 
+2026-05-17 12:00:56,109 - INFO  - Post Condition:
+2026-05-17 12:00:56,109 - INFO  - [True, True, True]
+2026-05-17 12:00:56,109 - INFO  - 
+2026-05-17 12:00:56,109 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo120_c257
+2026-05-17 12:00:56,109 - INFO  - ==================================================
+2026-05-17 12:00:56,109 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo120_c257/20260517_115818_622727_2cd6f167/output/foo120_c257.c
+2026-05-17 12:00:56,110 - INFO  - Output file content:
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures 0 <= \result && \result <= args_len;
+  ensures (\forall integer i; 0 <= i < args_len ==> args[i] != array) ==> (\result == \at(\old(0),Pre) || (\result >= 0 && \result <= args_len));
+  ensures count_eq(args, 0, args_len, array) == \at(count_eq(args, 0, args_len, array), Pre);
+*/
+int foo120_c257(int * args, int args_len, int array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant ret <= top + 1;
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer v; count_eq(args, 0, args_len, v) == \at(count_eq(args, 0, args_len, v), Pre);
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-17 12:00:56,110 - INFO  - ==================================================
+2026-05-17 12:00:56,110 - INFO  - first_pass:
+2026-05-17 12:00:56,110 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 12:00:56,110 - INFO  - ==================================================
+2026-05-17 12:00:56,110 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 12:00:56,110 - INFO  - Total execution time: 157.46 seconds (2.62 minutes)
+2026-05-17 12:00:56,110 - INFO  - ==================================================
+2026-05-17 12:00:56,110 - INFO  - ==================================================
+2026-05-17 12:00:56,110 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 12:00:56,110 - INFO  - Total API calls: 4
+2026-05-17 12:00:56,110 - INFO  - Total prompt tokens (input): 19,080
+2026-05-17 12:00:56,111 - INFO  - Total completion tokens (output): 2,847
+2026-05-17 12:00:56,111 - INFO  - Total tokens: 21,927
+2026-05-17 12:00:56,111 - INFO  - Average prompt tokens per call: 4770.0
+2026-05-17 12:00:56,111 - INFO  - Average completion tokens per call: 711.8
+2026-05-17 12:00:56,111 - INFO  - Average total tokens per call: 5481.8
+2026-05-17 12:00:56,111 - INFO  - ==================================================

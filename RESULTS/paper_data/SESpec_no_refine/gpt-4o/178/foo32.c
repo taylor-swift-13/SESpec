@@ -1,0 +1,65 @@
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array, begin, end - 1) + array[end - 1];
+*/
+
+/*@
+  requires \at(arr1_len,Pre) > 0 && \at(arr1_len,Pre) < 100;
+  requires \at(arr2_len,Pre) > 0 && \at(arr2_len,Pre) < 100;
+  requires \valid(arr1 + (0 .. arr1_len - 1));
+  requires \valid(arr2 + (0 .. arr2_len - 1));
+  ensures \result == -1 || (\exists integer idx; 0 <= idx < arr1_len && arr1[idx] == \result) || (\exists integer idx; 0 <= idx < arr2_len && arr2[idx] == \result);
+  assigns \nothing;
+*/
+int foo32(int * arr1, int arr1_len, int * arr2, int arr2_len, int m, int n, int k) {
+
+        int i = 0;
+        int j = 0;
+
+        /*@
+          loop invariant 0 <= count <= k;
+          loop invariant 0 <= i <= m;
+          loop invariant 0 <= j <= n;
+          loop invariant i + j == count;
+          loop invariant k == \at(k,Pre);
+          loop invariant n == \at(n,Pre);
+          loop invariant m == \at(m,Pre);
+          loop invariant arr2_len == \at(arr2_len,Pre);
+          loop invariant arr2 == \at(arr2,Pre);
+          loop invariant arr1_len == \at(arr1_len,Pre);
+          loop invariant arr1 == \at(arr1,Pre);
+          loop invariant \forall integer idx; 0 <= idx < arr1_len ==> arr1[idx] == \at(arr1[idx],Pre);
+          loop invariant \forall integer idx; 0 <= idx < arr2_len ==> arr2[idx] == \at(arr2[idx],Pre);
+          loop assigns count, i, j;
+          loop variant k - count;
+        */
+        for (int count = 0; count < k; count++) {
+            if (i < m && (j >= n || arr1[i] <= arr2[j])) {
+                if (count == k - 1) {
+                    /*@
+                      ensures \result == arr1[i];
+                    */
+                    return arr1[i];
+                }
+                i++;
+            } else {
+                if (count == k - 1) {
+                    /*@
+                      ensures \result == arr2[j];
+                    */
+                    return arr2[j];
+                }
+                j++;
+            }
+        }
+            
+        /*@
+          ensures \result == -1;
+        */
+        return -1;
+}

@@ -1,0 +1,32 @@
+import java.io.*;
+import java.lang.*;
+import java.util.*;
+import java.math.*;
+
+class FindOddPair {
+
+    //@ requires a != null;
+    //@ requires 0 <= n && n <= a.length;
+    //@ ensures \result >= 0;
+    //@ ensures \result <= a.length * (a.length - 1) / 2;
+    //@ ensures \result == (\sum int i; 0 <= i && i < a.length; (\sum int j; i + 1 <= j && j < a.length; ((((a[i] ^ a[j]) % 2) == 1) ? 1 : 0)));
+    public static int findOddPair(int[] a, int n) {
+        int count = 0;
+        int length = a.length;
+        //@ maintaining 0 <= i && i <= length;
+        //@ maintaining 0 < count && count < length * (length - 1) / 2;  
+        //@ maintaining count == (\sum int p; 0 <= p && p < i; (\sum int q; p + 1 <= q && q < length; ((((a[p] ^ a[q]) % 2) == 1) ? 1 : 0)));
+        //@ decreases length - i;
+        for (int i = 0; i < length; i++) {
+            //@ maintaining i + 1 <= j && j <= length;
+            //@ maintaining count == (\sum int p; 0 <= p && p < i; (\sum int q; p + 1 <= q && q < length; ((((a[p] ^ a[q]) % 2) == 1) ? 1 : 0))) + (\sum int q; i + 1 <= q && q < j; ((((a[i] ^ a[q]) % 2) == 1) ? 1 : 0));
+            //@ decreases length - j;
+            for (int j = i + 1; j < length; j++) {
+                if ((a[i] ^ a[j]) % 2 == 1) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+}

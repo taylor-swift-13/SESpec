@@ -1,0 +1,46 @@
+
+/*@
+*/
+
+/*@
+*/
+        
+
+int foo311(int count) {
+
+		int result = 0;
+		int diameter = 2 * count;
+		int center = diameter * diameter;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+              loop invariant count == \at(count,Pre);
+              loop invariant diameter == 2 * \at(count,Pre);
+              loop invariant center == (2 * \at(count,Pre)) * (2 * \at(count,Pre));
+              loop invariant 1 <= index <= 2 * \at(count,Pre) + 1;
+              loop invariant 0 <= result;
+              loop assigns index, i, diagnalLengthSquare, result;
+            */
+            for (int index = 1; index <= 2 * count; index++) {
+			
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+              loop invariant 1 <= index <= 2 * count;
+              loop invariant 1 <= i <= 2 * count + 1;
+              loop assigns result, i;
+            */
+            for (int i = 1; i <= 2 * count; i++) {
+				int diagnalLengthSquare = (index * index + i * i);
+				if (diagnalLengthSquare <= center) {
+					result++;
+				}
+			}
+            
+		}
+            
+		return result;
+}

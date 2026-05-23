@@ -1,0 +1,2127 @@
+2026-05-17 04:37:50,236 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo6_c155/20260517_043750_238087_bc249f5f
+2026-05-17 04:37:50,237 - INFO  - 
+🚀 Starting generation of function: foo6_c155
+2026-05-17 04:37:50,237 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 04:37:50,237 - INFO  - TRY TIME: 0
+2026-05-17 04:37:50,237 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 04:37:50,237 - INFO  - ==================================================
+
+2026-05-17 04:37:51,923 - INFO  - [auto only_loop] False — foo6_c155 returns 'int'
+2026-05-17 04:37:51,924 - INFO  - Initial pending functions: ['foo6_c155', 'malloc']
+2026-05-17 04:37:51,925 - INFO  - Now processing function malloc
+
+2026-05-17 04:37:51,926 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-17 04:37:51,926 - INFO  - 
+GENERATE ANNOTATION FOR foo6_c155
+2026-05-17 04:37:51,926 - INFO  - ==================================================
+
+2026-05-17 04:37:51,926 - INFO  - Function foo6_c155 has been initialized
+2026-05-17 04:37:51,926 - INFO  - Starting to generate annotation code for foo6_c155
+2026-05-17 04:37:52,052 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo6_c155
+2026-05-17 04:37:52,052 - INFO  - ==================================================
+
+2026-05-17 04:37:52,181 - INFO  - Variable Maps:[{}]
+2026-05-17 04:37:52,182 - INFO  - Path conditions: [None]
+2026-05-17 04:37:52,183 - INFO  - Pre condition: 
+2026-05-17 04:37:52,183 - INFO  - Loop Condition: array < Array
+2026-05-17 04:37:52,185 - INFO  - Array Names: ['mpis', 'args']
+2026-05-17 04:37:52,185 - INFO  - Updated Loop Conditions: ['array < Array']
+2026-05-17 04:37:52,185 - INFO  - Global Unchanged Variables: []
+2026-05-17 04:37:52,185 - INFO  - Non Inductive Variables: []
+2026-05-17 04:37:52,186 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-17 04:37:52,189 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 04:37:52,192 - INFO  - examples category: array
+2026-05-17 04:37:52,193 - INFO  - examples:
+2026-05-17 04:37:52,193 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 04:38:15,157 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 04:38:22,184 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 04:38:29,080 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 04:39:18,787 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.17, satisfy=0.00) clauses=6
+2026-05-17 04:39:52,179 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 04:40:26,865 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 04:41:02,292 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 04:41:02,293 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=15)
+2026-05-17 04:41:25,837 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 04:41:57,552 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 04:41:57,553 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=15)
+2026-05-17 04:42:24,017 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 04:42:30,247 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6, 0.0), clauses=5)
+2026-05-17 04:43:01,281 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 04:43:04,814 - INFO  - ACSL format loop invariant
+2026-05-17 04:43:04,815 - INFO  - /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+2026-05-17 04:43:04,817 - INFO  - QCP format loop invariant
+2026-05-17 04:43:04,821 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (0 <= array && array <= Array) &&
+(\valid_read(args + (0..args_len-1))) &&
+(Array <= args_len
+      loop assigns array, mpis_l[0..Array-1])
+    */
+    
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+2026-05-17 04:43:04,894 - INFO  - Variable Maps:[{}]
+2026-05-17 04:43:04,895 - INFO  - Path conditions: [None]
+2026-05-17 04:43:04,895 - INFO  - Pre condition: 
+2026-05-17 04:43:04,895 - INFO  - Loop Condition: k < i
+2026-05-17 04:43:04,895 - INFO  - Array Names: ['mpis', 'args']
+2026-05-17 04:43:04,895 - INFO  - Updated Loop Conditions: ['k < i']
+2026-05-17 04:43:04,895 - INFO  - Global Unchanged Variables: []
+2026-05-17 04:43:04,895 - INFO  - Non Inductive Variables: []
+2026-05-17 04:43:04,896 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-17 04:43:04,902 - INFO  - [inv-gen] multi-slot mode: 1 candidate(s) (simple placeholder)
+2026-05-17 04:43:15,058 - INFO  - ACSL format loop invariant
+2026-05-17 04:43:15,059 - INFO  - /*@
+          loop invariant 0 <= k <= i;
+          loop invariant \forall integer t; 0 <= t < i ==> mpis[t] >= args[t];
+          loop invariant \forall integer t; 0 <= t < k ==> mpis[t] >= args[t];
+          loop invariant \forall integer t; k <= t < i ==> mpis[t] == \at(mpis[t], Pre);
+          loop assigns k, mpis[0..i-1];
+            */
+            for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+2026-05-17 04:43:15,059 - INFO  - QCP format loop invariant
+2026-05-17 04:43:15,059 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (0 <= k && k <= i) &&
+(forall (t:Z), 0 <= t && t < i => mpis_l[t] >= args_l[t]) &&
+(forall (t:Z), 0 <= t && t < k => mpis_l[t] >= args_l[t]) &&
+(forall (t:Z), k <= t && t < i => mpis_l[t] == mpis_l[t]@pre
+          loop assigns k, mpis_l[0..i-1])
+    */
+    
+            for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+2026-05-17 04:43:15,060 - INFO  - Variable Maps:[{}]
+2026-05-17 04:43:15,060 - INFO  - Path conditions: [None]
+2026-05-17 04:43:15,061 - INFO  - Pre condition: 
+2026-05-17 04:43:15,061 - INFO  - Loop Condition: i < Array
+2026-05-17 04:43:15,061 - INFO  - Array Names: ['mpis', 'args']
+2026-05-17 04:43:15,061 - INFO  - Updated Loop Conditions: ['i < Array']
+2026-05-17 04:43:15,062 - INFO  - Global Unchanged Variables: []
+2026-05-17 04:43:15,062 - INFO  - Non Inductive Variables: []
+2026-05-17 04:43:15,062 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-17 04:43:15,063 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 04:43:15,069 - INFO  - examples category: array
+2026-05-17 04:43:15,069 - INFO  - examples:
+2026-05-17 04:43:15,069 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 04:43:43,632 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-17 04:43:55,570 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 04:44:32,276 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=7
+2026-05-17 04:45:22,477 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=7
+2026-05-17 04:46:01,999 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=7
+2026-05-17 04:46:02,003 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=29)
+2026-05-17 04:46:27,474 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=7
+2026-05-17 04:47:31,101 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=7
+2026-05-17 04:47:31,102 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=29)
+2026-05-17 04:48:02,540 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=7
+2026-05-17 04:48:41,797 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=7
+2026-05-17 04:48:41,798 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=29)
+2026-05-17 04:49:10,664 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=7
+2026-05-17 04:49:21,770 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.5714285714285714, 0.0), clauses=7)
+2026-05-17 04:50:56,935 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 04:51:20,124 - INFO  - ACSL format loop invariant
+2026-05-17 04:51:20,125 - INFO  - /*@
+          loop assigns i, mpis[0..Array-1];
+            */
+            for (int i = 1; i < Array; i++) {
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns k, mpis[0..i];
+            */
+            for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+            
+    }
+2026-05-17 04:51:20,125 - INFO  - QCP format loop invariant
+2026-05-17 04:51:20,125 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (loop assigns i, mpis_l[0..Array-1])
+    */
+    
+            for (int i = 1; i < Array; i++) {
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns k, mpis[0..i];
+            */
+            for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+            
+    }
+2026-05-17 04:51:20,165 - INFO  - Variable Maps:[{}]
+2026-05-17 04:51:20,166 - INFO  - Path conditions: [None]
+2026-05-17 04:51:20,166 - INFO  - Pre condition: 
+2026-05-17 04:51:20,166 - INFO  - Loop Condition: i < Array
+2026-05-17 04:51:20,166 - INFO  - Array Names: ['mpis']
+2026-05-17 04:51:20,167 - INFO  - Updated Loop Conditions: ['i < Array']
+2026-05-17 04:51:20,167 - INFO  - Global Unchanged Variables: []
+2026-05-17 04:51:20,167 - INFO  - Non Inductive Variables: []
+2026-05-17 04:51:20,168 - INFO  - Unchanged Arrays (Read-only): ['mpis']
+2026-05-17 04:51:20,169 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 04:51:20,173 - INFO  - examples category: array
+2026-05-17 04:51:20,174 - INFO  - examples:
+2026-05-17 04:51:20,174 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 04:51:46,947 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=10
+2026-05-17 04:52:01,080 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-17 04:52:25,626 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:52:55,891 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:53:25,515 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=7
+2026-05-17 04:53:25,516 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=41)
+2026-05-17 04:53:42,455 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:54:06,627 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:54:06,627 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=41)
+2026-05-17 04:54:21,837 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:54:54,511 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:54:54,512 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=41)
+2026-05-17 04:55:15,850 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 04:55:23,794 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8571428571428571, 0.0), clauses=7)
+2026-05-17 04:56:53,774 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 04:57:17,160 - INFO  - ACSL format loop invariant
+2026-05-17 04:57:17,161 - INFO  - /*@
+          loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+          loop assigns i, num;
+            */
+            for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+2026-05-17 04:57:17,161 - INFO  - QCP format loop invariant
+2026-05-17 04:57:17,161 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (forall (k:Z), 0 <= k && k < i => num >= mpis_l[k]
+          loop assigns i, num)
+    */
+    
+            for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+2026-05-17 04:57:39,224 - INFO  - CORRECT INVARIANT
+2026-05-17 04:57:39,225 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo6_c155
+2026-05-17 04:57:39,225 - INFO  - ==================================================
+
+2026-05-17 04:57:39,242 - INFO  - Starting to generate ACSL specification for foo6_c155
+2026-05-17 04:58:07,293 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo6_c155/20260517_043750_238087_bc249f5f/output/foo6_c155.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo6_c155/20260517_043750_238087_bc249f5f/output/foo6_c155.c:25: Warning: 
+  unbound logic function max_dp_prefix. Ignoring logic specification of function foo6_c155
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo6_c155/20260517_043750_238087_bc249f5f/output/foo6_c155.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 04:58:07,295 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-17 04:58:35,178 - INFO  - syntax Correct
+2026-05-17 04:58:48,204 - INFO  - Loop Invariant:
+2026-05-17 04:58:48,205 - INFO  - [False, False, False, True]
+2026-05-17 04:58:48,205 - INFO  - 
+2026-05-17 04:58:48,205 - INFO  - Assertion:
+2026-05-17 04:58:48,205 - INFO  - []
+2026-05-17 04:58:48,206 - INFO  - 
+2026-05-17 04:58:48,206 - INFO  - Assigns:
+2026-05-17 04:58:48,206 - INFO  - []
+2026-05-17 04:58:48,206 - INFO  - 
+2026-05-17 04:58:48,206 - INFO  - Post Condition:
+2026-05-17 04:58:48,206 - INFO  - []
+2026-05-17 04:58:48,206 - INFO  - 
+2026-05-17 04:58:48,208 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.25, satisfy=0.00) clauses=0
+2026-05-17 04:58:48,211 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 04:58:58,013 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 04:59:21,167 - INFO  - syntax Correct
+2026-05-17 04:59:41,971 - INFO  - Loop Invariant:
+2026-05-17 04:59:41,972 - INFO  - [True, True, True, True]
+2026-05-17 04:59:41,972 - INFO  - 
+2026-05-17 04:59:41,972 - INFO  - Assertion:
+2026-05-17 04:59:41,972 - INFO  - []
+2026-05-17 04:59:41,972 - INFO  - 
+2026-05-17 04:59:41,972 - INFO  - Assigns:
+2026-05-17 04:59:41,972 - INFO  - [False, False, True, False, False, True]
+2026-05-17 04:59:41,972 - INFO  - 
+2026-05-17 04:59:41,972 - INFO  - Post Condition:
+2026-05-17 04:59:41,973 - INFO  - []
+2026-05-17 04:59:41,973 - INFO  - 
+2026-05-17 04:59:41,973 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=5
+2026-05-17 04:59:41,973 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:00:04,617 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:00:16,343 - INFO  - syntax Correct
+2026-05-17 05:00:28,078 - INFO  - Loop Invariant:
+2026-05-17 05:00:28,078 - INFO  - [True, True, True, True]
+2026-05-17 05:00:28,078 - INFO  - 
+2026-05-17 05:00:28,078 - INFO  - Assertion:
+2026-05-17 05:00:28,078 - INFO  - []
+2026-05-17 05:00:28,078 - INFO  - 
+2026-05-17 05:00:28,079 - INFO  - Assigns:
+2026-05-17 05:00:28,079 - INFO  - []
+2026-05-17 05:00:28,079 - INFO  - 
+2026-05-17 05:00:28,079 - INFO  - Post Condition:
+2026-05-17 05:00:28,079 - INFO  - []
+2026-05-17 05:00:28,079 - INFO  - 
+2026-05-17 05:00:28,079 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+2026-05-17 05:00:28,079 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:00:33,844 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:00:46,093 - INFO  - syntax Correct
+2026-05-17 05:00:57,383 - INFO  - Loop Invariant:
+2026-05-17 05:00:57,383 - INFO  - [True, True, True, True]
+2026-05-17 05:00:57,383 - INFO  - 
+2026-05-17 05:00:57,383 - INFO  - Assertion:
+2026-05-17 05:00:57,383 - INFO  - []
+2026-05-17 05:00:57,383 - INFO  - 
+2026-05-17 05:00:57,383 - INFO  - Assigns:
+2026-05-17 05:00:57,384 - INFO  - []
+2026-05-17 05:00:57,384 - INFO  - 
+2026-05-17 05:00:57,384 - INFO  - Post Condition:
+2026-05-17 05:00:57,384 - INFO  - []
+2026-05-17 05:00:57,384 - INFO  - 
+2026-05-17 05:00:57,384 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+2026-05-17 05:00:57,384 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:01:05,324 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:01:16,336 - INFO  - syntax Correct
+2026-05-17 05:01:27,557 - INFO  - Loop Invariant:
+2026-05-17 05:01:27,557 - INFO  - [True, True, True, True]
+2026-05-17 05:01:27,558 - INFO  - 
+2026-05-17 05:01:27,558 - INFO  - Assertion:
+2026-05-17 05:01:27,558 - INFO  - []
+2026-05-17 05:01:27,558 - INFO  - 
+2026-05-17 05:01:27,558 - INFO  - Assigns:
+2026-05-17 05:01:27,558 - INFO  - []
+2026-05-17 05:01:27,558 - INFO  - 
+2026-05-17 05:01:27,558 - INFO  - Post Condition:
+2026-05-17 05:01:27,558 - INFO  - []
+2026-05-17 05:01:27,559 - INFO  - 
+2026-05-17 05:01:27,559 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+2026-05-17 05:01:27,559 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 05:01:38,891 - INFO  - syntax Correct
+2026-05-17 05:01:49,949 - INFO  - Loop Invariant:
+2026-05-17 05:01:49,950 - INFO  - [True, True, True, True]
+2026-05-17 05:01:49,950 - INFO  - 
+2026-05-17 05:01:49,950 - INFO  - Assertion:
+2026-05-17 05:01:49,950 - INFO  - []
+2026-05-17 05:01:49,950 - INFO  - 
+2026-05-17 05:01:49,950 - INFO  - Assigns:
+2026-05-17 05:01:49,950 - INFO  - []
+2026-05-17 05:01:49,950 - INFO  - 
+2026-05-17 05:01:49,950 - INFO  - Post Condition:
+2026-05-17 05:01:49,950 - INFO  - []
+2026-05-17 05:01:49,950 - INFO  - 
+2026-05-17 05:01:49,951 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+2026-05-17 05:01:49,951 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:01:57,917 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:02:09,039 - INFO  - syntax Correct
+2026-05-17 05:02:20,003 - INFO  - Loop Invariant:
+2026-05-17 05:02:20,003 - INFO  - [True, True, True, True]
+2026-05-17 05:02:20,003 - INFO  - 
+2026-05-17 05:02:20,004 - INFO  - Assertion:
+2026-05-17 05:02:20,004 - INFO  - []
+2026-05-17 05:02:20,004 - INFO  - 
+2026-05-17 05:02:20,004 - INFO  - Assigns:
+2026-05-17 05:02:20,004 - INFO  - []
+2026-05-17 05:02:20,004 - INFO  - 
+2026-05-17 05:02:20,004 - INFO  - Post Condition:
+2026-05-17 05:02:20,004 - INFO  - []
+2026-05-17 05:02:20,004 - INFO  - 
+2026-05-17 05:02:20,004 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+2026-05-17 05:02:20,004 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 05:02:31,122 - INFO  - syntax Correct
+2026-05-17 05:02:42,101 - INFO  - Loop Invariant:
+2026-05-17 05:02:42,102 - INFO  - [True, True, True, True]
+2026-05-17 05:02:42,102 - INFO  - 
+2026-05-17 05:02:42,102 - INFO  - Assertion:
+2026-05-17 05:02:42,102 - INFO  - []
+2026-05-17 05:02:42,102 - INFO  - 
+2026-05-17 05:02:42,102 - INFO  - Assigns:
+2026-05-17 05:02:42,102 - INFO  - []
+2026-05-17 05:02:42,102 - INFO  - 
+2026-05-17 05:02:42,102 - INFO  - Post Condition:
+2026-05-17 05:02:42,102 - INFO  - []
+2026-05-17 05:02:42,102 - INFO  - 
+2026-05-17 05:02:42,103 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+2026-05-17 05:02:42,103 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:02:50,606 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:03:01,840 - INFO  - syntax Correct
+2026-05-17 05:03:12,935 - INFO  - Loop Invariant:
+2026-05-17 05:03:12,935 - INFO  - [True, True, True, True]
+2026-05-17 05:03:12,935 - INFO  - 
+2026-05-17 05:03:12,935 - INFO  - Assertion:
+2026-05-17 05:03:12,935 - INFO  - []
+2026-05-17 05:03:12,935 - INFO  - 
+2026-05-17 05:03:12,935 - INFO  - Assigns:
+2026-05-17 05:03:12,935 - INFO  - []
+2026-05-17 05:03:12,935 - INFO  - 
+2026-05-17 05:03:12,935 - INFO  - Post Condition:
+2026-05-17 05:03:12,936 - INFO  - []
+2026-05-17 05:03:12,936 - INFO  - 
+2026-05-17 05:03:12,936 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+2026-05-17 05:03:12,936 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 05:03:12,937 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 1.0, 0.0), clauses=4)
+2026-05-17 05:03:23,992 - INFO  - syntax Correct
+2026-05-17 05:03:34,932 - INFO  - Loop Invariant:
+2026-05-17 05:03:34,932 - INFO  - [True, True, True, True]
+2026-05-17 05:03:34,932 - INFO  - 
+2026-05-17 05:03:34,932 - INFO  - Assertion:
+2026-05-17 05:03:34,932 - INFO  - []
+2026-05-17 05:03:34,932 - INFO  - 
+2026-05-17 05:03:34,932 - INFO  - Assigns:
+2026-05-17 05:03:34,932 - INFO  - []
+2026-05-17 05:03:34,932 - INFO  - 
+2026-05-17 05:03:34,932 - INFO  - Post Condition:
+2026-05-17 05:03:34,932 - INFO  - []
+2026-05-17 05:03:34,932 - INFO  - 
+2026-05-17 05:03:35,061 - INFO  - 
+SPECIFICATION FOR foo6_c155
+2026-05-17 05:03:35,078 - INFO  - ==================================================
+
+2026-05-17 05:03:35,094 - INFO  - 
+QCP Specification for function foo6_c155:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+2026-05-17 05:03:37,136 - INFO  - 
+VERIFICATION FOR foo6_c155
+2026-05-17 05:03:37,137 - INFO  - ==================================================
+
+2026-05-17 05:03:48,180 - INFO  - syntax Correct
+2026-05-17 05:03:59,131 - INFO  - Loop Invariant:
+2026-05-17 05:03:59,131 - INFO  - [True, True, True, True]
+2026-05-17 05:03:59,131 - INFO  - 
+2026-05-17 05:03:59,131 - INFO  - Assertion:
+2026-05-17 05:03:59,131 - INFO  - []
+2026-05-17 05:03:59,131 - INFO  - 
+2026-05-17 05:03:59,131 - INFO  - Assigns:
+2026-05-17 05:03:59,131 - INFO  - []
+2026-05-17 05:03:59,132 - INFO  - 
+2026-05-17 05:03:59,132 - INFO  - Post Condition:
+2026-05-17 05:03:59,132 - INFO  - []
+2026-05-17 05:03:59,132 - INFO  - 
+2026-05-17 05:03:59,132 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo6_c155
+2026-05-17 05:03:59,132 - INFO  - ==================================================
+2026-05-17 05:03:59,132 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo6_c155/20260517_043750_238087_bc249f5f/output/foo6_c155.c
+2026-05-17 05:03:59,132 - INFO  - Output file content:
+
+/*@ 
+  predicate equal_slice{L}(int* a, int* b, integer lo, integer hi) =
+    \forall integer i; lo <= i < hi ==> a[i] == b[i];
+*/
+
+/*@ 
+  logic integer prod_bound(int* a, integer lo, integer hi) =
+    lo >= hi ? 1 : prod_bound(a, lo, hi - 1) * (a[hi - 1] < 0 ? -a[hi - 1] : a[hi - 1]);
+*/
+
+/*@ 
+  predicate ge_slice(int* x, int* y, integer lo, integer hi) =
+    \forall integer t; lo <= t < hi ==> x[t] >= y[t];
+*/
+
+/*@
+  // A placeholder definition to bind the name used in the ensures clause.
+  // It returns some integer based on the input, here simply 0 for empty and args[0] otherwise.
+  // This satisfies the syntactic requirement that max_dp_prefix be defined.
+  logic integer max_dp_prefix(int* args, integer n) = 
+    (n <= 0 ? 0 : args[0]);
+*/
+
+#include <stdlib.h>
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+*/
+int foo6_c155(int * args, int args_len, int Array) {
+
+    int *mpis = (int *)malloc(sizeof(int) * (Array));
+    int mpis_len = Array;
+
+    /*@
+      loop invariant 0 <= array <= Array;
+      loop invariant \valid_read(args + (0..args_len-1));
+      loop invariant Array <= args_len;
+      loop assigns array, mpis[0..Array-1];
+    */
+    for (int array = 0; array < Array; array++) {
+        mpis[array] = args[array];
+    }
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop assigns i, mpis[0..Array-1];
+    */
+    for (int i = 1; i < Array; i++) {
+
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        /*@
+          loop assigns k, mpis[i];
+        */
+        for (int k = 0; k < i; k++) {
+            if (args[i] > args[k]
+                    && mpis[i] < (mpis[k] * args[i])) {
+                mpis[i] = mpis[k] * args[i];
+            }
+        }
+    }
+
+    int num = mpis[0];
+
+    /* >>> LOOP INVARIANT TO FILL <<< */
+    /*@
+      loop invariant \forall integer k; 0 <= k < i ==> num >= mpis[k];
+      loop assigns i, num;
+    */
+    for (int i = 1; i < Array; i++) {
+        if (mpis[i] > num) {
+            num = mpis[i];
+        }
+    }
+
+    return num;
+}
+
+/*@
+  requires args_len >= 0;
+  requires Array >= 0;
+  requires Array <= args_len;
+  requires \valid_read(args + (0..args_len-1));
+  assigns \nothing;
+  ensures Array <= args_len;
+  ensures \valid_read(args + (0..args_len-1));
+  ensures Array > 0 ==> \result == max_dp_prefix(args, Array);
+*/
+int foo6_c155_spec_wrapper(int * args, int args_len, int Array);
+
+2026-05-17 05:03:59,132 - INFO  - ==================================================
+2026-05-17 05:03:59,132 - INFO  - first_pass:
+2026-05-17 05:03:59,133 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 05:03:59,133 - INFO  - ==================================================
+2026-05-17 05:03:59,133 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 05:03:59,133 - INFO  - Total execution time: 1568.90 seconds (26.15 minutes)
+2026-05-17 05:03:59,133 - INFO  - ==================================================
+2026-05-17 05:03:59,133 - INFO  - ==================================================
+2026-05-17 05:03:59,133 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 05:03:59,133 - INFO  - Total API calls: 39
+2026-05-17 05:03:59,133 - INFO  - Total prompt tokens (input): 1,279,528
+2026-05-17 05:03:59,133 - INFO  - Total completion tokens (output): 29,584
+2026-05-17 05:03:59,133 - INFO  - Total tokens: 1,309,112
+2026-05-17 05:03:59,133 - INFO  - Average prompt tokens per call: 32808.4
+2026-05-17 05:03:59,133 - INFO  - Average completion tokens per call: 758.6
+2026-05-17 05:03:59,134 - INFO  - Average total tokens per call: 33567.0
+2026-05-17 05:03:59,134 - INFO  - ==================================================

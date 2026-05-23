@@ -1,0 +1,1840 @@
+2026-05-17 11:42:18,206 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo186_c294/20260517_114218_544476_e3f7468d
+2026-05-17 11:42:18,216 - INFO  - 
+🚀 Starting generation of function: foo186_c294
+2026-05-17 11:42:18,216 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 11:42:18,216 - INFO  - TRY TIME: 0
+2026-05-17 11:42:18,216 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 11:42:18,216 - INFO  - ==================================================
+
+2026-05-17 11:42:44,712 - INFO  - [auto only_loop] False — foo186_c294 returns 'int'
+2026-05-17 11:42:44,723 - INFO  - Initial pending functions: ['foo186_c294', 'malloc']
+2026-05-17 11:42:44,723 - INFO  - Now processing function malloc
+
+2026-05-17 11:42:44,723 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-17 11:42:44,723 - INFO  - 
+GENERATE ANNOTATION FOR foo186_c294
+2026-05-17 11:42:44,723 - INFO  - ==================================================
+
+2026-05-17 11:42:44,723 - INFO  - Function foo186_c294 has been initialized
+2026-05-17 11:42:44,724 - INFO  - Starting to generate annotation code for foo186_c294
+2026-05-17 11:42:45,099 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo186_c294
+2026-05-17 11:42:45,099 - INFO  - ==================================================
+
+2026-05-17 11:42:45,375 - INFO  - Variable Maps:[{}]
+2026-05-17 11:42:45,382 - INFO  - Path conditions: [None]
+2026-05-17 11:42:45,382 - INFO  - Pre condition: 
+2026-05-17 11:42:45,383 - INFO  - Loop Condition: count <= p
+2026-05-17 11:42:45,385 - INFO  - Array Names: ['arr']
+2026-05-17 11:42:45,385 - INFO  - Updated Loop Conditions: ['count <= p']
+2026-05-17 11:42:45,386 - INFO  - Global Unchanged Variables: []
+2026-05-17 11:42:45,386 - INFO  - Non Inductive Variables: []
+2026-05-17 11:42:45,386 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 11:42:45,390 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 11:42:45,399 - INFO  - examples category: array
+2026-05-17 11:42:45,400 - INFO  - examples:
+2026-05-17 11:42:45,400 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 11:43:09,020 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-17 11:43:09,071 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 11:43:53,736 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=6
+2026-05-17 11:44:49,860 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.62, satisfy=0.00) clauses=8
+2026-05-17 11:45:33,365 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=8
+2026-05-17 11:46:05,946 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:47:09,241 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 11:47:51,152 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 11:48:27,924 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:48:27,930 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=17)
+2026-05-17 11:49:09,767 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 11:50:03,364 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 11:50:03,366 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=17)
+2026-05-17 11:50:03,374 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8571428571428571, 0.0), clauses=7)
+2026-05-17 11:51:01,659 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 11:51:17,356 - INFO  - ACSL format loop invariant
+2026-05-17 11:51:17,357 - INFO  - /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+2026-05-17 11:51:17,429 - INFO  - QCP format loop invariant
+2026-05-17 11:51:17,434 - INFO  - /*@ Inv
+    (2 <= count) &&
+(arr_len == p + 1) &&
+(arr_l[0] == 0) &&
+((arr_len >= 2) => (arr_l[1] == 1)) &&
+((count >= 3) => (arr_l[count - 1] == ((2 * arr_l[count - 2] + arr_l[count - 3]) % 1000000000))) &&
+((count <= p) => (0 <= count && count < arr_len)
+      loop assigns count, arr_l[2..p])
+    */
+    
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+2026-05-17 11:51:35,165 - INFO  - CORRECT INVARIANT
+2026-05-17 11:51:35,168 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo186_c294
+2026-05-17 11:51:35,168 - INFO  - ==================================================
+
+2026-05-17 11:51:35,201 - INFO  - Starting to generate ACSL specification for foo186_c294
+2026-05-17 11:52:20,919 - INFO  - syntax Correct
+2026-05-17 11:52:51,750 - INFO  - Loop Invariant:
+2026-05-17 11:52:51,758 - INFO  - [True, True, True, True, True, True]
+2026-05-17 11:52:51,758 - INFO  - 
+2026-05-17 11:52:51,758 - INFO  - Assertion:
+2026-05-17 11:52:51,758 - INFO  - []
+2026-05-17 11:52:51,758 - INFO  - 
+2026-05-17 11:52:51,758 - INFO  - Assigns:
+2026-05-17 11:52:51,759 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 11:52:51,759 - INFO  - 
+2026-05-17 11:52:51,761 - INFO  - Post Condition:
+2026-05-17 11:52:51,761 - INFO  - [False]
+2026-05-17 11:52:51,761 - INFO  - 
+2026-05-17 11:52:51,762 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=2
+2026-05-17 11:52:51,763 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  assigns \nothing;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED];
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 11:53:07,436 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  assigns \nothing;
+  ensures \result == fib2mod(p); // matches the implemented recurrence modulo 1e9
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 11:53:38,735 - INFO  - syntax Correct
+2026-05-17 11:54:12,954 - INFO  - Loop Invariant:
+2026-05-17 11:54:12,964 - INFO  - [True, True, True, True, True, True]
+2026-05-17 11:54:12,965 - INFO  - 
+2026-05-17 11:54:12,969 - INFO  - Assertion:
+2026-05-17 11:54:12,969 - INFO  - []
+2026-05-17 11:54:12,970 - INFO  - 
+2026-05-17 11:54:12,978 - INFO  - Assigns:
+2026-05-17 11:54:12,978 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 11:54:12,978 - INFO  - 
+2026-05-17 11:54:12,988 - INFO  - Post Condition:
+2026-05-17 11:54:12,989 - INFO  - [False]
+2026-05-17 11:54:12,989 - INFO  - 
+2026-05-17 11:54:13,004 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=3
+2026-05-17 11:54:13,004 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  assigns \nothing;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED]; // matches the implemented recurrence modulo 1e9
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 11:54:26,344 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  assigns \nothing;
+  ensures \result == fib2mod(p); // matches the implemented recurrence modulo 1e9
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (2 <= count <= p) ==> (arr[count - 1] == fib2mod(count - 1));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+      loop variant p - count;
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 11:55:06,525 - INFO  - syntax Correct
+2026-05-17 11:55:38,836 - INFO  - Loop Invariant:
+2026-05-17 11:55:38,843 - INFO  - [True, True, True, True, False, True]
+2026-05-17 11:55:38,843 - INFO  - 
+2026-05-17 11:55:38,846 - INFO  - Assertion:
+2026-05-17 11:55:38,846 - INFO  - []
+2026-05-17 11:55:38,846 - INFO  - 
+2026-05-17 11:55:38,846 - INFO  - Assigns:
+2026-05-17 11:55:38,847 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 11:55:38,847 - INFO  - 
+2026-05-17 11:55:38,847 - INFO  - Post Condition:
+2026-05-17 11:55:38,847 - INFO  - [False]
+2026-05-17 11:55:38,847 - INFO  - 
+2026-05-17 11:55:38,855 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=3
+2026-05-17 11:55:38,855 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  assigns \nothing;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED]; // matches the implemented recurrence modulo 1e9
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (2 <= count <= p) ==> (arr[count - 1] == fib2mod(count - 1));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+      loop variant p - count;
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 11:55:46,460 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  assigns \nothing;
+  ensures \result == fib2mod(p);
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      // link the filled prefix to the logical sequence
+      loop invariant (count >= 2) ==> (arr[count - 1] == fib2mod(count - 1));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+      loop variant p - count;
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1] + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 11:56:27,922 - INFO  - syntax Correct
+2026-05-17 11:56:56,717 - INFO  - Loop Invariant:
+2026-05-17 11:56:56,733 - INFO  - [True, True, True, True, False, True]
+2026-05-17 11:56:56,734 - INFO  - 
+2026-05-17 11:56:56,734 - INFO  - Assertion:
+2026-05-17 11:56:56,735 - INFO  - []
+2026-05-17 11:56:56,736 - INFO  - 
+2026-05-17 11:56:56,736 - INFO  - Assigns:
+2026-05-17 11:56:56,736 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 11:56:56,736 - INFO  - 
+2026-05-17 11:56:56,737 - INFO  - Post Condition:
+2026-05-17 11:56:56,737 - INFO  - [False]
+2026-05-17 11:56:56,737 - INFO  - 
+2026-05-17 11:56:56,741 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=3
+2026-05-17 11:56:56,741 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 11:57:27,246 - INFO  - syntax Correct
+2026-05-17 11:57:56,508 - INFO  - Loop Invariant:
+2026-05-17 11:57:56,522 - INFO  - [True, True, True, True, True, True]
+2026-05-17 11:57:56,522 - INFO  - 
+2026-05-17 11:57:56,523 - INFO  - Assertion:
+2026-05-17 11:57:56,523 - INFO  - []
+2026-05-17 11:57:56,523 - INFO  - 
+2026-05-17 11:57:56,523 - INFO  - Assigns:
+2026-05-17 11:57:56,523 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 11:57:56,523 - INFO  - 
+2026-05-17 11:57:56,543 - INFO  - Post Condition:
+2026-05-17 11:57:56,544 - INFO  - [False]
+2026-05-17 11:57:56,544 - INFO  - 
+2026-05-17 11:57:56,545 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=3
+2026-05-17 11:57:56,545 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  assigns \nothing;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED]; // matches the implemented recurrence modulo 1e9
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 11:58:04,335 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  assigns \nothing;
+  ensures \result == fib2mod(p);
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+      loop variant p - count;
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 11:58:36,447 - INFO  - syntax Correct
+2026-05-17 11:59:04,710 - INFO  - Loop Invariant:
+2026-05-17 11:59:04,711 - INFO  - [True, True, True, True, True, True]
+2026-05-17 11:59:04,711 - INFO  - 
+2026-05-17 11:59:04,711 - INFO  - Assertion:
+2026-05-17 11:59:04,711 - INFO  - []
+2026-05-17 11:59:04,711 - INFO  - 
+2026-05-17 11:59:04,712 - INFO  - Assigns:
+2026-05-17 11:59:04,712 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 11:59:04,712 - INFO  - 
+2026-05-17 11:59:04,723 - INFO  - Post Condition:
+2026-05-17 11:59:04,723 - INFO  - [False]
+2026-05-17 11:59:04,723 - INFO  - 
+2026-05-17 11:59:04,724 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=3
+2026-05-17 11:59:04,724 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 11:59:37,230 - INFO  - syntax Correct
+2026-05-17 12:00:02,401 - INFO  - Loop Invariant:
+2026-05-17 12:00:02,402 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:00:02,402 - INFO  - 
+2026-05-17 12:00:02,403 - INFO  - Assertion:
+2026-05-17 12:00:02,403 - INFO  - []
+2026-05-17 12:00:02,403 - INFO  - 
+2026-05-17 12:00:02,404 - INFO  - Assigns:
+2026-05-17 12:00:02,404 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:00:02,404 - INFO  - 
+2026-05-17 12:00:02,417 - INFO  - Post Condition:
+2026-05-17 12:00:02,422 - INFO  - [False]
+2026-05-17 12:00:02,422 - INFO  - 
+2026-05-17 12:00:02,426 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=3
+2026-05-17 12:00:02,429 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  assigns \nothing;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED]; // matches the implemented recurrence modulo 1e9
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:00:15,392 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/* base case consistent with fib2mod */
+  ensures (p >= 2) ==> (\result == (2 * fib2mod(p - 1) + fib2mod(p - 2)) % 1000000000);
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:00:17,156 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo186_c294/20260517_114218_544476_e3f7468d/output/foo186_c294.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo186_c294/20260517_114218_544476_e3f7468d/output/foo186_c294.c:11: 
+  syntax error:
+  Location: line 11, between columns 13 and 15, before or at token: >=
+  9     
+  10    /* base case consistent with fib2mod */
+  11      ensures (p >= 2) ==> (\result == (2 * fib2mod(p - 1) + fib2mod(p - 2)) % 1000000000);
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  12    */
+  13    int foo186_c294(int p) {
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:00:17,157 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=1
+2026-05-17 12:00:17,157 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 12:00:47,172 - INFO  - syntax Correct
+2026-05-17 12:01:10,118 - INFO  - Loop Invariant:
+2026-05-17 12:01:10,121 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:01:10,122 - INFO  - 
+2026-05-17 12:01:10,122 - INFO  - Assertion:
+2026-05-17 12:01:10,122 - INFO  - []
+2026-05-17 12:01:10,122 - INFO  - 
+2026-05-17 12:01:10,123 - INFO  - Assigns:
+2026-05-17 12:01:10,123 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:01:10,123 - INFO  - 
+2026-05-17 12:01:10,127 - INFO  - Post Condition:
+2026-05-17 12:01:10,127 - INFO  - [False]
+2026-05-17 12:01:10,127 - INFO  - 
+2026-05-17 12:01:10,130 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=3
+2026-05-17 12:01:10,137 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  assigns \nothing;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED]; // matches the implemented recurrence modulo 1e9
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:01:18,773 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;               // ensures arr[1] is initialized and loop entry safe
+  assigns \nothing;              // only local/heap temporaries are touched; no caller-visible writes
+  ensures \result == (p == 1 ? 1
+                      : ((2 * fib2mod(p - 1) + fib2mod(p - 2)) % 1000000000));
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:01:50,180 - INFO  - syntax Correct
+2026-05-17 12:02:13,619 - INFO  - Loop Invariant:
+2026-05-17 12:02:13,620 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:02:13,620 - INFO  - 
+2026-05-17 12:02:13,620 - INFO  - Assertion:
+2026-05-17 12:02:13,621 - INFO  - []
+2026-05-17 12:02:13,621 - INFO  - 
+2026-05-17 12:02:13,621 - INFO  - Assigns:
+2026-05-17 12:02:13,621 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:02:13,621 - INFO  - 
+2026-05-17 12:02:13,625 - INFO  - Post Condition:
+2026-05-17 12:02:13,625 - INFO  - [False]
+2026-05-17 12:02:13,625 - INFO  - 
+2026-05-17 12:02:13,626 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=4
+2026-05-17 12:02:13,627 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;               // ensures arr[1] is initialized and loop entry safe
+  assigns \nothing [POSTCONDITION FAILED];              // only local/heap temporaries are touched; no caller-visible writes
+  ensures \result == (p == 1 ? 1
+                      : ((2 * fib2mod(p - 1) + fib2mod(p - 2)) % 1000000000));
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:02:25,035 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == fib2mod(p);
+*/
+int foo186_c294(int p) {
+    if (p <= 0) return 0;
+    if (p == 1) return 1;
+    int a = 0;      /* value for k = 0 */
+    int b = 1;      /* value for k = 1 */
+    /*@
+      loop invariant i >= 1 && i <= p;
+      loop invariant b == fib2mod(i);
+      loop invariant a == fib2mod(i - 1);
+      loop assigns i, a, b;
+      loop variant p - i;
+    */
+    for (int i = 1; i < p; i++) {
+        int next = (int)(((long long)2 * b + a) % 1000000000);
+        a = b;
+        b = next;
+    }
+    return b;
+}
+
+2026-05-17 12:02:25,063 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.5714285714285714, 0.0), clauses=4)
+2026-05-17 12:02:56,316 - INFO  - syntax Correct
+2026-05-17 12:03:21,555 - INFO  - Loop Invariant:
+2026-05-17 12:03:21,556 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:03:21,556 - INFO  - 
+2026-05-17 12:03:21,556 - INFO  - Assertion:
+2026-05-17 12:03:21,557 - INFO  - []
+2026-05-17 12:03:21,557 - INFO  - 
+2026-05-17 12:03:21,557 - INFO  - Assigns:
+2026-05-17 12:03:21,557 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:03:21,557 - INFO  - 
+2026-05-17 12:03:21,562 - INFO  - Post Condition:
+2026-05-17 12:03:21,562 - INFO  - [False]
+2026-05-17 12:03:21,562 - INFO  - 
+2026-05-17 12:03:50,203 - INFO  - syntax Correct
+2026-05-17 12:04:14,568 - INFO  - Loop Invariant:
+2026-05-17 12:04:14,572 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:04:14,572 - INFO  - 
+2026-05-17 12:04:14,572 - INFO  - Assertion:
+2026-05-17 12:04:14,572 - INFO  - []
+2026-05-17 12:04:14,572 - INFO  - 
+2026-05-17 12:04:14,572 - INFO  - Assigns:
+2026-05-17 12:04:14,572 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:04:14,572 - INFO  - 
+2026-05-17 12:04:14,573 - INFO  - Post Condition:
+2026-05-17 12:04:14,573 - INFO  - []
+2026-05-17 12:04:14,573 - INFO  - 
+2026-05-17 12:04:14,601 - INFO  - 
+SPECIFICATION FOR foo186_c294
+2026-05-17 12:04:14,604 - INFO  - ==================================================
+
+2026-05-17 12:04:14,607 - INFO  - 
+QCP Specification for function foo186_c294:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 12:04:22,841 - INFO  - 
+VERIFICATION FOR foo186_c294
+2026-05-17 12:04:22,842 - INFO  - ==================================================
+
+2026-05-17 12:04:51,187 - INFO  - syntax Correct
+2026-05-17 12:05:14,703 - INFO  - Loop Invariant:
+2026-05-17 12:05:14,704 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:05:14,705 - INFO  - 
+2026-05-17 12:05:14,705 - INFO  - Assertion:
+2026-05-17 12:05:14,705 - INFO  - []
+2026-05-17 12:05:14,705 - INFO  - 
+2026-05-17 12:05:14,709 - INFO  - Assigns:
+2026-05-17 12:05:14,709 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:05:14,709 - INFO  - 
+2026-05-17 12:05:14,710 - INFO  - Post Condition:
+2026-05-17 12:05:14,710 - INFO  - []
+2026-05-17 12:05:14,710 - INFO  - 
+2026-05-17 12:05:54,851 - INFO  - syntax Correct
+2026-05-17 12:06:17,766 - INFO  - Loop Invariant:
+2026-05-17 12:06:17,767 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:06:17,767 - INFO  - 
+2026-05-17 12:06:17,767 - INFO  - Assertion:
+2026-05-17 12:06:17,767 - INFO  - []
+2026-05-17 12:06:17,767 - INFO  - 
+2026-05-17 12:06:17,767 - INFO  - Assigns:
+2026-05-17 12:06:17,767 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:06:17,767 - INFO  - 
+2026-05-17 12:06:17,768 - INFO  - Post Condition:
+2026-05-17 12:06:17,768 - INFO  - [False]
+2026-05-17 12:06:17,768 - INFO  - 
+2026-05-17 12:06:17,773 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=2
+2026-05-17 12:06:17,776 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:06:24,051 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:06:24,631 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo186_c294/20260517_114218_544476_e3f7468d/output/foo186_c294.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo186_c294/20260517_114218_544476_e3f7468d/output/foo186_c294.c:12: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo186_c294/20260517_114218_544476_e3f7468d/output/foo186_c294.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:06:24,632 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 12:06:59,181 - INFO  - syntax Correct
+2026-05-17 12:07:22,219 - INFO  - Loop Invariant:
+2026-05-17 12:07:22,220 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:07:22,220 - INFO  - 
+2026-05-17 12:07:22,220 - INFO  - Assertion:
+2026-05-17 12:07:22,220 - INFO  - []
+2026-05-17 12:07:22,220 - INFO  - 
+2026-05-17 12:07:22,220 - INFO  - Assigns:
+2026-05-17 12:07:22,220 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:07:22,221 - INFO  - 
+2026-05-17 12:07:22,221 - INFO  - Post Condition:
+2026-05-17 12:07:22,221 - INFO  - [False]
+2026-05-17 12:07:22,221 - INFO  - 
+2026-05-17 12:07:22,221 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=3
+2026-05-17 12:07:22,222 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:07:30,608 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p);
+  assigns \nothing;
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:07:53,083 - INFO  - syntax Correct
+2026-05-17 12:08:14,286 - INFO  - Loop Invariant:
+2026-05-17 12:08:14,287 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:08:14,287 - INFO  - 
+2026-05-17 12:08:14,287 - INFO  - Assertion:
+2026-05-17 12:08:14,287 - INFO  - []
+2026-05-17 12:08:14,287 - INFO  - 
+2026-05-17 12:08:14,287 - INFO  - Assigns:
+2026-05-17 12:08:14,287 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:08:14,287 - INFO  - 
+2026-05-17 12:08:14,288 - INFO  - Post Condition:
+2026-05-17 12:08:14,288 - INFO  - [False]
+2026-05-17 12:08:14,288 - INFO  - 
+2026-05-17 12:08:14,288 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=3
+2026-05-17 12:08:14,288 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:08:22,470 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p);
+  assigns \nothing;
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:08:44,477 - INFO  - syntax Correct
+2026-05-17 12:09:05,415 - INFO  - Loop Invariant:
+2026-05-17 12:09:05,416 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:09:05,416 - INFO  - 
+2026-05-17 12:09:05,416 - INFO  - Assertion:
+2026-05-17 12:09:05,416 - INFO  - []
+2026-05-17 12:09:05,416 - INFO  - 
+2026-05-17 12:09:05,417 - INFO  - Assigns:
+2026-05-17 12:09:05,417 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:09:05,417 - INFO  - 
+2026-05-17 12:09:05,417 - INFO  - Post Condition:
+2026-05-17 12:09:05,417 - INFO  - [False]
+2026-05-17 12:09:05,417 - INFO  - 
+2026-05-17 12:09:05,418 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=3
+2026-05-17 12:09:05,418 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 12:09:27,554 - INFO  - syntax Correct
+2026-05-17 12:09:48,616 - INFO  - Loop Invariant:
+2026-05-17 12:09:48,616 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:09:48,616 - INFO  - 
+2026-05-17 12:09:48,616 - INFO  - Assertion:
+2026-05-17 12:09:48,616 - INFO  - []
+2026-05-17 12:09:48,616 - INFO  - 
+2026-05-17 12:09:48,616 - INFO  - Assigns:
+2026-05-17 12:09:48,617 - INFO  - [False, False, True, False, False, False, True]
+2026-05-17 12:09:48,617 - INFO  - 
+2026-05-17 12:09:48,617 - INFO  - Post Condition:
+2026-05-17 12:09:48,617 - INFO  - [False]
+2026-05-17 12:09:48,617 - INFO  - 
+2026-05-17 12:09:48,617 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=3
+2026-05-17 12:09:48,617 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:09:57,211 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p);
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:10:08,020 - INFO  - syntax Correct
+2026-05-17 12:10:19,196 - INFO  - Loop Invariant:
+2026-05-17 12:10:19,197 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:10:19,197 - INFO  - 
+2026-05-17 12:10:19,197 - INFO  - Assertion:
+2026-05-17 12:10:19,197 - INFO  - []
+2026-05-17 12:10:19,197 - INFO  - 
+2026-05-17 12:10:19,197 - INFO  - Assigns:
+2026-05-17 12:10:19,197 - INFO  - []
+2026-05-17 12:10:19,197 - INFO  - 
+2026-05-17 12:10:19,197 - INFO  - Post Condition:
+2026-05-17 12:10:19,197 - INFO  - [False]
+2026-05-17 12:10:19,197 - INFO  - 
+2026-05-17 12:10:19,197 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=2
+2026-05-17 12:10:19,198 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED];
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:10:25,046 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p);
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:10:35,989 - INFO  - syntax Correct
+2026-05-17 12:10:46,729 - INFO  - Loop Invariant:
+2026-05-17 12:10:46,729 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:10:46,730 - INFO  - 
+2026-05-17 12:10:46,730 - INFO  - Assertion:
+2026-05-17 12:10:46,730 - INFO  - []
+2026-05-17 12:10:46,730 - INFO  - 
+2026-05-17 12:10:46,730 - INFO  - Assigns:
+2026-05-17 12:10:46,730 - INFO  - []
+2026-05-17 12:10:46,730 - INFO  - 
+2026-05-17 12:10:46,730 - INFO  - Post Condition:
+2026-05-17 12:10:46,730 - INFO  - [False]
+2026-05-17 12:10:46,730 - INFO  - 
+2026-05-17 12:10:46,731 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=2
+2026-05-17 12:10:46,731 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p) [POSTCONDITION FAILED];
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:10:55,223 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures (p == 1) ==> (\result == 1);
+  ensures (p >= 2) ==> (\result == fib2mod(p));
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:11:06,134 - INFO  - syntax Correct
+2026-05-17 12:11:17,016 - INFO  - Loop Invariant:
+2026-05-17 12:11:17,016 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:11:17,017 - INFO  - 
+2026-05-17 12:11:17,017 - INFO  - Assertion:
+2026-05-17 12:11:17,017 - INFO  - []
+2026-05-17 12:11:17,017 - INFO  - 
+2026-05-17 12:11:17,017 - INFO  - Assigns:
+2026-05-17 12:11:17,017 - INFO  - []
+2026-05-17 12:11:17,017 - INFO  - 
+2026-05-17 12:11:17,017 - INFO  - Post Condition:
+2026-05-17 12:11:17,017 - INFO  - [True, False]
+2026-05-17 12:11:17,017 - INFO  - 
+2026-05-17 12:11:17,018 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=3
+2026-05-17 12:11:17,018 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures (p == 1) ==> (\result == 1);
+  ensures (p >= 2) ==> (\result == fib2mod(p)) [POSTCONDITION FAILED];
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:11:23,962 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures (p == 1) ==> (\result == 1);
+  ensures (p >= 2) ==> (\result == ((2 * fib2mod(p - 1) + fib2mod(p - 2)) % 1000000000));
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:11:34,666 - INFO  - syntax Correct
+2026-05-17 12:11:45,481 - INFO  - Loop Invariant:
+2026-05-17 12:11:45,481 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:11:45,481 - INFO  - 
+2026-05-17 12:11:45,481 - INFO  - Assertion:
+2026-05-17 12:11:45,482 - INFO  - []
+2026-05-17 12:11:45,482 - INFO  - 
+2026-05-17 12:11:45,482 - INFO  - Assigns:
+2026-05-17 12:11:45,482 - INFO  - []
+2026-05-17 12:11:45,482 - INFO  - 
+2026-05-17 12:11:45,482 - INFO  - Post Condition:
+2026-05-17 12:11:45,482 - INFO  - [True, False]
+2026-05-17 12:11:45,483 - INFO  - 
+2026-05-17 12:11:45,483 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=3
+2026-05-17 12:11:45,483 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures (p == 1) ==> (\result == 1);
+  ensures (p >= 2) ==> (\result == ((2 * fib2mod(p - 1) + fib2mod(p - 2)) % 1000000000)) [POSTCONDITION FAILED];
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:11:53,490 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures \result == fib2mod(p);
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:11:53,491 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.875, 0.0), clauses=3)
+2026-05-17 12:12:04,373 - INFO  - syntax Correct
+2026-05-17 12:12:15,313 - INFO  - Loop Invariant:
+2026-05-17 12:12:15,313 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:12:15,314 - INFO  - 
+2026-05-17 12:12:15,314 - INFO  - Assertion:
+2026-05-17 12:12:15,314 - INFO  - []
+2026-05-17 12:12:15,314 - INFO  - 
+2026-05-17 12:12:15,314 - INFO  - Assigns:
+2026-05-17 12:12:15,314 - INFO  - []
+2026-05-17 12:12:15,314 - INFO  - 
+2026-05-17 12:12:15,314 - INFO  - Post Condition:
+2026-05-17 12:12:15,314 - INFO  - [True, False]
+2026-05-17 12:12:15,314 - INFO  - 
+2026-05-17 12:12:16,395 - INFO  - syntax Correct
+2026-05-17 12:12:17,512 - INFO  - Loop Invariant:
+2026-05-17 12:12:17,513 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:12:17,513 - INFO  - 
+2026-05-17 12:12:17,513 - INFO  - Assertion:
+2026-05-17 12:12:17,513 - INFO  - []
+2026-05-17 12:12:17,513 - INFO  - 
+2026-05-17 12:12:17,513 - INFO  - Assigns:
+2026-05-17 12:12:17,513 - INFO  - []
+2026-05-17 12:12:17,513 - INFO  - 
+2026-05-17 12:12:17,513 - INFO  - Post Condition:
+2026-05-17 12:12:17,514 - INFO  - [True]
+2026-05-17 12:12:17,514 - INFO  - 
+2026-05-17 12:12:18,559 - INFO  - syntax Correct
+2026-05-17 12:12:19,684 - INFO  - Loop Invariant:
+2026-05-17 12:12:19,685 - INFO  - [True, True, True, True, True, True]
+2026-05-17 12:12:19,685 - INFO  - 
+2026-05-17 12:12:19,685 - INFO  - Assertion:
+2026-05-17 12:12:19,685 - INFO  - []
+2026-05-17 12:12:19,685 - INFO  - 
+2026-05-17 12:12:19,685 - INFO  - Assigns:
+2026-05-17 12:12:19,685 - INFO  - []
+2026-05-17 12:12:19,685 - INFO  - 
+2026-05-17 12:12:19,685 - INFO  - Post Condition:
+2026-05-17 12:12:19,685 - INFO  - [True]
+2026-05-17 12:12:19,685 - INFO  - 
+2026-05-17 12:12:19,685 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo186_c294
+2026-05-17 12:12:19,686 - INFO  - ==================================================
+2026-05-17 12:12:19,686 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo186_c294/20260517_114218_544476_e3f7468d/output/foo186_c294.c
+2026-05-17 12:12:19,686 - INFO  - Output file content:
+
+#include <stdlib.h>
+
+/*@ logic integer fib2mod(integer k) =
+      k <= 0 ? 0 :
+      k == 1 ? 1 :
+      ((2 * fib2mod(k - 1) + fib2mod(k - 2)) % 1000000000);
+*/
+
+/*@
+  requires p >= 1;
+  ensures (p == 1) ==> (\result == 1);
+*/
+int foo186_c294(int p) {
+
+    int *arr = (int *)malloc(sizeof(int) * (p + 1));
+    int arr_len = p + 1;
+    arr[0] = 0;
+    arr[1] = 1;
+
+    /*@ 
+      loop invariant 2 <= count;
+      loop invariant arr_len == p + 1;
+      loop invariant arr[0] == 0;
+      loop invariant (arr_len >= 2) ==> (arr[1] == 1);
+      loop invariant (count >= 3) ==> (arr[count - 1] == ((2 * arr[count - 2] + arr[count - 3]) % 1000000000));
+      loop invariant (count <= p) ==> (0 <= count && count < arr_len);
+      loop assigns count, arr[2..p];
+    */
+    for (int count = 2; count <= p; count++) {
+        arr[count] = (2 * arr[count - 1]
+                      + arr[count - 2]) % 1000000000;
+    }
+
+    return arr[p];
+}
+
+2026-05-17 12:12:19,686 - INFO  - ==================================================
+2026-05-17 12:12:19,687 - INFO  - first_pass:
+2026-05-17 12:12:19,687 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 12:12:19,688 - INFO  - ==================================================
+2026-05-17 12:12:19,688 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 12:12:19,688 - INFO  - Total execution time: 1801.47 seconds (30.02 minutes)
+2026-05-17 12:12:19,688 - INFO  - ==================================================
+2026-05-17 12:12:19,688 - INFO  - ==================================================
+2026-05-17 12:12:19,689 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 12:12:19,689 - INFO  - Total API calls: 29
+2026-05-17 12:12:19,689 - INFO  - Total prompt tokens (input): 370,766
+2026-05-17 12:12:19,689 - INFO  - Total completion tokens (output): 18,198
+2026-05-17 12:12:19,689 - INFO  - Total tokens: 388,964
+2026-05-17 12:12:19,689 - INFO  - Average prompt tokens per call: 12785.0
+2026-05-17 12:12:19,689 - INFO  - Average completion tokens per call: 627.5
+2026-05-17 12:12:19,689 - INFO  - Average total tokens per call: 13412.6
+2026-05-17 12:12:19,689 - INFO  - ==================================================

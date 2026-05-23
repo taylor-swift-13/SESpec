@@ -1,0 +1,1379 @@
+2026-05-15 00:04:31,349 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo52/20260515_000431_528992_b41ed862
+2026-05-15 00:04:31,349 - INFO  - 
+🚀 Starting generation of function: foo52
+2026-05-15 00:04:31,349 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 00:04:31,349 - INFO  - ==================================================
+
+2026-05-15 00:04:31,736 - INFO  - [auto only_loop] False — foo52 returns 'int'
+2026-05-15 00:04:31,736 - INFO  - Initial pending functions: ['foo52']
+2026-05-15 00:04:31,736 - INFO  - 
+GENERATE ANNOTATION FOR foo52
+2026-05-15 00:04:31,736 - INFO  - ==================================================
+
+2026-05-15 00:04:31,736 - INFO  - Function foo52 has been initialized
+2026-05-15 00:04:31,737 - INFO  - Starting to generate annotation code for foo52
+2026-05-15 00:04:31,780 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo52
+2026-05-15 00:04:31,780 - INFO  - ==================================================
+
+2026-05-15 00:04:31,845 - INFO  - Variable Maps:[{'step': '0', 'stop': '0', 'max': '0', 'max_ending_here': '0', 'max_so_far': '0', 'Array': 'Array@pre', 'a_len': 'a_len@pre', 'a': 'a@pre'}]
+2026-05-15 00:04:31,845 - INFO  - Path conditions: ['a_len@pre > 0 && a_len@pre < 100']
+2026-05-15 00:04:31,846 - INFO  - Pre condition: a_len@pre > 0 && a_len@pre < 100 && (step == 0) * (stop == 0) * (max == 0) * (max_ending_here == 0) * (max_so_far == 0) * (Array == Array@pre) * (a_len == a_len@pre) * (a == a@pre) * store_int_array(a@pre, a_len@pre, a_l)
+2026-05-15 00:04:31,846 - INFO  - Loop Condition: n < Array
+2026-05-15 00:04:31,847 - INFO  - Array Names: ['a']
+2026-05-15 00:04:31,847 - INFO  - Updated Loop Conditions: ['n < Array@pre']
+2026-05-15 00:04:31,848 - INFO  - Global Unchanged Variables: ['Array', 'a_len', 'a']
+2026-05-15 00:04:31,849 - INFO  - Non Inductive Variables: ['max_so_far', 'max', 'stop', 'max_ending_here', 'step']
+2026-05-15 00:04:31,850 - INFO  - Unchanged Arrays (Read-only): ['a']
+2026-05-15 00:04:31,852 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 00:04:31,853 - INFO  - examples category: array
+2026-05-15 00:04:31,853 - INFO  - examples:
+2026-05-15 00:04:31,854 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-15 00:04:47,803 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=10
+2026-05-15 00:05:31,064 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=10
+2026-05-15 00:06:19,136 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.85, satisfy=0.00) clauses=13
+2026-05-15 00:07:01,721 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.85, satisfy=0.00) clauses=13
+2026-05-15 00:07:40,635 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.85, satisfy=0.00) clauses=13
+2026-05-15 00:07:40,635 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-15 00:08:03,378 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.85, satisfy=0.00) clauses=13
+2026-05-15 00:08:26,077 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-15 00:08:26,078 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-15 00:08:48,972 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.85, satisfy=0.00) clauses=13
+2026-05-15 00:09:05,941 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=13
+2026-05-15 00:09:05,941 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-15 00:09:28,861 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.85, satisfy=0.00) clauses=13
+2026-05-15 00:09:48,135 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8461538461538461, 0.0), clauses=13)
+2026-05-15 00:10:15,875 - INFO  - ACSL format loop invariant
+2026-05-15 00:10:15,875 - INFO  - /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+2026-05-15 00:10:15,877 - INFO  - QCP format loop invariant
+2026-05-15 00:10:15,877 - INFO  - /*@ Inv
+    exists  a_l,    
+    store_int_array(a, a_len, a_l) && a_len > 0 && a_len < 100 &&
+    (0 <= n) &&
+(Array == Array@pre) &&
+(a_len == a_len@pre) &&
+(a == a@pre) &&
+((n == 0) => (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0)) &&
+(0 <= max_so_far) &&
+(0 <= max_ending_here) &&
+(max_ending_here <= max_so_far) &&
+((step >= 0)) &&
+(0 <= stop && stop < (n == 0 ? 1 : n)) &&
+(forall (i:Z), 0 <= i && i < Array@pre => a_l[i] == a_l[i]@pre
+          loop assigns n, max_ending_here, max_so_far, max, stop, step)
+    */
+    
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+2026-05-15 00:10:18,209 - INFO  - CORRECT INVARIANT
+2026-05-15 00:10:18,209 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo52
+2026-05-15 00:10:18,210 - INFO  - ==================================================
+
+2026-05-15 00:10:18,219 - INFO  - Starting to generate ACSL specification for foo52
+2026-05-15 00:10:37,611 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo52/20260515_000431_528992_b41ed862/output/foo52.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo52/20260515_000431_528992_b41ed862/output/foo52.c:33: Warning: 
+  unexpected token 'in'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo52/20260515_000431_528992_b41ed862/output/foo52.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 00:10:37,612 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=10
+2026-05-15 00:11:18,273 - INFO  - syntax Correct
+2026-05-15 00:11:29,282 - INFO  - Loop Invariant:
+2026-05-15 00:11:29,282 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:11:29,282 - INFO  - 
+2026-05-15 00:11:29,282 - INFO  - Assertion:
+2026-05-15 00:11:29,282 - INFO  - []
+2026-05-15 00:11:29,282 - INFO  - 
+2026-05-15 00:11:29,283 - INFO  - Assigns:
+2026-05-15 00:11:29,283 - INFO  - [True, True]
+2026-05-15 00:11:29,283 - INFO  - 
+2026-05-15 00:11:29,283 - INFO  - Post Condition:
+2026-05-15 00:11:29,283 - INFO  - [False, False, True, True, True, True]
+2026-05-15 00:11:29,283 - INFO  - 
+2026-05-15 00:11:29,283 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=9
+2026-05-15 00:11:29,284 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures 0 <= \result <= Array [POSTCONDITION FAILED];
+  ensures (\exists integer s, e [POSTCONDITION FAILED]; 0 <= s <= e < Array &&
+            \at(sum(a, s, e+1), Pre) == max_sub(a, 0, Array) &&
+            \result == e - s + 1);
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:11:46,363 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures -\at(Array,Pre) <= \result <= \at(Array,Pre);
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:11:57,188 - INFO  - syntax Correct
+2026-05-15 00:12:08,110 - INFO  - Loop Invariant:
+2026-05-15 00:12:08,111 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:12:08,111 - INFO  - 
+2026-05-15 00:12:08,111 - INFO  - Assertion:
+2026-05-15 00:12:08,111 - INFO  - []
+2026-05-15 00:12:08,111 - INFO  - 
+2026-05-15 00:12:08,111 - INFO  - Assigns:
+2026-05-15 00:12:08,111 - INFO  - [True, True]
+2026-05-15 00:12:08,111 - INFO  - 
+2026-05-15 00:12:08,111 - INFO  - Post Condition:
+2026-05-15 00:12:08,111 - INFO  - [False, True, True, True, True]
+2026-05-15 00:12:08,111 - INFO  - 
+2026-05-15 00:12:08,112 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=8
+2026-05-15 00:12:08,112 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures -\at(Array,Pre) <= \result <= \at(Array,Pre) [POSTCONDITION FAILED];
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:12:18,222 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures 1 - \at(Array,Pre) <= \result <= \at(Array,Pre);
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:12:29,042 - INFO  - syntax Correct
+2026-05-15 00:12:39,956 - INFO  - Loop Invariant:
+2026-05-15 00:12:39,956 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:12:39,956 - INFO  - 
+2026-05-15 00:12:39,956 - INFO  - Assertion:
+2026-05-15 00:12:39,956 - INFO  - []
+2026-05-15 00:12:39,957 - INFO  - 
+2026-05-15 00:12:39,957 - INFO  - Assigns:
+2026-05-15 00:12:39,957 - INFO  - [True, True]
+2026-05-15 00:12:39,957 - INFO  - 
+2026-05-15 00:12:39,957 - INFO  - Post Condition:
+2026-05-15 00:12:39,957 - INFO  - [False, True, True, True, True]
+2026-05-15 00:12:39,957 - INFO  - 
+2026-05-15 00:12:39,958 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=8
+2026-05-15 00:12:39,958 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures 1 - \at(Array,Pre) <= \result <= \at(Array,Pre) [POSTCONDITION FAILED];
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:12:51,271 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures 1 - \at(Array,Pre) <= \result <= \at(Array,Pre);
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:13:02,377 - INFO  - syntax Correct
+2026-05-15 00:13:13,410 - INFO  - Loop Invariant:
+2026-05-15 00:13:13,411 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:13:13,411 - INFO  - 
+2026-05-15 00:13:13,411 - INFO  - Assertion:
+2026-05-15 00:13:13,411 - INFO  - []
+2026-05-15 00:13:13,411 - INFO  - 
+2026-05-15 00:13:13,411 - INFO  - Assigns:
+2026-05-15 00:13:13,411 - INFO  - [True, True]
+2026-05-15 00:13:13,411 - INFO  - 
+2026-05-15 00:13:13,412 - INFO  - Post Condition:
+2026-05-15 00:13:13,412 - INFO  - [False, True, True, True, True]
+2026-05-15 00:13:13,412 - INFO  - 
+2026-05-15 00:13:13,412 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=8
+2026-05-15 00:13:13,413 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 00:13:24,441 - INFO  - syntax Correct
+2026-05-15 00:13:35,337 - INFO  - Loop Invariant:
+2026-05-15 00:13:35,337 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:13:35,338 - INFO  - 
+2026-05-15 00:13:35,338 - INFO  - Assertion:
+2026-05-15 00:13:35,338 - INFO  - []
+2026-05-15 00:13:35,338 - INFO  - 
+2026-05-15 00:13:35,338 - INFO  - Assigns:
+2026-05-15 00:13:35,338 - INFO  - [True, True]
+2026-05-15 00:13:35,338 - INFO  - 
+2026-05-15 00:13:35,338 - INFO  - Post Condition:
+2026-05-15 00:13:35,338 - INFO  - [False, True, True, True, True]
+2026-05-15 00:13:35,339 - INFO  - 
+2026-05-15 00:13:35,339 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=8
+2026-05-15 00:13:35,339 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures -\at(Array,Pre) <= \result <= \at(Array,Pre) [POSTCONDITION FAILED];
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:13:49,747 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures -\at(a_len,Pre) <= \result <= \at(a_len,Pre);
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:14:00,582 - INFO  - syntax Correct
+2026-05-15 00:14:11,384 - INFO  - Loop Invariant:
+2026-05-15 00:14:11,384 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:14:11,384 - INFO  - 
+2026-05-15 00:14:11,384 - INFO  - Assertion:
+2026-05-15 00:14:11,384 - INFO  - []
+2026-05-15 00:14:11,384 - INFO  - 
+2026-05-15 00:14:11,385 - INFO  - Assigns:
+2026-05-15 00:14:11,385 - INFO  - [True, True]
+2026-05-15 00:14:11,385 - INFO  - 
+2026-05-15 00:14:11,385 - INFO  - Post Condition:
+2026-05-15 00:14:11,385 - INFO  - [False, True, True, True, True]
+2026-05-15 00:14:11,385 - INFO  - 
+2026-05-15 00:14:11,386 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=8
+2026-05-15 00:14:11,386 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 00:14:22,558 - INFO  - syntax Correct
+2026-05-15 00:14:33,461 - INFO  - Loop Invariant:
+2026-05-15 00:14:33,462 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:14:33,462 - INFO  - 
+2026-05-15 00:14:33,462 - INFO  - Assertion:
+2026-05-15 00:14:33,463 - INFO  - []
+2026-05-15 00:14:33,463 - INFO  - 
+2026-05-15 00:14:33,463 - INFO  - Assigns:
+2026-05-15 00:14:33,463 - INFO  - [True, True]
+2026-05-15 00:14:33,463 - INFO  - 
+2026-05-15 00:14:33,463 - INFO  - Post Condition:
+2026-05-15 00:14:33,464 - INFO  - [False, True, True, True, True]
+2026-05-15 00:14:33,464 - INFO  - 
+2026-05-15 00:14:33,464 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=8
+2026-05-15 00:14:33,464 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures -\at(Array,Pre) <= \result <= \at(Array,Pre) [POSTCONDITION FAILED];
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:14:43,592 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures -\at(Array,Pre) <= \result <= \at(Array,Pre);
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:14:54,457 - INFO  - syntax Correct
+2026-05-15 00:15:05,438 - INFO  - Loop Invariant:
+2026-05-15 00:15:05,438 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:15:05,438 - INFO  - 
+2026-05-15 00:15:05,439 - INFO  - Assertion:
+2026-05-15 00:15:05,439 - INFO  - []
+2026-05-15 00:15:05,439 - INFO  - 
+2026-05-15 00:15:05,439 - INFO  - Assigns:
+2026-05-15 00:15:05,439 - INFO  - [True, True]
+2026-05-15 00:15:05,439 - INFO  - 
+2026-05-15 00:15:05,439 - INFO  - Post Condition:
+2026-05-15 00:15:05,439 - INFO  - [False, True, True, True, True]
+2026-05-15 00:15:05,439 - INFO  - 
+2026-05-15 00:15:05,439 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=8
+2026-05-15 00:15:05,440 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 00:15:16,188 - INFO  - syntax Correct
+2026-05-15 00:15:27,031 - INFO  - Loop Invariant:
+2026-05-15 00:15:27,031 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:15:27,031 - INFO  - 
+2026-05-15 00:15:27,031 - INFO  - Assertion:
+2026-05-15 00:15:27,031 - INFO  - []
+2026-05-15 00:15:27,031 - INFO  - 
+2026-05-15 00:15:27,032 - INFO  - Assigns:
+2026-05-15 00:15:27,032 - INFO  - [True, True]
+2026-05-15 00:15:27,032 - INFO  - 
+2026-05-15 00:15:27,032 - INFO  - Post Condition:
+2026-05-15 00:15:27,032 - INFO  - [False, True, True, True, True]
+2026-05-15 00:15:27,032 - INFO  - 
+2026-05-15 00:15:27,033 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.94, satisfy=0.00) clauses=8
+2026-05-15 00:15:27,033 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures -\at(Array,Pre) <= \result <= \at(Array,Pre) [POSTCONDITION FAILED];
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:15:40,250 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures -\at(Array,Pre) - 1 <= \result <= \at(Array,Pre);
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:15:40,251 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9444444444444444, 0.0), clauses=8)
+2026-05-15 00:15:51,267 - INFO  - syntax Correct
+2026-05-15 00:16:02,177 - INFO  - Loop Invariant:
+2026-05-15 00:16:02,177 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:16:02,177 - INFO  - 
+2026-05-15 00:16:02,177 - INFO  - Assertion:
+2026-05-15 00:16:02,177 - INFO  - []
+2026-05-15 00:16:02,177 - INFO  - 
+2026-05-15 00:16:02,177 - INFO  - Assigns:
+2026-05-15 00:16:02,177 - INFO  - [True, True]
+2026-05-15 00:16:02,178 - INFO  - 
+2026-05-15 00:16:02,178 - INFO  - Post Condition:
+2026-05-15 00:16:02,178 - INFO  - [False, True, True, True, True]
+2026-05-15 00:16:02,178 - INFO  - 
+2026-05-15 00:16:03,690 - INFO  - syntax Correct
+2026-05-15 00:16:05,415 - INFO  - Loop Invariant:
+2026-05-15 00:16:05,415 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:16:05,415 - INFO  - 
+2026-05-15 00:16:05,415 - INFO  - Assertion:
+2026-05-15 00:16:05,415 - INFO  - []
+2026-05-15 00:16:05,415 - INFO  - 
+2026-05-15 00:16:05,415 - INFO  - Assigns:
+2026-05-15 00:16:05,415 - INFO  - [True, True]
+2026-05-15 00:16:05,415 - INFO  - 
+2026-05-15 00:16:05,415 - INFO  - Post Condition:
+2026-05-15 00:16:05,415 - INFO  - [True, True, True, True]
+2026-05-15 00:16:05,415 - INFO  - 
+2026-05-15 00:16:05,418 - INFO  - 
+SPECIFICATION FOR foo52
+2026-05-15 00:16:05,418 - INFO  - ==================================================
+
+2026-05-15 00:16:05,418 - INFO  - 
+QCP Specification for function foo52:
+/*@
+With a_l
+Require store_int_array(a, a_len, a_l) && a_len > 0 && a_len < 100
+Ensure Results(__return)
+*/
+2026-05-15 00:16:05,511 - INFO  - 
+VERIFICATION FOR foo52
+2026-05-15 00:16:05,512 - INFO  - ==================================================
+
+2026-05-15 00:16:05,512 - INFO  - TRY TIME: 0
+2026-05-15 00:16:06,832 - INFO  - syntax Correct
+2026-05-15 00:16:08,137 - INFO  - Loop Invariant:
+2026-05-15 00:16:08,138 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-15 00:16:08,138 - INFO  - 
+2026-05-15 00:16:08,138 - INFO  - Assertion:
+2026-05-15 00:16:08,138 - INFO  - []
+2026-05-15 00:16:08,138 - INFO  - 
+2026-05-15 00:16:08,138 - INFO  - Assigns:
+2026-05-15 00:16:08,138 - INFO  - [True, True]
+2026-05-15 00:16:08,138 - INFO  - 
+2026-05-15 00:16:08,138 - INFO  - Post Condition:
+2026-05-15 00:16:08,138 - INFO  - [True, True, True, True]
+2026-05-15 00:16:08,138 - INFO  - 
+2026-05-15 00:16:08,138 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo52
+2026-05-15 00:16:08,138 - INFO  - ==================================================
+2026-05-15 00:16:08,139 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo52/20260515_000431_528992_b41ed862/output/foo52.c
+2026-05-15 00:16:08,139 - INFO  - Output file content:
+
+/*@ 
+  logic integer sum(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : sum(a, lo, hi-1) + a[hi-1];
+*/
+
+/*@
+  logic integer max_end_at(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : (max_end_at(a, lo, hi-1) > 0 ? max_end_at(a, lo, hi-1) + a[hi-1] : a[hi-1]));
+*/
+
+/*@
+  logic integer max_sub(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (hi == lo+1 ? a[lo]
+                           : ((max_sub(a, lo, hi-1) >= max_end_at(a, lo, hi)) ? max_sub(a, lo, hi-1) : max_end_at(a, lo, hi)));
+*/
+
+/*@
+  requires \at(a_len,Pre) > 0 && \at(a_len,Pre) < 100;
+  requires \valid_read(a + (0 .. \at(a_len,Pre)-1));
+  assigns \nothing;
+  ensures \forall integer i; 0 <= i < Array ==> a[i] == \at(a[i],Pre);
+  ensures \at(a_len,Pre) == a_len;
+  ensures \at(Array,Pre) == Array;
+  ensures \at(a,Pre) == a;
+*/
+int foo52(int * a, int a_len, int Array) {
+
+		int max_so_far = 0;
+		int max_ending_here = 0;
+		int max = 0;
+		int stop = 0;
+		int step = 0;
+
+            /*@
+          loop invariant 0 <= n;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant (n == 0) ==> (max_so_far == 0 && max_ending_here == 0 && max == 0 && stop == 0 && step == 0);
+          loop invariant 0 <= max_so_far;
+          loop invariant 0 <= max_ending_here;
+          loop invariant max_ending_here <= max_so_far;
+          loop invariant (step >= 0);
+          loop invariant 0 <= stop < (n == 0 ? 1 : n);
+          loop invariant \forall integer i; 0 <= i < \at(Array,Pre) ==> a[i] == \at(a[i],Pre);
+          loop assigns n, max_ending_here, max_so_far, max, stop, step;
+            */
+            for (int n = 0; n < Array; n++) {
+			max_ending_here += a[n];
+			if (max_so_far < max_ending_here) {
+				max_so_far = max_ending_here;
+				max = step;
+				stop = n;
+			}
+			if (max_ending_here < 0) {
+				max_ending_here = 0;
+				step = n + 1;
+			}
+		}
+            
+		return stop - max + 1;
+}
+
+2026-05-15 00:16:08,139 - INFO  - ==================================================
+2026-05-15 00:16:08,139 - INFO  - first_pass:
+2026-05-15 00:16:08,139 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 00:16:08,139 - INFO  - ==================================================
+2026-05-15 00:16:08,139 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 00:16:08,139 - INFO  - Total execution time: 696.79 seconds (11.61 minutes)
+2026-05-15 00:16:08,139 - INFO  - ==================================================
+2026-05-15 00:16:08,139 - INFO  - ==================================================
+2026-05-15 00:16:08,139 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 00:16:08,140 - INFO  - Total API calls: 16
+2026-05-15 00:16:08,140 - INFO  - Total prompt tokens (input): 197,220
+2026-05-15 00:16:08,140 - INFO  - Total completion tokens (output): 18,271
+2026-05-15 00:16:08,140 - INFO  - Total tokens: 215,491
+2026-05-15 00:16:08,140 - INFO  - Average prompt tokens per call: 12326.2
+2026-05-15 00:16:08,140 - INFO  - Average completion tokens per call: 1141.9
+2026-05-15 00:16:08,140 - INFO  - Average total tokens per call: 13468.2
+2026-05-15 00:16:08,140 - INFO  - ==================================================

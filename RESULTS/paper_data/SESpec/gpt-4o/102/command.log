@@ -1,0 +1,1118 @@
+$ /home/yangfp/miniconda3/envs/SpecAutoGen/bin/python main.py --config /home/yangfp/SESpec/src/results/tmp/sespec_default_sespec_102_gpt-4o_20260517_205800_1000147_d6b4cba4.json
+
+[stdout]
+🚀 Starting specification generation for function: foo102
+📁 Project directory: sespec
+📄 Configuration file: /home/yangfp/SESpec/src/results/tmp/sespec_default_sespec_102_gpt-4o_20260517_205800_1000147_d6b4cba4.json
+🤖 Using model: gpt-4o
+workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29
+
+🚀 Starting generation of function: foo102
+
+OUTER PASS: 1/1
+TRY TIME: 0
+
+FUNCTION INITIALIZATION
+==================================================
+
+[auto only_loop] False — foo102 returns 'int'
+Initial pending functions: ['foo102']
+
+GENERATE ANNOTATION FOR foo102
+==================================================
+
+Function foo102 has been initialized
+Starting to generate annotation code for foo102
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/3_output/foo102.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/1_output/foo102.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/2_output/foo102.c created and written successfully.
+
+GENERATE LOOP INVARIANT FOR foo102
+==================================================
+
+Loop 1 : Inner
+Loop 0 : Outer
+Sorted indices: [1, 0]
+LoopEntry_0:
+num == num@pre
+LoopEntry_1:
+num@pre >= 10 && (sum == 0) * (num == num@pre)
+Successfully generated /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/loop/foo102.json
+num@pre >= 10 && (sum == 0) * (num == num@pre)
+Variable Maps:[{'sum': '0', 'num': 'num@pre'}]
+Path conditions: ['num@pre >= 10']
+Pre condition: num@pre >= 10 && (sum == 0) * (num == num@pre)
+Loop Condition: num > 0
+Array Names: []
+Updated Loop Conditions: ['num@pre > 0']
+Global Unchanged Variables: []
+Non Inductive Variables: []
+Unchanged Arrays (Read-only): []
+[inv-gen] multi-slot mode: 1 candidate(s) (simple placeholder)
+ACSL format loop invariant
+/*@
+          loop invariant num >= 10;
+          loop invariant sum == 0;
+          loop assigns \nothing;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+QCP format loop invariant
+/*@ Inv
+    (num >= 10) &&
+(sum == 0
+          loop assigns \nothing)
+    */
+    
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+num == num@pre
+Variable Maps:[{'num': 'num@pre'}]
+Path conditions: [None]
+Pre condition: num == num@pre
+Loop Condition: num >= 10
+Array Names: []
+Updated Loop Conditions: ['num@pre >= 10']
+Global Unchanged Variables: []
+Non Inductive Variables: ['num']
+Unchanged Arrays (Read-only): []
+[inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+examples category: numeric
+examples:
+
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+[inv-gen] refine 1/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=7
+[inv-gen] refine 2/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+[inv-gen] refine 3/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+OpenAI API 调用失败: Request timed out.
+[inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+[inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+[inv-gen] refine 5/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+[inv-gen] refine 6/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+[inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+[inv-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+[inv-gen] refine 8/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+[inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+[inv-gen] refine 9/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+[inv-gen] refine 10/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+[inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+[inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8333333333333334, 0.0), clauses=6)
+[inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+ACSL format loop invariant
+/*@
+      loop invariant num >= 0;
+      loop invariant (\at(num,Pre) < 10) ==> (num == \at(num,Pre));
+      loop assigns num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop assigns sum, num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+QCP format loop invariant
+/*@ Inv
+    (num >= 0) &&
+((num@pre < 10) => (num == num@pre)
+      loop assigns num)
+    */
+    
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop assigns sum, num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+LoopEntry_0:
+num == num@pre
+[1;31mfatal error: [0mbison: syntax error, unexpected PT_IDENT, expecting PT_RPAREN or PT_COLON in /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/2_output/foo102.c:22:10
+['while (num >= 10) {\n            int sum = 0;\n            while (num > 0) {\n                sum += num % 10;\n                num /= 10;\n            }\n            num = sum;\n        }', 'while (num > 0) {\n                sum += num % 10;\n                num /= 10;\n            }']
+[(0, 'num == num@pre')]
+1
+Successfully generated /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/loop/foo102.json
+CORRECT INVARIANT
+
+GENERATE FUNCTION SPECIFICATION FOR foo102
+==================================================
+
+Starting to generate ACSL specification for foo102
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c:9: Warning: 
+  not an assignable left value: num. Ignoring logic specification of function foo102
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, False, True, True, False]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True, True]
+
+[spec-gen] refine 2/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=4
+postconditon before refine: 
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures digit_sum(\at(num, Pre)) % 9 == \result % 9;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant digit_sum(\at(num, Pre)) % 9 == num % 9;
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant digit_sum(\at(num, Pre)) % 9 == (sum + digit_sum(num)) % 9;
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+postconditon after refine: 
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures digit_sum(\at(num, Pre)) % 9 == \result % 9;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant digit_sum(\at(num, Pre)) % 9 == digit_sum(num) % 9;
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant digit_sum(\at(num, Pre)) % 9 == (sum + digit_sum(num)) % 9;
+          loop invariant digit_sum(num) == \old(digit_sum(num));
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c:29: Warning: 
+  \old undefined in this context. Ignoring loop annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, False, True, True, True, False]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True, False]
+
+[spec-gen] refine 4/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=4
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, False, True, True, False]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True, True]
+
+[spec-gen] refine 5/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=4
+postconditon before refine: 
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures digit_sum(\at(num, Pre)) % 9 == \result % 9;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant digit_sum(\at(num, Pre)) % 9 == num % 9;
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant digit_sum(\at(num, Pre)) % 9 == (sum + digit_sum(num)) % 9;
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+postconditon after refine: 
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  logic integer partial_digit_sum(integer n, integer k) =
+    k == 0 ? 0 : (n % 10) + partial_digit_sum(n / 10, k - 1);
+*/
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures digit_sum(\at(num, Pre)) % 9 == \result % 9;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant digit_sum(\at(num, Pre)) % 9 == digit_sum(num) % 9;
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant \exists integer k; k >= 0 && num == \at(num, Pre) / (10^k);
+          loop invariant digit_sum(\at(num, Pre)) % 9 == (sum + digit_sum(num)) % 9;
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, False, True, True, False, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True, False]
+
+[spec-gen] refine 6/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=4
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, False, True, True, False]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True, True]
+
+[spec-gen] refine 7/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=4
+postconditon before refine: 
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures digit_sum(\at(num, Pre)) % 9 == \result % 9;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant digit_sum(\at(num, Pre)) % 9 == num % 9;
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant digit_sum(\at(num, Pre)) % 9 == (sum + digit_sum(num)) % 9;
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+postconditon after refine: 
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures digit_sum(\at(num, Pre)) % 9 == \result % 9;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant digit_sum(\at(num, Pre)) % 9 == digit_sum(num) % 9;
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant digit_sum(\at(num, Pre)) % 9 == (sum + digit_sum(num)) % 9;
+          loop invariant digit_sum(\at(num, Pre)) == sum + digit_sum(num);
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, False, True, True, True, False]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True, False]
+
+[spec-gen] refine 8/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=4
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, False, True, True, False]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True, True]
+
+[spec-gen] refine 9/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=4
+postconditon before refine: 
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures digit_sum(\at(num, Pre)) % 9 == \result % 9;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant digit_sum(\at(num, Pre)) % 9 == num % 9;
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant digit_sum(\at(num, Pre)) % 9 == (sum + digit_sum(num)) % 9;
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+postconditon after refine: 
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures digit_sum(\at(num, Pre)) % 9 == \result % 9;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant digit_sum(\at(num, Pre)) % 9 == num % 9;
+      loop invariant \exists integer k; num == k && k >= 0;
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant digit_sum(\at(num, Pre)) % 9 == (sum + digit_sum(num)) % 9;
+          loop invariant \exists integer k; num == k && k >= 0;
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, False, True, True, True, False, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True, True]
+
+[spec-gen] refine 10/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=4
+postconditon before refine: 
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures digit_sum(\at(num, Pre)) % 9 == \result % 9;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant digit_sum(\at(num, Pre)) % 9 == num % 9;
+      loop invariant \exists integer k; num == k && k >= 0;
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant digit_sum(\at(num, Pre)) % 9 == (sum + digit_sum(num)) % 9;
+          loop invariant \exists integer k; num == k && k >= 0;
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+postconditon after refine: 
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  logic integer mod9_sum(integer n) =
+    digit_sum(n) % 9;
+*/
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+  ensures mod9_sum(\at(num, Pre)) == \result;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant mod9_sum(\at(num, Pre)) == mod9_sum(num);
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant mod9_sum(\at(num, Pre)) == mod9_sum(sum + digit_sum(num));
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+[spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8181818181818182, 0.0), clauses=4)
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, False, True, True, True, False, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True, True]
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True, False]
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True]
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c created and written successfully.
+
+SPECIFICATION FOR foo102
+==================================================
+
+
+QCP Specification for function foo102:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+
+VERIFICATION FOR foo102
+==================================================
+
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True]
+
+Post Condition:
+[True]
+
+
+🎯 FINAL SPECIFICATION FOR foo102
+==================================================
+Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo102/20260517_205802_1065239_7fb68d29/output/foo102.c
+Output file content:
+
+/*@
+  logic integer digit_sum(integer n) =
+    n == 0 ? 0 : (n % 10) + digit_sum(n / 10);
+*/
+
+/*@
+  requires num >= 0;
+  assigns \nothing;
+  ensures \result >= 0 && \result < 10;
+*/
+int foo102(int num) {
+
+    /*@
+      loop invariant num >= 0;
+      loop invariant (\at(num, Pre) < 10) ==> (num == \at(num, Pre));
+      loop invariant \exists integer k; num == k && k >= 0;
+      loop assigns num;
+      loop variant num;
+    */
+    while (num >= 10) {
+        int sum = 0;
+
+        /*@
+          loop invariant num >= 0;
+          loop invariant sum >= 0;
+          loop invariant \exists integer k; num == k && k >= 0;
+          loop assigns sum, num;
+          loop variant num;
+        */
+        while (num > 0) {
+            sum += num % 10;
+            num /= 10;
+        }
+
+        num = sum;
+    }
+
+    return num;
+}
+
+==================================================
+first_pass:
+syntax=1, valid=1,satisfy=1
+==================================================
+⏰ OVERALL EXECUTION TIME STATISTICS
+Total execution time: 863.69 seconds (14.39 minutes)
+==================================================
+==================================================
+📊 TOKEN USAGE STATISTICS
+Total API calls: 17
+Total prompt tokens (input): 130,542
+Total completion tokens (output): 9,403
+Total tokens: 139,945
+Average prompt tokens per call: 7678.9
+Average completion tokens per call: 553.1
+Average total tokens per call: 8232.1
+==================================================
+✅ Generation completed!
+
+[stderr]
+

@@ -1,0 +1,617 @@
+2026-05-15 01:27:34,886 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo201/20260515_012734_732794_a4811eba
+2026-05-15 01:27:34,886 - INFO  - 
+🚀 Starting generation of function: foo201
+2026-05-15 01:27:34,886 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 01:27:34,886 - INFO  - ==================================================
+
+2026-05-15 01:27:36,816 - INFO  - [auto only_loop] False — foo201 returns 'int'
+2026-05-15 01:27:36,816 - INFO  - Initial pending functions: ['foo201']
+2026-05-15 01:27:36,816 - INFO  - 
+GENERATE ANNOTATION FOR foo201
+2026-05-15 01:27:36,816 - INFO  - ==================================================
+
+2026-05-15 01:27:36,816 - INFO  - Function foo201 has been initialized
+2026-05-15 01:27:36,817 - INFO  - Starting to generate annotation code for foo201
+2026-05-15 01:27:36,865 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo201
+2026-05-15 01:27:36,866 - INFO  - ==================================================
+
+2026-05-15 01:27:36,958 - INFO  - Variable Maps:[{'top': 'array@pre - 1', 'i': '0', 'array': 'array@pre', 'data_len': 'data_len@pre', 'data': 'data@pre'}]
+2026-05-15 01:27:36,958 - INFO  - Path conditions: ['data_len@pre > 0 && data_len@pre < 100']
+2026-05-15 01:27:36,958 - INFO  - Pre condition: data_len@pre > 0 && data_len@pre < 100 && (top == array@pre - 1) * (i == 0) * (array == array@pre) * (data_len == data_len@pre) * (data == data@pre) * store_int_array(data@pre, data_len@pre, data_l)
+2026-05-15 01:27:36,959 - INFO  - Loop Condition: i < top
+2026-05-15 01:27:36,960 - INFO  - Array Names: ['data']
+2026-05-15 01:27:36,960 - INFO  - Updated Loop Conditions: ['0 < array@pre - 1']
+2026-05-15 01:27:36,961 - INFO  - Global Unchanged Variables: ['array', 'data_len', 'data']
+2026-05-15 01:27:36,961 - INFO  - Non Inductive Variables: ['i', 'top']
+2026-05-15 01:27:36,962 - INFO  - Unchanged Arrays (Read-only): ['data']
+2026-05-15 01:27:36,964 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 01:27:36,965 - INFO  - examples category: array
+2026-05-15 01:27:36,965 - INFO  - examples:
+2026-05-15 01:27:36,966 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-15 01:27:40,737 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-15 01:28:07,702 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-15 01:28:34,817 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-15 01:28:43,276 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=6
+2026-05-15 01:28:43,277 - INFO  - [inv-gen] converged at refine 4
+2026-05-15 01:28:45,210 - INFO  - ACSL format loop invariant
+2026-05-15 01:28:45,210 - INFO  - /*@
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (0 <= i <= top));
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (top <= \at(array,Pre) - 1));
+          loop invariant (!(0 < \at(array,Pre) - 1)) ==> ((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant data_len == \at(data_len,Pre);
+          loop invariant data == \at(data,Pre);
+          loop assigns i, top;
+            */
+            while (i < top) {
+			int p = i + (top - i) / 2;
+			if (data[p] < data[p + 1]) {
+				i = p + 1;
+			} else {
+				top = p;
+			}
+		}
+2026-05-15 01:28:45,212 - INFO  - QCP format loop invariant
+2026-05-15 01:28:45,212 - INFO  - /*@ Inv
+    exists  data_l,    
+    store_int_array(data, data_len, data_l) && data_len > 0 && data_len < 100 &&
+    ((0 < array@pre - 1) => (((top == array@pre - 1)&&(i == 0)&&(array == array@pre)&&(data_len == data_len@pre)&&(data == data@pre)) || (0 <= i && i <= top))) &&
+((0 < array@pre - 1) => (((top == array@pre - 1)&&(i == 0)&&(array == array@pre)&&(data_len == data_len@pre)&&(data == data@pre)) || (top <= array@pre - 1))) &&
+((!(0 < array@pre - 1)) => ((top == array@pre - 1)&&(i == 0)&&(array == array@pre)&&(data_len == data_len@pre)&&(data == data@pre))) &&
+(array == array@pre) &&
+(data_len == data_len@pre) &&
+(data == data@pre
+          loop assigns i, top)
+    */
+    
+            while (i < top) {
+			int p = i + (top - i) / 2;
+			if (data[p] < data[p + 1]) {
+				i = p + 1;
+			} else {
+				top = p;
+			}
+		}
+2026-05-15 01:28:47,040 - INFO  - CORRECT INVARIANT
+2026-05-15 01:28:47,040 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo201
+2026-05-15 01:28:47,040 - INFO  - ==================================================
+
+2026-05-15 01:28:47,066 - INFO  - Starting to generate ACSL specification for foo201
+2026-05-15 01:29:01,336 - INFO  - syntax Correct
+2026-05-15 01:29:12,177 - INFO  - Loop Invariant:
+2026-05-15 01:29:12,177 - INFO  - [True, True, True, True, True, True]
+2026-05-15 01:29:12,177 - INFO  - 
+2026-05-15 01:29:12,177 - INFO  - Assertion:
+2026-05-15 01:29:12,177 - INFO  - []
+2026-05-15 01:29:12,177 - INFO  - 
+2026-05-15 01:29:12,177 - INFO  - Assigns:
+2026-05-15 01:29:12,178 - INFO  - [True]
+2026-05-15 01:29:12,178 - INFO  - 
+2026-05-15 01:29:12,178 - INFO  - Post Condition:
+2026-05-15 01:29:12,178 - INFO  - [False, True]
+2026-05-15 01:29:12,178 - INFO  - 
+2026-05-15 01:29:12,179 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=3
+2026-05-15 01:29:12,179 - INFO  - postconditon before refine: 
+
+/*@ logic integer max_int(integer a, integer b) = a > b ? a : b; */
+
+/*@ 
+  assigns \nothing;
+  ensures 0 < \at(array,Pre) - 1 ==> \result == (\at(array,Pre) - 1) [POSTCONDITION FAILED];
+  ensures !(0 < \at(array,Pre) - 1) ==> \result == 0;
+*/
+int foo201(int * data, int data_len, int array) {
+
+		int i = 0, top = array - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (0 <= i <= top));
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (top <= \at(array,Pre) - 1));
+          loop invariant (!(0 < \at(array,Pre) - 1)) ==> ((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant data_len == \at(data_len,Pre);
+          loop invariant data == \at(data,Pre);
+          loop assigns i, top;
+            */
+            while (i < top) {
+			int p = i + (top - i) / 2;
+			if (data[p] < data[p + 1]) {
+				i = p + 1;
+			} else {
+				top = p;
+			}
+		}
+            
+		return i;
+}
+
+2026-05-15 01:29:15,306 - INFO  - postconditon after refine: 
+
+/*@ logic integer max_int(integer a, integer b) = a > b ? a : b; */
+
+/*@
+  assigns \nothing;
+  ensures 0 < \at(array,Pre) - 1 ==> \result == (\at(array,Pre) - 1);
+  ensures !(0 < \at(array,Pre) - 1) ==> \result == 0;
+*/
+int foo201(int * data, int data_len, int array) {
+
+		int i = 0, top = array - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (0 <= i <= top));
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (top <= \at(array,Pre) - 1));
+          loop invariant (!(0 < \at(array,Pre) - 1)) ==> ((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant data_len == \at(data_len,Pre);
+          loop invariant data == \at(data,Pre);
+          loop assigns i, top;
+            */
+            while (i < top) {
+			int p = i + (top - i) / 2;
+			if (data[p] < data[p + 1]) {
+				i = p + 1;
+			} else {
+				top = p;
+			}
+		}
+            
+		return i;
+}
+
+2026-05-15 01:29:26,278 - INFO  - syntax Correct
+2026-05-15 01:29:37,186 - INFO  - Loop Invariant:
+2026-05-15 01:29:37,186 - INFO  - [True, True, True, True, True, True]
+2026-05-15 01:29:37,187 - INFO  - 
+2026-05-15 01:29:37,187 - INFO  - Assertion:
+2026-05-15 01:29:37,187 - INFO  - []
+2026-05-15 01:29:37,187 - INFO  - 
+2026-05-15 01:29:37,187 - INFO  - Assigns:
+2026-05-15 01:29:37,187 - INFO  - [True]
+2026-05-15 01:29:37,187 - INFO  - 
+2026-05-15 01:29:37,187 - INFO  - Post Condition:
+2026-05-15 01:29:37,187 - INFO  - [False, True]
+2026-05-15 01:29:37,187 - INFO  - 
+2026-05-15 01:29:37,188 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=3
+2026-05-15 01:29:37,188 - INFO  - postconditon before refine: 
+
+/*@ logic integer max_int(integer a, integer b) = a > b ? a : b; */
+
+/*@
+  assigns \nothing;
+  ensures 0 < \at(array,Pre) - 1 ==> \result == (\at(array,Pre) - 1) [POSTCONDITION FAILED];
+  ensures !(0 < \at(array,Pre) - 1) ==> \result == 0;
+*/
+int foo201(int * data, int data_len, int array) {
+
+		int i = 0, top = array - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (0 <= i <= top));
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (top <= \at(array,Pre) - 1));
+          loop invariant (!(0 < \at(array,Pre) - 1)) ==> ((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant data_len == \at(data_len,Pre);
+          loop invariant data == \at(data,Pre);
+          loop assigns i, top;
+            */
+            while (i < top) {
+			int p = i + (top - i) / 2;
+			if (data[p] < data[p + 1]) {
+				i = p + 1;
+			} else {
+				top = p;
+			}
+		}
+            
+		return i;
+}
+
+2026-05-15 01:29:41,239 - INFO  - postconditon after refine: 
+
+/*@ logic integer max_int(integer a, integer b) = a > b ? a : b; */
+
+/*@
+  assigns \nothing;
+  ensures 0 < \at(array,Pre) - 1 ==> \result == (\at(array,Pre) - 1);
+  ensures !(0 < \at(array,Pre) - 1) ==> \result == 0;
+*/
+int foo201(int * data, int data_len, int array) {
+
+		int i = 0, top = array - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (0 <= i <= top));
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (top <= \at(array,Pre) - 1));
+          loop invariant (!(0 < \at(array,Pre) - 1)) ==> ((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant data_len == \at(data_len,Pre);
+          loop invariant data == \at(data,Pre);
+          loop assigns i, top;
+            */
+            while (i < top) {
+			int p = i + (top - i) / 2;
+			if (data[p] < data[p + 1]) {
+				i = p + 1;
+			} else {
+				top = p;
+			}
+		}
+            
+		return i;
+}
+
+2026-05-15 01:29:52,121 - INFO  - syntax Correct
+2026-05-15 01:30:02,896 - INFO  - Loop Invariant:
+2026-05-15 01:30:02,896 - INFO  - [True, True, True, True, True, True]
+2026-05-15 01:30:02,896 - INFO  - 
+2026-05-15 01:30:02,896 - INFO  - Assertion:
+2026-05-15 01:30:02,896 - INFO  - []
+2026-05-15 01:30:02,896 - INFO  - 
+2026-05-15 01:30:02,897 - INFO  - Assigns:
+2026-05-15 01:30:02,897 - INFO  - [True]
+2026-05-15 01:30:02,897 - INFO  - 
+2026-05-15 01:30:02,897 - INFO  - Post Condition:
+2026-05-15 01:30:02,897 - INFO  - [False, True]
+2026-05-15 01:30:02,897 - INFO  - 
+2026-05-15 01:30:02,897 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=3
+2026-05-15 01:30:02,897 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:30:13,774 - INFO  - syntax Correct
+2026-05-15 01:30:24,606 - INFO  - Loop Invariant:
+2026-05-15 01:30:24,606 - INFO  - [True, True, True, True, True, True]
+2026-05-15 01:30:24,606 - INFO  - 
+2026-05-15 01:30:24,607 - INFO  - Assertion:
+2026-05-15 01:30:24,607 - INFO  - []
+2026-05-15 01:30:24,607 - INFO  - 
+2026-05-15 01:30:24,607 - INFO  - Assigns:
+2026-05-15 01:30:24,607 - INFO  - [True]
+2026-05-15 01:30:24,607 - INFO  - 
+2026-05-15 01:30:24,607 - INFO  - Post Condition:
+2026-05-15 01:30:24,608 - INFO  - [False, True]
+2026-05-15 01:30:24,608 - INFO  - 
+2026-05-15 01:30:24,608 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=3
+2026-05-15 01:30:24,608 - INFO  - postconditon before refine: 
+
+/*@ logic integer max_int(integer a, integer b) = a > b ? a : b; */
+
+/*@ 
+  assigns \nothing;
+  ensures 0 < \at(array,Pre) - 1 ==> \result == (\at(array,Pre) - 1) [POSTCONDITION FAILED];
+  ensures !(0 < \at(array,Pre) - 1) ==> \result == 0;
+*/
+int foo201(int * data, int data_len, int array) {
+
+		int i = 0, top = array - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (0 <= i <= top));
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (top <= \at(array,Pre) - 1));
+          loop invariant (!(0 < \at(array,Pre) - 1)) ==> ((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant data_len == \at(data_len,Pre);
+          loop invariant data == \at(data,Pre);
+          loop assigns i, top;
+            */
+            while (i < top) {
+			int p = i + (top - i) / 2;
+			if (data[p] < data[p + 1]) {
+				i = p + 1;
+			} else {
+				top = p;
+			}
+		}
+            
+		return i;
+}
+
+2026-05-15 01:30:31,593 - INFO  - postconditon after refine: 
+
+/*@ logic integer max_int(integer a, integer b) = a > b ? a : b; */
+
+/*@ 
+  assigns \nothing;
+  ensures 0 < \at(array,Pre) - 1 ==> \result <= (\at(array,Pre) - 1);
+  ensures !(0 < \at(array,Pre) - 1) ==> \result == 0;
+*/
+int foo201(int * data, int data_len, int array) {
+
+		int i = 0, top = array - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (0 <= i <= top));
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (top <= \at(array,Pre) - 1));
+          loop invariant (!(0 < \at(array,Pre) - 1)) ==> ((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant data_len == \at(data_len,Pre);
+          loop invariant data == \at(data,Pre);
+          loop assigns i, top;
+            */
+            while (i < top) {
+			int p = i + (top - i) / 2;
+			if (data[p] < data[p + 1]) {
+				i = p + 1;
+			} else {
+				top = p;
+			}
+		}
+            
+		return i;
+}
+
+2026-05-15 01:30:32,647 - INFO  - syntax Correct
+2026-05-15 01:30:33,876 - INFO  - Loop Invariant:
+2026-05-15 01:30:33,877 - INFO  - [True, True, True, True, True, True]
+2026-05-15 01:30:33,877 - INFO  - 
+2026-05-15 01:30:33,877 - INFO  - Assertion:
+2026-05-15 01:30:33,877 - INFO  - []
+2026-05-15 01:30:33,877 - INFO  - 
+2026-05-15 01:30:33,877 - INFO  - Assigns:
+2026-05-15 01:30:33,878 - INFO  - [True]
+2026-05-15 01:30:33,878 - INFO  - 
+2026-05-15 01:30:33,878 - INFO  - Post Condition:
+2026-05-15 01:30:33,878 - INFO  - [True, True]
+2026-05-15 01:30:33,878 - INFO  - 
+2026-05-15 01:30:33,878 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=3
+2026-05-15 01:30:33,879 - INFO  - [spec-gen] converged at refine 5
+2026-05-15 01:30:33,879 - INFO  - 
+SPECIFICATION FOR foo201
+2026-05-15 01:30:33,879 - INFO  - ==================================================
+
+2026-05-15 01:30:33,879 - INFO  - 
+QCP Specification for function foo201:
+/*@
+With data_l
+Require store_int_array(data, data_len, data_l) && data_len > 0 && data_len < 100
+Ensure Results(__return)
+*/
+2026-05-15 01:30:34,053 - INFO  - 
+VERIFICATION FOR foo201
+2026-05-15 01:30:34,054 - INFO  - ==================================================
+
+2026-05-15 01:30:34,054 - INFO  - TRY TIME: 0
+2026-05-15 01:30:35,164 - INFO  - syntax Correct
+2026-05-15 01:30:36,243 - INFO  - Loop Invariant:
+2026-05-15 01:30:36,243 - INFO  - [True, True, True, True, True, True]
+2026-05-15 01:30:36,243 - INFO  - 
+2026-05-15 01:30:36,243 - INFO  - Assertion:
+2026-05-15 01:30:36,244 - INFO  - []
+2026-05-15 01:30:36,244 - INFO  - 
+2026-05-15 01:30:36,244 - INFO  - Assigns:
+2026-05-15 01:30:36,244 - INFO  - [True]
+2026-05-15 01:30:36,244 - INFO  - 
+2026-05-15 01:30:36,244 - INFO  - Post Condition:
+2026-05-15 01:30:36,244 - INFO  - [True, True]
+2026-05-15 01:30:36,244 - INFO  - 
+2026-05-15 01:30:36,245 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo201
+2026-05-15 01:30:36,245 - INFO  - ==================================================
+2026-05-15 01:30:36,245 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo201/20260515_012734_732794_a4811eba/output/foo201.c
+2026-05-15 01:30:36,245 - INFO  - Output file content:
+
+/*@ logic integer max_int(integer a, integer b) = a > b ? a : b; */
+
+/*@ 
+  assigns \nothing;
+  ensures 0 < \at(array,Pre) - 1 ==> \result <= (\at(array,Pre) - 1);
+  ensures !(0 < \at(array,Pre) - 1) ==> \result == 0;
+*/
+int foo201(int * data, int data_len, int array) {
+
+		int i = 0, top = array - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (0 <= i <= top));
+          loop invariant (0 < \at(array,Pre) - 1) ==> (((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre))) || (top <= \at(array,Pre) - 1));
+          loop invariant (!(0 < \at(array,Pre) - 1)) ==> ((top == \at(array,Pre) - 1)&&(i == 0)&&(array == \at(array,Pre))&&(data_len == \at(data_len,Pre))&&(data == \at(data,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant data_len == \at(data_len,Pre);
+          loop invariant data == \at(data,Pre);
+          loop assigns i, top;
+            */
+            while (i < top) {
+			int p = i + (top - i) / 2;
+			if (data[p] < data[p + 1]) {
+				i = p + 1;
+			} else {
+				top = p;
+			}
+		}
+            
+		return i;
+}
+
+2026-05-15 01:30:36,245 - INFO  - ==================================================
+2026-05-15 01:30:36,245 - INFO  - first_pass:
+2026-05-15 01:30:36,245 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 01:30:36,246 - INFO  - ==================================================
+2026-05-15 01:30:36,246 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 01:30:36,246 - INFO  - Total execution time: 181.36 seconds (3.02 minutes)
+2026-05-15 01:30:36,246 - INFO  - ==================================================
+2026-05-15 01:30:36,246 - INFO  - ==================================================
+2026-05-15 01:30:36,246 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 01:30:36,246 - INFO  - Total API calls: 8
+2026-05-15 01:30:36,246 - INFO  - Total prompt tokens (input): 47,266
+2026-05-15 01:30:36,246 - INFO  - Total completion tokens (output): 4,111
+2026-05-15 01:30:36,247 - INFO  - Total tokens: 51,377
+2026-05-15 01:30:36,247 - INFO  - Average prompt tokens per call: 5908.2
+2026-05-15 01:30:36,247 - INFO  - Average completion tokens per call: 513.9
+2026-05-15 01:30:36,247 - INFO  - Average total tokens per call: 6422.1
+2026-05-15 01:30:36,247 - INFO  - ==================================================

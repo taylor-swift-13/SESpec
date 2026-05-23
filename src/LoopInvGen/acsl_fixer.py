@@ -298,9 +298,30 @@ class ACSLFixer:
         # known LLM-emitted patterns that Frama-C/WP rejects but ACSL-the-
         # grammar nominally allows. Each rewrite is a no-op if the pattern
         # is absent, so this is always safe.
+        src, msgs = self._strip_const_in_annotations(src)
+        report.fixes_applied.extend(msgs)
+
         src, msgs = self._rewrite_zero_arg_logic(src)
         report.fixes_applied.extend(msgs)
 
+        # `decreases X, Y;` (tuple form) is invalid ACSL; ACSL accepts only one
+        # expression per decreases clause. Rewrite to `decreases X + Y;`.
+        def _fix_decreases_tuple(s: str) -> Tuple[str, List[str]]:
+            ms: List[str] = []
+            def repl(m):
+                ms.append(f"[acsl-fixer] decreases tuple: rewrote to sum form on line ~{s.count(chr(10), 0, m.start())+1}")
+                terms = [t.strip() for t in m.group(1).split(',')]
+                return f"decreases {' + '.join(terms)};"
+            out = re.sub(r'\bdecreases\s+([^;\n]*,[^;\n]*);', repl, s)
+            return out, ms
+
+        src, msgs = _fix_decreases_tuple(src)
+        report.fixes_applied.extend(msgs)
+
+        # `const`-token-cited line drop is now mostly redundant (the proactive
+        # strip above removes every `const` inside annotation spans). Keep as
+        # a safety net for cases where the LLM smuggles `const` inside a
+        # non-annotation block that Frama-C still picks up.
         src, msgs = self._drop_lines_by_token(src, err_lines, 'const')
         report.fixes_applied.extend(msgs)
 
@@ -676,6 +697,41 @@ class ACSLFixer:
         replacements.sort(key=lambda r: r[0], reverse=True)
         for a, b, repl, msg in replacements:
             src = src[:a] + repl + src[b:]
+            msgs.append(msg)
+        return src, msgs
+
+    def _strip_const_in_annotations(self, src: str) -> Tuple[str, List[str]]:
+        """Remove `const` qualifier tokens that appear inside ACSL annotation
+        spans.
+
+        ACSL types have no qualifier concept; any `const T*` parameter in a
+        `logic` / `predicate` declaration triggers `unexpected token 'const'`
+        and (because the const token sits in the MIDDLE of a multi-line
+        parameter list) the older line-drop fix would amputate the
+        declaration and leave the rest of the spec referring to unbound
+        names. Stripping the token in place preserves the parameter list.
+
+        Conservative: only touches text inside `/*@ ... */` or `//@ ...`
+        spans; C-body uses of `const` are untouched. Word-boundary anchored.
+        """
+        msgs: List[str] = []
+        spans = _find_annotation_spans(src)
+        if not spans:
+            return src, msgs
+        pattern = re.compile(r'\bconst\b\s*')
+        replacements: List[Tuple[int, int, str]] = []
+        for m in pattern.finditer(src):
+            if not _in_annotation(m.start(), spans):
+                continue
+            ln = src.count('\n', 0, m.start()) + 1
+            replacements.append((m.start(), m.end(),
+                                 f"const-strip: removed `const` qualifier "
+                                 f"on line {ln}"))
+        if not replacements:
+            return src, msgs
+        replacements.sort(key=lambda r: r[0], reverse=True)
+        for a, b, msg in replacements:
+            src = src[:a] + src[b:]
             msgs.append(msg)
         return src, msgs
 

@@ -1,0 +1,17 @@
+#include <limits.h>
+
+/*@logic integer fact(integer n) = n <= 0 ? 1 : n * fact(n - 1);*/
+
+/*@ requires (1 <= loop <= num + 1) && (ret == fact(loop - 1));
+    assigns \nothing;
+*/
+void check_A_implies_B(int k, int num, int ret) {
+    /*@ assert (loop == 1 || ret >= 1) && (0 <= loop - 1) && (ret >= 1 && loop >= 1) && (ret == 1 || ret >= loop - 1) && (ret == 1 || ret >= 1) && (ret == 1 || ret > 1) && (ret == 1 || ret > 0) && (ret == 1 || ret % 2 == 0) && (ret == 1 || ret % 2 == 0 || ret % 2 == 1) && (ret == (loop - 1) * ret || ret > 0) && (ret <= loop || loop <= num + 1) && (ret <= loop * ret) && (ret % 2 == loop % 2 || ret % 2 != loop % 2) && (ret % 2 == 0 || ret % 2 == 1) && (ret % 100 >= 0 && ret % 100 < 100) && (ret % 100 == ret % 100) && (ret % 100 == (ret % 100)) && (ret % 100 == (1 <= loop ? ret % 100 : ret % 100)) && (loop > 1 ==> ret >= loop - 1) && (loop > 1 ==> ret >= 1) && (loop > 1 ==> ret > 0) && (loop > 0 ==> ret >= loop - 1) && (loop > 0 ==> ret >= 1) && (loop > 0 ==> ret > 0) && (loop == 1 || ret % 2 == 0 || ret % 2 == 1) && (loop == 1 || loop > 1) && (loop == 1 ==> ret == 1) && (loop <= ret || loop <= num + 1) && (loop <= num + 1 || loop <= ret) && (loop - 1 <= ret) && (loop % 2 == 0 || loop % 2 == 1) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\exists integer k) && (\exists integer k) && (1 <= ret) && (1 <= ret || loop == 1) && (1 <= loop) && (0 <= ret) && (0 <= loop) && (0 < ret) && (0 < loop); */
+}
+
+/*@ requires (loop == 1 || ret >= 1) && (0 <= loop - 1) && (ret >= 1 && loop >= 1) && (ret == 1 || ret >= loop - 1) && (ret == 1 || ret >= 1) && (ret == 1 || ret > 1) && (ret == 1 || ret > 0) && (ret == 1 || ret % 2 == 0) && (ret == 1 || ret % 2 == 0 || ret % 2 == 1) && (ret == (loop - 1) * ret || ret > 0) && (ret <= loop || loop <= num + 1) && (ret <= loop * ret) && (ret % 2 == loop % 2 || ret % 2 != loop % 2) && (ret % 2 == 0 || ret % 2 == 1) && (ret % 100 >= 0 && ret % 100 < 100) && (ret % 100 == ret % 100) && (ret % 100 == (ret % 100)) && (ret % 100 == (1 <= loop ? ret % 100 : ret % 100)) && (loop > 1 ==> ret >= loop - 1) && (loop > 1 ==> ret >= 1) && (loop > 1 ==> ret > 0) && (loop > 0 ==> ret >= loop - 1) && (loop > 0 ==> ret >= 1) && (loop > 0 ==> ret > 0) && (loop == 1 || ret % 2 == 0 || ret % 2 == 1) && (loop == 1 || loop > 1) && (loop == 1 ==> ret == 1) && (loop <= ret || loop <= num + 1) && (loop <= num + 1 || loop <= ret) && (loop - 1 <= ret) && (loop % 2 == 0 || loop % 2 == 1) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\exists integer k) && (\exists integer k) && (1 <= ret) && (1 <= ret || loop == 1) && (1 <= loop) && (0 <= ret) && (0 <= loop) && (0 < ret) && (0 < loop);
+    assigns \nothing;
+*/
+void check_B_implies_A(int k, int num, int ret) {
+    /*@ assert (1 <= loop <= num + 1) && (ret == fact(loop - 1)); */
+}

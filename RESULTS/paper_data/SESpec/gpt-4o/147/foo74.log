@@ -1,0 +1,957 @@
+2026-05-14 23:35:46,529 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo74/20260514_233546_459129_f22539a3
+2026-05-14 23:35:46,530 - INFO  - 
+🚀 Starting generation of function: foo74
+2026-05-14 23:35:46,530 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-14 23:35:46,530 - INFO  - ==================================================
+
+2026-05-14 23:35:47,251 - INFO  - [auto only_loop] False — foo74 returns 'int'
+2026-05-14 23:35:47,251 - INFO  - Initial pending functions: ['foo74']
+2026-05-14 23:35:47,251 - INFO  - 
+GENERATE ANNOTATION FOR foo74
+2026-05-14 23:35:47,251 - INFO  - ==================================================
+
+2026-05-14 23:35:47,252 - INFO  - Function foo74 has been initialized
+2026-05-14 23:35:47,252 - INFO  - Starting to generate annotation code for foo74
+2026-05-14 23:35:47,291 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo74
+2026-05-14 23:35:47,291 - INFO  - ==================================================
+
+2026-05-14 23:35:47,343 - INFO  - Variable Maps:[{'temp': 'n@pre', 'n': 'n@pre'}]
+2026-05-14 23:35:47,343 - INFO  - Path conditions: [None]
+2026-05-14 23:35:47,343 - INFO  - Pre condition: (temp == n@pre) * (n == n@pre)
+2026-05-14 23:35:47,343 - INFO  - Loop Condition: temp != 0 && temp % 3 == 0
+2026-05-14 23:35:47,344 - INFO  - Array Names: []
+2026-05-14 23:35:47,344 - INFO  - Updated Loop Conditions: ['n@pre != 0 && n@pre % 3 == 0']
+2026-05-14 23:35:47,345 - INFO  - Global Unchanged Variables: ['n']
+2026-05-14 23:35:47,345 - INFO  - Non Inductive Variables: []
+2026-05-14 23:35:47,345 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-14 23:35:47,346 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-14 23:35:47,347 - INFO  - examples category: numeric
+2026-05-14 23:35:47,347 - INFO  - examples:
+2026-05-14 23:35:47,347 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-14 23:35:59,753 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-14 23:36:19,448 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-14 23:36:37,076 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-14 23:36:37,076 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 23:36:37,455 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-14 23:37:29,517 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-14 23:37:29,518 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-14 23:37:29,837 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-14 23:38:26,099 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-14 23:39:05,369 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-14 23:39:35,178 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-14 23:39:35,178 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-14 23:39:57,367 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-14 23:40:06,000 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6666666666666666, 0.0), clauses=3)
+2026-05-14 23:40:28,816 - INFO  - ACSL format loop invariant
+2026-05-14 23:40:28,817 - INFO  - /*@
+      loop invariant (!(\at(n,Pre) != 0 && \at(n,Pre) % 3 == 0)) ==> ((temp == \at(n,Pre)) && (n == \at(n,Pre)));
+      loop invariant n == \at(n,Pre);
+      loop assigns temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+2026-05-14 23:40:28,818 - INFO  - QCP format loop invariant
+2026-05-14 23:40:28,818 - INFO  - /*@ Inv
+    ((!(n@pre != 0 && n@pre % 3 == 0)) => ((temp == n@pre) && (n == n@pre))) &&
+(n == n@pre
+      loop assigns temp)
+    */
+    
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+2026-05-14 23:40:29,576 - INFO  - CORRECT INVARIANT
+2026-05-14 23:40:29,576 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo74
+2026-05-14 23:40:29,576 - INFO  - ==================================================
+
+2026-05-14 23:40:29,589 - INFO  - Starting to generate ACSL specification for foo74
+2026-05-14 23:40:44,618 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo74/20260514_233546_459129_f22539a3/output/foo74.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo74/20260514_233546_459129_f22539a3/output/foo74.c:10: Warning: 
+  unbound logic function max_divisible_by_3. Ignoring logic specification of function foo74
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo74/20260514_233546_459129_f22539a3/output/foo74.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-14 23:40:44,619 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-14 23:41:19,069 - INFO  - syntax Correct
+2026-05-14 23:41:29,848 - INFO  - Loop Invariant:
+2026-05-14 23:41:29,848 - INFO  - [False, True]
+2026-05-14 23:41:29,849 - INFO  - 
+2026-05-14 23:41:29,849 - INFO  - Assertion:
+2026-05-14 23:41:29,849 - INFO  - []
+2026-05-14 23:41:29,849 - INFO  - 
+2026-05-14 23:41:29,849 - INFO  - Assigns:
+2026-05-14 23:41:29,849 - INFO  - [True, True]
+2026-05-14 23:41:29,849 - INFO  - 
+2026-05-14 23:41:29,849 - INFO  - Post Condition:
+2026-05-14 23:41:29,850 - INFO  - [True, True]
+2026-05-14 23:41:29,850 - INFO  - 
+2026-05-14 23:41:29,850 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=4
+2026-05-14 23:41:29,851 - INFO  - postconditon before refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp == max_divisible_by_3(\at(n, Pre));
+      loop invariant n == \at(n, Pre);
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:41:55,477 - INFO  - postconditon after refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:42:06,402 - INFO  - syntax Correct
+2026-05-14 23:42:17,529 - INFO  - Loop Invariant:
+2026-05-14 23:42:17,529 - INFO  - [True, False, True, True]
+2026-05-14 23:42:17,529 - INFO  - 
+2026-05-14 23:42:17,529 - INFO  - Assertion:
+2026-05-14 23:42:17,530 - INFO  - []
+2026-05-14 23:42:17,530 - INFO  - 
+2026-05-14 23:42:17,530 - INFO  - Assigns:
+2026-05-14 23:42:17,530 - INFO  - [True, True]
+2026-05-14 23:42:17,530 - INFO  - 
+2026-05-14 23:42:17,530 - INFO  - Post Condition:
+2026-05-14 23:42:17,530 - INFO  - [True, True]
+2026-05-14 23:42:17,530 - INFO  - 
+2026-05-14 23:42:17,531 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=4
+2026-05-14 23:42:17,531 - INFO  - postconditon before refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:42:51,104 - INFO  - postconditon after refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  requires n % 3 == 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:43:02,006 - INFO  - syntax Correct
+2026-05-14 23:43:12,883 - INFO  - Loop Invariant:
+2026-05-14 23:43:12,884 - INFO  - [True, False, True, True]
+2026-05-14 23:43:12,884 - INFO  - 
+2026-05-14 23:43:12,884 - INFO  - Assertion:
+2026-05-14 23:43:12,884 - INFO  - []
+2026-05-14 23:43:12,884 - INFO  - 
+2026-05-14 23:43:12,884 - INFO  - Assigns:
+2026-05-14 23:43:12,884 - INFO  - [True, True]
+2026-05-14 23:43:12,884 - INFO  - 
+2026-05-14 23:43:12,884 - INFO  - Post Condition:
+2026-05-14 23:43:12,885 - INFO  - [True, True]
+2026-05-14 23:43:12,885 - INFO  - 
+2026-05-14 23:43:12,885 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-14 23:43:12,885 - INFO  - postconditon before refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  requires n % 3 == 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:43:38,713 - INFO  - postconditon after refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  requires n % 3 == 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:43:49,828 - INFO  - syntax Correct
+2026-05-14 23:44:00,795 - INFO  - Loop Invariant:
+2026-05-14 23:44:00,795 - INFO  - [True, False, True, True]
+2026-05-14 23:44:00,795 - INFO  - 
+2026-05-14 23:44:00,795 - INFO  - Assertion:
+2026-05-14 23:44:00,796 - INFO  - []
+2026-05-14 23:44:00,796 - INFO  - 
+2026-05-14 23:44:00,796 - INFO  - Assigns:
+2026-05-14 23:44:00,796 - INFO  - [True, True]
+2026-05-14 23:44:00,796 - INFO  - 
+2026-05-14 23:44:00,796 - INFO  - Post Condition:
+2026-05-14 23:44:00,796 - INFO  - [True, True]
+2026-05-14 23:44:00,796 - INFO  - 
+2026-05-14 23:44:00,796 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-14 23:44:00,797 - INFO  - postconditon before refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  requires n % 3 == 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:45:29,970 - INFO  - postconditon after refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  requires n % 3 == 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:45:40,787 - INFO  - syntax Correct
+2026-05-14 23:45:51,741 - INFO  - Loop Invariant:
+2026-05-14 23:45:51,742 - INFO  - [True, False, True, True]
+2026-05-14 23:45:51,742 - INFO  - 
+2026-05-14 23:45:51,742 - INFO  - Assertion:
+2026-05-14 23:45:51,742 - INFO  - []
+2026-05-14 23:45:51,742 - INFO  - 
+2026-05-14 23:45:51,742 - INFO  - Assigns:
+2026-05-14 23:45:51,742 - INFO  - [True, True]
+2026-05-14 23:45:51,742 - INFO  - 
+2026-05-14 23:45:51,742 - INFO  - Post Condition:
+2026-05-14 23:45:51,742 - INFO  - [True, True]
+2026-05-14 23:45:51,742 - INFO  - 
+2026-05-14 23:45:51,742 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-14 23:45:51,742 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 23:46:02,633 - INFO  - syntax Correct
+2026-05-14 23:46:13,383 - INFO  - Loop Invariant:
+2026-05-14 23:46:13,383 - INFO  - [True, False, True, True]
+2026-05-14 23:46:13,383 - INFO  - 
+2026-05-14 23:46:13,383 - INFO  - Assertion:
+2026-05-14 23:46:13,383 - INFO  - []
+2026-05-14 23:46:13,383 - INFO  - 
+2026-05-14 23:46:13,383 - INFO  - Assigns:
+2026-05-14 23:46:13,383 - INFO  - [True, True]
+2026-05-14 23:46:13,383 - INFO  - 
+2026-05-14 23:46:13,384 - INFO  - Post Condition:
+2026-05-14 23:46:13,384 - INFO  - [True, True]
+2026-05-14 23:46:13,384 - INFO  - 
+2026-05-14 23:46:13,384 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-14 23:46:13,384 - INFO  - postconditon before refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  requires n % 3 == 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:46:30,256 - INFO  - postconditon after refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  requires n % 3 == 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:46:40,976 - INFO  - syntax Correct
+2026-05-14 23:46:51,773 - INFO  - Loop Invariant:
+2026-05-14 23:46:51,773 - INFO  - [True, False, True, True]
+2026-05-14 23:46:51,773 - INFO  - 
+2026-05-14 23:46:51,773 - INFO  - Assertion:
+2026-05-14 23:46:51,773 - INFO  - []
+2026-05-14 23:46:51,773 - INFO  - 
+2026-05-14 23:46:51,773 - INFO  - Assigns:
+2026-05-14 23:46:51,773 - INFO  - [True, True]
+2026-05-14 23:46:51,773 - INFO  - 
+2026-05-14 23:46:51,773 - INFO  - Post Condition:
+2026-05-14 23:46:51,773 - INFO  - [True, True]
+2026-05-14 23:46:51,773 - INFO  - 
+2026-05-14 23:46:51,774 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-14 23:46:51,774 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 23:47:02,534 - INFO  - syntax Correct
+2026-05-14 23:47:13,603 - INFO  - Loop Invariant:
+2026-05-14 23:47:13,603 - INFO  - [True, False, True, True]
+2026-05-14 23:47:13,604 - INFO  - 
+2026-05-14 23:47:13,604 - INFO  - Assertion:
+2026-05-14 23:47:13,604 - INFO  - []
+2026-05-14 23:47:13,604 - INFO  - 
+2026-05-14 23:47:13,604 - INFO  - Assigns:
+2026-05-14 23:47:13,604 - INFO  - [True, True]
+2026-05-14 23:47:13,604 - INFO  - 
+2026-05-14 23:47:13,604 - INFO  - Post Condition:
+2026-05-14 23:47:13,604 - INFO  - [True, True]
+2026-05-14 23:47:13,604 - INFO  - 
+2026-05-14 23:47:13,605 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-14 23:47:13,605 - INFO  - postconditon before refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  requires n % 3 == 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:47:39,022 - INFO  - postconditon after refine: 
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  requires n % 3 == 0;
+  assigns \nothing;
+  ensures \result == 1 <==> max_divisible_by_3(n) == 1;
+  ensures \result == 0 <==> max_divisible_by_3(n) != 1;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant temp % 3 == 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp == \at(temp, Pre) / (3 ^ (\at(temp, Pre) / temp));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:47:39,280 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo74/20260514_233546_459129_f22539a3/output/foo74.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo74/20260514_233546_459129_f22539a3/output/foo74.c:23: Warning: 
+  unbound logic variable temp. Ignoring loop annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo74/20260514_233546_459129_f22539a3/output/foo74.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-14 23:47:39,281 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-14 23:47:39,281 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 23:47:39,281 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.875, 0.0), clauses=5)
+2026-05-14 23:47:50,112 - INFO  - syntax Correct
+2026-05-14 23:48:00,805 - INFO  - Loop Invariant:
+2026-05-14 23:48:00,805 - INFO  - [True, False, True, True]
+2026-05-14 23:48:00,805 - INFO  - 
+2026-05-14 23:48:00,806 - INFO  - Assertion:
+2026-05-14 23:48:00,806 - INFO  - []
+2026-05-14 23:48:00,806 - INFO  - 
+2026-05-14 23:48:00,806 - INFO  - Assigns:
+2026-05-14 23:48:00,806 - INFO  - [True, True]
+2026-05-14 23:48:00,806 - INFO  - 
+2026-05-14 23:48:00,806 - INFO  - Post Condition:
+2026-05-14 23:48:00,806 - INFO  - [True, True]
+2026-05-14 23:48:00,806 - INFO  - 
+2026-05-14 23:48:11,498 - INFO  - syntax Correct
+2026-05-14 23:48:22,240 - INFO  - Loop Invariant:
+2026-05-14 23:48:22,240 - INFO  - [True, True, True]
+2026-05-14 23:48:22,240 - INFO  - 
+2026-05-14 23:48:22,240 - INFO  - Assertion:
+2026-05-14 23:48:22,240 - INFO  - []
+2026-05-14 23:48:22,240 - INFO  - 
+2026-05-14 23:48:22,240 - INFO  - Assigns:
+2026-05-14 23:48:22,241 - INFO  - [True, True]
+2026-05-14 23:48:22,241 - INFO  - 
+2026-05-14 23:48:22,241 - INFO  - Post Condition:
+2026-05-14 23:48:22,241 - INFO  - [False, False]
+2026-05-14 23:48:22,241 - INFO  - 
+2026-05-14 23:48:23,160 - INFO  - syntax Correct
+2026-05-14 23:48:24,257 - INFO  - Loop Invariant:
+2026-05-14 23:48:24,258 - INFO  - [True, True, True]
+2026-05-14 23:48:24,258 - INFO  - 
+2026-05-14 23:48:24,259 - INFO  - Assertion:
+2026-05-14 23:48:24,259 - INFO  - []
+2026-05-14 23:48:24,259 - INFO  - 
+2026-05-14 23:48:24,260 - INFO  - Assigns:
+2026-05-14 23:48:24,260 - INFO  - [True, True]
+2026-05-14 23:48:24,260 - INFO  - 
+2026-05-14 23:48:24,260 - INFO  - Post Condition:
+2026-05-14 23:48:24,260 - INFO  - []
+2026-05-14 23:48:24,260 - INFO  - 
+2026-05-14 23:48:24,261 - INFO  - 
+SPECIFICATION FOR foo74
+2026-05-14 23:48:24,261 - INFO  - ==================================================
+
+2026-05-14 23:48:24,261 - INFO  - 
+QCP Specification for function foo74:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-14 23:48:24,382 - INFO  - 
+VERIFICATION FOR foo74
+2026-05-14 23:48:24,383 - INFO  - ==================================================
+
+2026-05-14 23:48:24,383 - INFO  - TRY TIME: 0
+2026-05-14 23:48:25,210 - INFO  - syntax Correct
+2026-05-14 23:48:26,107 - INFO  - Loop Invariant:
+2026-05-14 23:48:26,108 - INFO  - [True, True, True]
+2026-05-14 23:48:26,108 - INFO  - 
+2026-05-14 23:48:26,108 - INFO  - Assertion:
+2026-05-14 23:48:26,108 - INFO  - []
+2026-05-14 23:48:26,108 - INFO  - 
+2026-05-14 23:48:26,108 - INFO  - Assigns:
+2026-05-14 23:48:26,108 - INFO  - [True, True]
+2026-05-14 23:48:26,108 - INFO  - 
+2026-05-14 23:48:26,108 - INFO  - Post Condition:
+2026-05-14 23:48:26,108 - INFO  - []
+2026-05-14 23:48:26,108 - INFO  - 
+2026-05-14 23:48:26,108 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo74
+2026-05-14 23:48:26,108 - INFO  - ==================================================
+2026-05-14 23:48:26,108 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo74/20260514_233546_459129_f22539a3/output/foo74.c
+2026-05-14 23:48:26,109 - INFO  - Output file content:
+
+/*@
+  // Define the missing logic function max_divisible_by_3
+  logic integer max_divisible_by_3(integer n) =
+    n == 0 ? 0 : (n % 3 == 0 ? n : max_divisible_by_3(n - 1));
+*/
+
+/*@
+  requires n >= 0;
+  requires n % 3 == 0;
+  assigns \nothing;
+*/
+int foo74(int n) {
+
+    int temp = n;
+
+    /*@
+      loop invariant temp >= 0;
+      loop invariant max_divisible_by_3(\at(n, Pre)) % 3 == 0;
+      loop invariant temp <= max_divisible_by_3(\at(n, Pre));
+      loop assigns temp;
+      loop variant temp;
+    */
+    while (temp != 0 && temp % 3 == 0) {
+        temp /= 3;
+    }
+
+    return temp == 1;
+}
+
+2026-05-14 23:48:26,109 - INFO  - ==================================================
+2026-05-14 23:48:26,109 - INFO  - first_pass:
+2026-05-14 23:48:26,109 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-14 23:48:26,109 - INFO  - ==================================================
+2026-05-14 23:48:26,109 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-14 23:48:26,109 - INFO  - Total execution time: 759.58 seconds (12.66 minutes)
+2026-05-14 23:48:26,109 - INFO  - ==================================================
+2026-05-14 23:48:26,109 - INFO  - ==================================================
+2026-05-14 23:48:26,109 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-14 23:48:26,109 - INFO  - Total API calls: 16
+2026-05-14 23:48:26,110 - INFO  - Total prompt tokens (input): 149,513
+2026-05-14 23:48:26,110 - INFO  - Total completion tokens (output): 11,818
+2026-05-14 23:48:26,110 - INFO  - Total tokens: 161,331
+2026-05-14 23:48:26,110 - INFO  - Average prompt tokens per call: 9344.6
+2026-05-14 23:48:26,110 - INFO  - Average completion tokens per call: 738.6
+2026-05-14 23:48:26,112 - INFO  - Average total tokens per call: 10083.2
+2026-05-14 23:48:26,112 - INFO  - ==================================================

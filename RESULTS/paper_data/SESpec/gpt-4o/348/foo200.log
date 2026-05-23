@@ -1,0 +1,1107 @@
+2026-05-15 02:10:23,621 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3
+2026-05-15 02:10:23,622 - INFO  - 
+🚀 Starting generation of function: foo200
+2026-05-15 02:10:23,622 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 02:10:23,622 - INFO  - ==================================================
+
+2026-05-15 02:10:25,518 - INFO  - [auto only_loop] False — foo200 returns 'int'
+2026-05-15 02:10:25,519 - INFO  - Initial pending functions: ['foo200']
+2026-05-15 02:10:25,519 - INFO  - 
+GENERATE ANNOTATION FOR foo200
+2026-05-15 02:10:25,519 - INFO  - ==================================================
+
+2026-05-15 02:10:25,519 - INFO  - Function foo200 has been initialized
+2026-05-15 02:10:25,519 - INFO  - Starting to generate annotation code for foo200
+2026-05-15 02:10:25,571 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo200
+2026-05-15 02:10:25,571 - INFO  - ==================================================
+
+2026-05-15 02:10:25,662 - INFO  - Variable Maps:[{'count': '0', 'r': 'r@pre', 'l': 'l@pre', 'n': 'n@pre', 'a': 'a@pre'}]
+2026-05-15 02:10:25,662 - INFO  - Path conditions: [None]
+2026-05-15 02:10:25,662 - INFO  - Pre condition: (count == 0) * (r == r@pre) * (l == l@pre) * (n == n@pre) * (a == a@pre)
+2026-05-15 02:10:25,663 - INFO  - Loop Condition: i <= r
+2026-05-15 02:10:25,663 - INFO  - Array Names: []
+2026-05-15 02:10:25,663 - INFO  - Updated Loop Conditions: ['i <= r@pre']
+2026-05-15 02:10:25,664 - INFO  - Global Unchanged Variables: ['r', 'l', 'n', 'a']
+2026-05-15 02:10:25,664 - INFO  - Non Inductive Variables: []
+2026-05-15 02:10:25,664 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 02:10:25,666 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 02:10:25,667 - INFO  - examples category: numeric
+2026-05-15 02:10:25,667 - INFO  - examples:
+2026-05-15 02:10:25,667 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 02:11:07,322 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:11:40,353 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-15 02:12:14,103 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:12:47,472 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:12:47,472 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:13:09,785 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-15 02:13:39,609 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:13:39,609 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:14:01,783 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-15 02:14:33,738 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:14:33,738 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:14:56,872 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-15 02:15:31,606 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:15:31,607 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:15:31,607 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8571428571428571, 0.0), clauses=7)
+2026-05-15 02:17:00,871 - INFO  - ACSL format loop invariant
+2026-05-15 02:17:00,872 - INFO  - /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop assigns i, count;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+2026-05-15 02:17:00,874 - INFO  - QCP format loop invariant
+2026-05-15 02:17:00,874 - INFO  - /*@ Inv
+    (l <= i && i <= r + 1) &&
+(r == r@pre) &&
+(l == l@pre) &&
+(n == n@pre) &&
+(a == a@pre
+      loop assigns i, count)
+    */
+    
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+2026-05-15 02:17:23,042 - INFO  - CORRECT INVARIANT
+2026-05-15 02:17:23,043 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo200
+2026-05-15 02:17:23,043 - INFO  - ==================================================
+
+2026-05-15 02:17:23,069 - INFO  - Starting to generate ACSL specification for foo200
+2026-05-15 02:17:58,591 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:33: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:17:58,592 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:18:38,118 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:37: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:18:38,119 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:19:01,922 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:37: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:19:01,923 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:19:01,923 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:19:02,397 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:33: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:19:02,398 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:20:46,688 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:33: Warning: 
+  Only one code annotation is allowed per comment
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:46,689 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:20:46,689 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:20:46,961 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:33: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:46,962 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:21:31,051 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:33: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:21:31,052 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:21:31,052 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:21:31,282 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:33: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:21:31,283 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:22:03,433 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:37: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:22:03,434 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:22:03,434 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:22:03,692 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:33: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:22:03,692 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:22:33,519 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=5)
+2026-05-15 02:22:33,764 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:33: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:22:33,766 - INFO  - 
+SPECIFICATION FOR foo200
+2026-05-15 02:22:33,766 - INFO  - ==================================================
+
+2026-05-15 02:22:33,766 - INFO  - 
+QCP Specification for function foo200:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-15 02:22:33,942 - INFO  - 
+VERIFICATION FOR foo200
+2026-05-15 02:22:33,943 - INFO  - ==================================================
+
+2026-05-15 02:22:33,943 - INFO  - TRY TIME: 0
+2026-05-15 02:22:34,199 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:33: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:22:53,610 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:33: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:22:53,610 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:23:47,335 - INFO  - syntax Correct
+2026-05-15 02:23:58,444 - INFO  - Loop Invariant:
+2026-05-15 02:23:58,445 - INFO  - [True, True, True, True, True, False]
+2026-05-15 02:23:58,445 - INFO  - 
+2026-05-15 02:23:58,445 - INFO  - Assertion:
+2026-05-15 02:23:58,445 - INFO  - []
+2026-05-15 02:23:58,445 - INFO  - 
+2026-05-15 02:23:58,446 - INFO  - Assigns:
+2026-05-15 02:23:58,446 - INFO  - [True, True, True, True]
+2026-05-15 02:23:58,446 - INFO  - 
+2026-05-15 02:23:58,446 - INFO  - Post Condition:
+2026-05-15 02:23:58,446 - INFO  - [False]
+2026-05-15 02:23:58,446 - INFO  - 
+2026-05-15 02:23:58,446 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=5
+2026-05-15 02:23:58,447 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+  ensures \result == -1 || (l <= \result <= r && count_non_multiples(a, l, \result) == n) [POSTCONDITION FAILED];
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop invariant count_non_multiples(a, l, i - 1) == count;
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:24:15,559 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  logic integer iterative_count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + iterative_count_non_multiples(a, l + 1, r);
+*/
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+  ensures \result == -1 || (l <= \result <= r && iterative_count_non_multiples(a, l, \result) == n);
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop invariant iterative_count_non_multiples(a, l, i - 1) == count;
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:24:26,774 - INFO  - syntax Correct
+2026-05-15 02:24:38,156 - INFO  - Loop Invariant:
+2026-05-15 02:24:38,157 - INFO  - [True, True, True, True, True, False]
+2026-05-15 02:24:38,157 - INFO  - 
+2026-05-15 02:24:38,157 - INFO  - Assertion:
+2026-05-15 02:24:38,157 - INFO  - []
+2026-05-15 02:24:38,157 - INFO  - 
+2026-05-15 02:24:38,157 - INFO  - Assigns:
+2026-05-15 02:24:38,157 - INFO  - [True, True, True, True]
+2026-05-15 02:24:38,157 - INFO  - 
+2026-05-15 02:24:38,157 - INFO  - Post Condition:
+2026-05-15 02:24:38,158 - INFO  - [False]
+2026-05-15 02:24:38,158 - INFO  - 
+2026-05-15 02:24:38,158 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=5
+2026-05-15 02:24:38,158 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  logic integer iterative_count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + iterative_count_non_multiples(a, l + 1, r);
+*/
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+  ensures \result == -1 || (l <= \result <= r && iterative_count_non_multiples(a, l, \result) == n) [POSTCONDITION FAILED];
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop invariant iterative_count_non_multiples(a, l, i - 1) == count;
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:25:05,179 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  logic integer iterative_count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + iterative_count_non_multiples(a, l + 1, r);
+*/
+/*@
+  logic integer incremental_count_non_multiples(integer a, integer l, integer r, integer count) =
+    (l > r) ? count : incremental_count_non_multiples(a, l + 1, r, count + ((l % a != 0) ? 1 : 0));
+*/
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+  ensures \result == -1 || (l <= \result <= r && incremental_count_non_multiples(a, l, \result, 0) == n);
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop invariant incremental_count_non_multiples(a, l, i - 1, 0) == count;
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:25:16,106 - INFO  - syntax Correct
+2026-05-15 02:25:27,280 - INFO  - Loop Invariant:
+2026-05-15 02:25:27,280 - INFO  - [True, True, True, True, True, False]
+2026-05-15 02:25:27,281 - INFO  - 
+2026-05-15 02:25:27,281 - INFO  - Assertion:
+2026-05-15 02:25:27,281 - INFO  - []
+2026-05-15 02:25:27,281 - INFO  - 
+2026-05-15 02:25:27,281 - INFO  - Assigns:
+2026-05-15 02:25:27,281 - INFO  - [True, True, True, True]
+2026-05-15 02:25:27,281 - INFO  - 
+2026-05-15 02:25:27,281 - INFO  - Post Condition:
+2026-05-15 02:25:27,281 - INFO  - [False]
+2026-05-15 02:25:27,282 - INFO  - 
+2026-05-15 02:25:27,282 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=5
+2026-05-15 02:25:27,282 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:25:41,151 - INFO  - syntax Correct
+2026-05-15 02:25:52,467 - INFO  - Loop Invariant:
+2026-05-15 02:25:52,468 - INFO  - [True, True, True, True, True, False]
+2026-05-15 02:25:52,468 - INFO  - 
+2026-05-15 02:25:52,468 - INFO  - Assertion:
+2026-05-15 02:25:52,468 - INFO  - []
+2026-05-15 02:25:52,468 - INFO  - 
+2026-05-15 02:25:52,468 - INFO  - Assigns:
+2026-05-15 02:25:52,469 - INFO  - [True, True, True, True]
+2026-05-15 02:25:52,469 - INFO  - 
+2026-05-15 02:25:52,469 - INFO  - Post Condition:
+2026-05-15 02:25:52,469 - INFO  - [False]
+2026-05-15 02:25:52,469 - INFO  - 
+2026-05-15 02:25:52,470 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=5
+2026-05-15 02:25:52,470 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+  ensures \result == -1 || (l <= \result <= r && count_non_multiples(a, l, \result) == n) [POSTCONDITION FAILED];
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop invariant count_non_multiples(a, l, i - 1) == count;
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:26:15,536 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+  ensures \result == -1 ==> count_non_multiples(a, l, r) < n;
+  ensures \result != -1 ==> (l <= \result <= r && count_non_multiples(a, l, \result) == n);
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop invariant count_non_multiples(a, l, i - 1) == count;
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:26:27,006 - INFO  - syntax Correct
+2026-05-15 02:26:38,513 - INFO  - Loop Invariant:
+2026-05-15 02:26:38,514 - INFO  - [True, True, True, True, True, False]
+2026-05-15 02:26:38,514 - INFO  - 
+2026-05-15 02:26:38,514 - INFO  - Assertion:
+2026-05-15 02:26:38,514 - INFO  - []
+2026-05-15 02:26:38,514 - INFO  - 
+2026-05-15 02:26:38,514 - INFO  - Assigns:
+2026-05-15 02:26:38,514 - INFO  - [True, True, True, True]
+2026-05-15 02:26:38,514 - INFO  - 
+2026-05-15 02:26:38,514 - INFO  - Post Condition:
+2026-05-15 02:26:38,514 - INFO  - [False, False]
+2026-05-15 02:26:38,514 - INFO  - 
+2026-05-15 02:26:38,515 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=6
+2026-05-15 02:26:38,515 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:26:49,786 - INFO  - syntax Correct
+2026-05-15 02:27:00,986 - INFO  - Loop Invariant:
+2026-05-15 02:27:00,986 - INFO  - [True, True, True, True, True, False]
+2026-05-15 02:27:00,986 - INFO  - 
+2026-05-15 02:27:00,987 - INFO  - Assertion:
+2026-05-15 02:27:00,987 - INFO  - []
+2026-05-15 02:27:00,987 - INFO  - 
+2026-05-15 02:27:00,987 - INFO  - Assigns:
+2026-05-15 02:27:00,987 - INFO  - [True, True, True, True]
+2026-05-15 02:27:00,987 - INFO  - 
+2026-05-15 02:27:00,987 - INFO  - Post Condition:
+2026-05-15 02:27:00,987 - INFO  - [False]
+2026-05-15 02:27:00,987 - INFO  - 
+2026-05-15 02:27:00,988 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=5
+2026-05-15 02:27:00,988 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+  ensures \result == -1 || (l <= \result <= r && count_non_multiples(a, l, \result) == n) [POSTCONDITION FAILED];
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop invariant count_non_multiples(a, l, i - 1) == count;
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:27:29,048 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+  ensures \result == -1 || (l <= \result <= r && count_non_multiples(a, l, \result) == n) [POSTCONDITION FAILED];
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop invariant count_non_multiples(a, l, i - 1) == count;
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:27:29,291 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c:12: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:27:29,291 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-15 02:27:29,291 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:27:40,240 - INFO  - syntax Correct
+2026-05-15 02:27:51,398 - INFO  - Loop Invariant:
+2026-05-15 02:27:51,399 - INFO  - [True, True, True, True, True, False]
+2026-05-15 02:27:51,399 - INFO  - 
+2026-05-15 02:27:51,399 - INFO  - Assertion:
+2026-05-15 02:27:51,399 - INFO  - []
+2026-05-15 02:27:51,399 - INFO  - 
+2026-05-15 02:27:51,399 - INFO  - Assigns:
+2026-05-15 02:27:51,399 - INFO  - [True, True, True, True]
+2026-05-15 02:27:51,399 - INFO  - 
+2026-05-15 02:27:51,400 - INFO  - Post Condition:
+2026-05-15 02:27:51,400 - INFO  - [False]
+2026-05-15 02:27:51,400 - INFO  - 
+2026-05-15 02:27:51,400 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=5
+2026-05-15 02:27:51,400 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+  ensures \result == -1 || (l <= \result <= r && count_non_multiples(a, l, \result) == n) [POSTCONDITION FAILED];
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop invariant count_non_multiples(a, l, i - 1) == count;
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:28:08,512 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+  ensures \result == -1 || (l <= \result <= r && count_non_multiples(a, l, \result) == n);
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop invariant count == count_non_multiples(a, l, i - 1);
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:28:19,968 - INFO  - syntax Correct
+2026-05-15 02:28:31,137 - INFO  - Loop Invariant:
+2026-05-15 02:28:31,138 - INFO  - [True, True, True, True, True, False]
+2026-05-15 02:28:31,138 - INFO  - 
+2026-05-15 02:28:31,138 - INFO  - Assertion:
+2026-05-15 02:28:31,138 - INFO  - []
+2026-05-15 02:28:31,138 - INFO  - 
+2026-05-15 02:28:31,138 - INFO  - Assigns:
+2026-05-15 02:28:31,138 - INFO  - [True, True, True, True]
+2026-05-15 02:28:31,138 - INFO  - 
+2026-05-15 02:28:31,138 - INFO  - Post Condition:
+2026-05-15 02:28:31,138 - INFO  - [False]
+2026-05-15 02:28:31,138 - INFO  - 
+2026-05-15 02:28:31,138 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=5
+2026-05-15 02:28:31,139 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:28:31,139 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8181818181818182, 0.0), clauses=5)
+2026-05-15 02:28:42,170 - INFO  - syntax Correct
+2026-05-15 02:28:53,235 - INFO  - Loop Invariant:
+2026-05-15 02:28:53,235 - INFO  - [True, True, True, True, True, False]
+2026-05-15 02:28:53,235 - INFO  - 
+2026-05-15 02:28:53,235 - INFO  - Assertion:
+2026-05-15 02:28:53,236 - INFO  - []
+2026-05-15 02:28:53,236 - INFO  - 
+2026-05-15 02:28:53,236 - INFO  - Assigns:
+2026-05-15 02:28:53,236 - INFO  - [True, True, True, True]
+2026-05-15 02:28:53,236 - INFO  - 
+2026-05-15 02:28:53,236 - INFO  - Post Condition:
+2026-05-15 02:28:53,236 - INFO  - [False]
+2026-05-15 02:28:53,236 - INFO  - 
+2026-05-15 02:28:54,019 - INFO  - syntax Correct
+2026-05-15 02:28:54,897 - INFO  - Loop Invariant:
+2026-05-15 02:28:54,897 - INFO  - [True, True, True, True, True]
+2026-05-15 02:28:54,898 - INFO  - 
+2026-05-15 02:28:54,898 - INFO  - Assertion:
+2026-05-15 02:28:54,898 - INFO  - []
+2026-05-15 02:28:54,898 - INFO  - 
+2026-05-15 02:28:54,898 - INFO  - Assigns:
+2026-05-15 02:28:54,898 - INFO  - [True, True, True, True]
+2026-05-15 02:28:54,898 - INFO  - 
+2026-05-15 02:28:54,898 - INFO  - Post Condition:
+2026-05-15 02:28:54,898 - INFO  - []
+2026-05-15 02:28:54,898 - INFO  - 
+2026-05-15 02:28:55,683 - INFO  - syntax Correct
+2026-05-15 02:28:56,517 - INFO  - Loop Invariant:
+2026-05-15 02:28:56,517 - INFO  - [True, True, True, True, True]
+2026-05-15 02:28:56,517 - INFO  - 
+2026-05-15 02:28:56,517 - INFO  - Assertion:
+2026-05-15 02:28:56,517 - INFO  - []
+2026-05-15 02:28:56,517 - INFO  - 
+2026-05-15 02:28:56,518 - INFO  - Assigns:
+2026-05-15 02:28:56,518 - INFO  - [True, True, True, True]
+2026-05-15 02:28:56,518 - INFO  - 
+2026-05-15 02:28:56,518 - INFO  - Post Condition:
+2026-05-15 02:28:56,518 - INFO  - []
+2026-05-15 02:28:56,518 - INFO  - 
+2026-05-15 02:28:56,518 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo200
+2026-05-15 02:28:56,518 - INFO  - ==================================================
+2026-05-15 02:28:56,518 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo200/20260515_021023_833407_6da410f3/output/foo200.c
+2026-05-15 02:28:56,518 - INFO  - Output file content:
+
+/*@
+  logic integer count_non_multiples(integer a, integer l, integer r) =
+    (l > r) ? 0 : ((l % a != 0) ? 1 : 0) + count_non_multiples(a, l + 1, r);
+*/
+
+/*@
+  requires a > 0;
+  requires n >= 0;
+  requires l <= r;
+  assigns \nothing;
+*/
+int foo200(int a, int n, int l, int r) {
+    int count = 0;
+
+    /*@
+      loop invariant l <= i <= r + 1;
+      loop invariant r == \at(r, Pre);
+      loop invariant l == \at(l, Pre);
+      loop invariant n == \at(n, Pre);
+      loop invariant a == \at(a, Pre);
+      loop assigns i, count;
+      loop variant r - i;
+    */
+    for (int i = l; i <= r; i++) {
+        if (i % a != 0) {
+            count++;
+        }
+        if (count == n) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+2026-05-15 02:28:56,518 - INFO  - ==================================================
+2026-05-15 02:28:56,518 - INFO  - first_pass:
+2026-05-15 02:28:56,518 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 02:28:56,518 - INFO  - ==================================================
+2026-05-15 02:28:56,518 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 02:28:56,519 - INFO  - Total execution time: 1112.90 seconds (18.55 minutes)
+2026-05-15 02:28:56,519 - INFO  - ==================================================
+2026-05-15 02:28:56,519 - INFO  - ==================================================
+2026-05-15 02:28:56,519 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 02:28:56,519 - INFO  - Total API calls: 21
+2026-05-15 02:28:56,519 - INFO  - Total prompt tokens (input): 118,312
+2026-05-15 02:28:56,519 - INFO  - Total completion tokens (output): 16,346
+2026-05-15 02:28:56,519 - INFO  - Total tokens: 134,658
+2026-05-15 02:28:56,519 - INFO  - Average prompt tokens per call: 5633.9
+2026-05-15 02:28:56,519 - INFO  - Average completion tokens per call: 778.4
+2026-05-15 02:28:56,519 - INFO  - Average total tokens per call: 6412.3
+2026-05-15 02:28:56,519 - INFO  - ==================================================

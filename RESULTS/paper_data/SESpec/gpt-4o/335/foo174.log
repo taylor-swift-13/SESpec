@@ -1,0 +1,1681 @@
+2026-05-15 01:57:53,347 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo174/20260515_015753_803727_9b6a0cab
+2026-05-15 01:57:53,347 - INFO  - 
+🚀 Starting generation of function: foo174
+2026-05-15 01:57:53,348 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 01:57:53,348 - INFO  - ==================================================
+
+2026-05-15 01:57:54,383 - INFO  - [auto only_loop] False — foo174 returns 'int'
+2026-05-15 01:57:54,384 - INFO  - Initial pending functions: ['foo174']
+2026-05-15 01:57:54,384 - INFO  - 
+GENERATE ANNOTATION FOR foo174
+2026-05-15 01:57:54,384 - INFO  - ==================================================
+
+2026-05-15 01:57:54,384 - INFO  - Function foo174 has been initialized
+2026-05-15 01:57:54,384 - INFO  - Starting to generate annotation code for foo174
+2026-05-15 01:57:54,435 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo174
+2026-05-15 01:57:54,435 - INFO  - ==================================================
+
+2026-05-15 01:57:54,512 - INFO  - Variable Maps:[{'variable': '1', 'b': 'b@pre', 'a': 'a@pre'}]
+2026-05-15 01:57:54,512 - INFO  - Path conditions: ['b@pre - a@pre < 5 && a@pre != b@pre']
+2026-05-15 01:57:54,512 - INFO  - Pre condition: b@pre - a@pre < 5 && a@pre != b@pre && (variable == 1) * (b == b@pre) * (a == a@pre)
+2026-05-15 01:57:54,512 - INFO  - Loop Condition: i < b + 1
+2026-05-15 01:57:54,513 - INFO  - Array Names: []
+2026-05-15 01:57:54,514 - INFO  - Updated Loop Conditions: ['i < b@pre + 1']
+2026-05-15 01:57:54,514 - INFO  - Global Unchanged Variables: ['b', 'a']
+2026-05-15 01:57:54,515 - INFO  - Non Inductive Variables: []
+2026-05-15 01:57:54,515 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 01:57:54,516 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 01:57:54,518 - INFO  - examples category: numeric
+2026-05-15 01:57:54,518 - INFO  - examples:
+2026-05-15 01:57:54,518 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 01:58:58,319 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 02:00:06,154 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 02:00:51,571 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 02:00:51,572 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:01:13,274 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 02:01:27,722 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:01:27,722 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:01:49,714 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 02:02:28,690 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 02:02:28,691 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:02:50,982 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 02:03:31,685 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 02:03:31,686 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:03:54,043 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-15 02:04:16,397 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.5, 0.0), clauses=4)
+2026-05-15 02:05:24,437 - INFO  - ACSL format loop invariant
+2026-05-15 02:05:24,438 - INFO  - /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop assigns i, variable;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+2026-05-15 02:05:24,440 - INFO  - QCP format loop invariant
+2026-05-15 02:05:24,440 - INFO  - /*@ Inv
+    (b == b@pre) &&
+(a == a@pre
+          loop assigns i, variable)
+    */
+    
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+2026-05-15 02:05:47,646 - INFO  - CORRECT INVARIANT
+2026-05-15 02:05:47,647 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo174
+2026-05-15 02:05:47,647 - INFO  - ==================================================
+
+2026-05-15 02:05:47,680 - INFO  - Starting to generate ACSL specification for foo174
+2026-05-15 02:06:26,757 - INFO  - syntax Correct
+2026-05-15 02:06:38,067 - INFO  - Loop Invariant:
+2026-05-15 02:06:38,067 - INFO  - [True, True, False]
+2026-05-15 02:06:38,067 - INFO  - 
+2026-05-15 02:06:38,068 - INFO  - Assertion:
+2026-05-15 02:06:38,068 - INFO  - [False]
+2026-05-15 02:06:38,068 - INFO  - 
+2026-05-15 02:06:38,068 - INFO  - Assigns:
+2026-05-15 02:06:38,068 - INFO  - [True, True, True, True]
+2026-05-15 02:06:38,068 - INFO  - 
+2026-05-15 02:06:38,068 - INFO  - Post Condition:
+2026-05-15 02:06:38,068 - INFO  - [True]
+2026-05-15 02:06:38,068 - INFO  - 
+2026-05-15 02:06:38,069 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=3
+2026-05-15 02:06:38,069 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:07:21,915 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:07:33,140 - INFO  - syntax Correct
+2026-05-15 02:07:44,448 - INFO  - Loop Invariant:
+2026-05-15 02:07:44,449 - INFO  - [True, True, False, False]
+2026-05-15 02:07:44,449 - INFO  - 
+2026-05-15 02:07:44,449 - INFO  - Assertion:
+2026-05-15 02:07:44,449 - INFO  - [True]
+2026-05-15 02:07:44,450 - INFO  - 
+2026-05-15 02:07:44,450 - INFO  - Assigns:
+2026-05-15 02:07:44,450 - INFO  - [True, True, True, True]
+2026-05-15 02:07:44,450 - INFO  - 
+2026-05-15 02:07:44,450 - INFO  - Post Condition:
+2026-05-15 02:07:44,450 - INFO  - [True]
+2026-05-15 02:07:44,450 - INFO  - 
+2026-05-15 02:07:44,450 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.78, satisfy=1.00) clauses=3
+2026-05-15 02:07:44,450 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:08:18,471 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            //@ assert a + 1 <= i <= b + 1; // Establish invariant
+            variable = (variable * (i % 10)) % 10;
+            //@ assert variable == product_mod_10(a + 1, i - 1) % 10; // Preserve invariant
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:08:29,742 - INFO  - syntax Correct
+2026-05-15 02:08:41,041 - INFO  - Loop Invariant:
+2026-05-15 02:08:41,042 - INFO  - [True, True, False, False]
+2026-05-15 02:08:41,042 - INFO  - 
+2026-05-15 02:08:41,042 - INFO  - Assertion:
+2026-05-15 02:08:41,042 - INFO  - [True, False, True]
+2026-05-15 02:08:41,042 - INFO  - 
+2026-05-15 02:08:41,042 - INFO  - Assigns:
+2026-05-15 02:08:41,042 - INFO  - [True, True, True, True]
+2026-05-15 02:08:41,042 - INFO  - 
+2026-05-15 02:08:41,042 - INFO  - Post Condition:
+2026-05-15 02:08:41,042 - INFO  - [True]
+2026-05-15 02:08:41,042 - INFO  - 
+2026-05-15 02:08:41,042 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.78, satisfy=0.67) clauses=3
+2026-05-15 02:08:41,043 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:08:52,212 - INFO  - syntax Correct
+2026-05-15 02:09:03,674 - INFO  - Loop Invariant:
+2026-05-15 02:09:03,675 - INFO  - [True, True, False]
+2026-05-15 02:09:03,675 - INFO  - 
+2026-05-15 02:09:03,675 - INFO  - Assertion:
+2026-05-15 02:09:03,675 - INFO  - [False]
+2026-05-15 02:09:03,675 - INFO  - 
+2026-05-15 02:09:03,675 - INFO  - Assigns:
+2026-05-15 02:09:03,675 - INFO  - [True, True, True, True]
+2026-05-15 02:09:03,675 - INFO  - 
+2026-05-15 02:09:03,675 - INFO  - Post Condition:
+2026-05-15 02:09:03,675 - INFO  - [True]
+2026-05-15 02:09:03,675 - INFO  - 
+2026-05-15 02:09:03,676 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=3
+2026-05-15 02:09:03,676 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:09:44,928 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant i >= a + 1 && i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:09:56,194 - INFO  - syntax Correct
+2026-05-15 02:10:07,271 - INFO  - Loop Invariant:
+2026-05-15 02:10:07,271 - INFO  - [True, True, False, False]
+2026-05-15 02:10:07,271 - INFO  - 
+2026-05-15 02:10:07,272 - INFO  - Assertion:
+2026-05-15 02:10:07,272 - INFO  - [True]
+2026-05-15 02:10:07,272 - INFO  - 
+2026-05-15 02:10:07,272 - INFO  - Assigns:
+2026-05-15 02:10:07,272 - INFO  - [True, True, True, True]
+2026-05-15 02:10:07,272 - INFO  - 
+2026-05-15 02:10:07,272 - INFO  - Post Condition:
+2026-05-15 02:10:07,272 - INFO  - [True]
+2026-05-15 02:10:07,272 - INFO  - 
+2026-05-15 02:10:07,273 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.78, satisfy=1.00) clauses=3
+2026-05-15 02:10:07,273 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:10:18,424 - INFO  - syntax Correct
+2026-05-15 02:10:29,483 - INFO  - Loop Invariant:
+2026-05-15 02:10:29,483 - INFO  - [True, True, False]
+2026-05-15 02:10:29,483 - INFO  - 
+2026-05-15 02:10:29,483 - INFO  - Assertion:
+2026-05-15 02:10:29,484 - INFO  - [False]
+2026-05-15 02:10:29,484 - INFO  - 
+2026-05-15 02:10:29,484 - INFO  - Assigns:
+2026-05-15 02:10:29,484 - INFO  - [True, True, True, True]
+2026-05-15 02:10:29,484 - INFO  - 
+2026-05-15 02:10:29,484 - INFO  - Post Condition:
+2026-05-15 02:10:29,484 - INFO  - [True]
+2026-05-15 02:10:29,484 - INFO  - 
+2026-05-15 02:10:29,485 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=3
+2026-05-15 02:10:29,485 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:10:58,265 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:11:10,932 - INFO  - syntax Correct
+2026-05-15 02:11:22,432 - INFO  - Loop Invariant:
+2026-05-15 02:11:22,432 - INFO  - [True, True, False, False]
+2026-05-15 02:11:22,432 - INFO  - 
+2026-05-15 02:11:22,433 - INFO  - Assertion:
+2026-05-15 02:11:22,433 - INFO  - [True]
+2026-05-15 02:11:22,433 - INFO  - 
+2026-05-15 02:11:22,433 - INFO  - Assigns:
+2026-05-15 02:11:22,433 - INFO  - [True, True, True, True]
+2026-05-15 02:11:22,433 - INFO  - 
+2026-05-15 02:11:22,433 - INFO  - Post Condition:
+2026-05-15 02:11:22,433 - INFO  - [True]
+2026-05-15 02:11:22,433 - INFO  - 
+2026-05-15 02:11:22,434 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.78, satisfy=1.00) clauses=3
+2026-05-15 02:11:22,434 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:11:33,680 - INFO  - syntax Correct
+2026-05-15 02:11:45,219 - INFO  - Loop Invariant:
+2026-05-15 02:11:45,219 - INFO  - [True, True, False]
+2026-05-15 02:11:45,219 - INFO  - 
+2026-05-15 02:11:45,219 - INFO  - Assertion:
+2026-05-15 02:11:45,219 - INFO  - [False]
+2026-05-15 02:11:45,219 - INFO  - 
+2026-05-15 02:11:45,219 - INFO  - Assigns:
+2026-05-15 02:11:45,220 - INFO  - [True, True, True, True]
+2026-05-15 02:11:45,220 - INFO  - 
+2026-05-15 02:11:45,220 - INFO  - Post Condition:
+2026-05-15 02:11:45,220 - INFO  - [True]
+2026-05-15 02:11:45,220 - INFO  - 
+2026-05-15 02:11:45,220 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=3
+2026-05-15 02:11:45,220 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:12:25,639 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant i >= a + 1 && i <= b + 1;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:12:36,947 - INFO  - syntax Correct
+2026-05-15 02:12:48,298 - INFO  - Loop Invariant:
+2026-05-15 02:12:48,299 - INFO  - [True, True, False, False]
+2026-05-15 02:12:48,299 - INFO  - 
+2026-05-15 02:12:48,299 - INFO  - Assertion:
+2026-05-15 02:12:48,299 - INFO  - [True]
+2026-05-15 02:12:48,299 - INFO  - 
+2026-05-15 02:12:48,299 - INFO  - Assigns:
+2026-05-15 02:12:48,299 - INFO  - [True, True, True, True]
+2026-05-15 02:12:48,299 - INFO  - 
+2026-05-15 02:12:48,299 - INFO  - Post Condition:
+2026-05-15 02:12:48,300 - INFO  - [True]
+2026-05-15 02:12:48,300 - INFO  - 
+2026-05-15 02:12:48,300 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.78, satisfy=1.00) clauses=3
+2026-05-15 02:12:48,300 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:12:59,416 - INFO  - syntax Correct
+2026-05-15 02:13:10,561 - INFO  - Loop Invariant:
+2026-05-15 02:13:10,561 - INFO  - [True, True, False]
+2026-05-15 02:13:10,561 - INFO  - 
+2026-05-15 02:13:10,562 - INFO  - Assertion:
+2026-05-15 02:13:10,562 - INFO  - [False]
+2026-05-15 02:13:10,562 - INFO  - 
+2026-05-15 02:13:10,562 - INFO  - Assigns:
+2026-05-15 02:13:10,562 - INFO  - [True, True, True, True]
+2026-05-15 02:13:10,562 - INFO  - 
+2026-05-15 02:13:10,562 - INFO  - Post Condition:
+2026-05-15 02:13:10,562 - INFO  - [True]
+2026-05-15 02:13:10,562 - INFO  - 
+2026-05-15 02:13:10,563 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=3
+2026-05-15 02:13:10,563 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:13:45,632 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        //@ assert variable == product_mod_10(a + 1, b) % 10;
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:13:45,633 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.875, 0.0), clauses=3)
+2026-05-15 02:13:56,522 - INFO  - syntax Correct
+2026-05-15 02:14:07,470 - INFO  - Loop Invariant:
+2026-05-15 02:14:07,471 - INFO  - [True, True, False]
+2026-05-15 02:14:07,471 - INFO  - 
+2026-05-15 02:14:07,471 - INFO  - Assertion:
+2026-05-15 02:14:07,471 - INFO  - [False]
+2026-05-15 02:14:07,471 - INFO  - 
+2026-05-15 02:14:07,471 - INFO  - Assigns:
+2026-05-15 02:14:07,471 - INFO  - [True, True, True, True]
+2026-05-15 02:14:07,471 - INFO  - 
+2026-05-15 02:14:07,471 - INFO  - Post Condition:
+2026-05-15 02:14:07,471 - INFO  - [True]
+2026-05-15 02:14:07,471 - INFO  - 
+2026-05-15 02:14:19,305 - INFO  - syntax Correct
+2026-05-15 02:14:30,955 - INFO  - Loop Invariant:
+2026-05-15 02:14:30,955 - INFO  - [True, True]
+2026-05-15 02:14:30,955 - INFO  - 
+2026-05-15 02:14:30,955 - INFO  - Assertion:
+2026-05-15 02:14:30,955 - INFO  - [False]
+2026-05-15 02:14:30,956 - INFO  - 
+2026-05-15 02:14:30,956 - INFO  - Assigns:
+2026-05-15 02:14:30,956 - INFO  - [True, True, True, True]
+2026-05-15 02:14:30,956 - INFO  - 
+2026-05-15 02:14:30,956 - INFO  - Post Condition:
+2026-05-15 02:14:30,956 - INFO  - [True]
+2026-05-15 02:14:30,956 - INFO  - 
+2026-05-15 02:14:30,958 - INFO  - 
+SPECIFICATION FOR foo174
+2026-05-15 02:14:30,958 - INFO  - ==================================================
+
+2026-05-15 02:14:30,958 - INFO  - 
+QCP Specification for function foo174:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-15 02:14:31,139 - INFO  - 
+VERIFICATION FOR foo174
+2026-05-15 02:14:31,141 - INFO  - ==================================================
+
+2026-05-15 02:14:31,141 - INFO  - TRY TIME: 0
+2026-05-15 02:14:42,275 - INFO  - syntax Correct
+2026-05-15 02:14:53,730 - INFO  - Loop Invariant:
+2026-05-15 02:14:53,730 - INFO  - [True, True]
+2026-05-15 02:14:53,730 - INFO  - 
+2026-05-15 02:14:53,731 - INFO  - Assertion:
+2026-05-15 02:14:53,731 - INFO  - [False]
+2026-05-15 02:14:53,731 - INFO  - 
+2026-05-15 02:14:53,731 - INFO  - Assigns:
+2026-05-15 02:14:53,732 - INFO  - [True, True, True, True]
+2026-05-15 02:14:53,732 - INFO  - 
+2026-05-15 02:14:53,732 - INFO  - Post Condition:
+2026-05-15 02:14:53,732 - INFO  - [True]
+2026-05-15 02:14:53,732 - INFO  - 
+2026-05-15 02:15:38,943 - INFO  - syntax Correct
+2026-05-15 02:15:49,955 - INFO  - Loop Invariant:
+2026-05-15 02:15:49,956 - INFO  - [True, True, False, False]
+2026-05-15 02:15:49,956 - INFO  - 
+2026-05-15 02:15:49,956 - INFO  - Assertion:
+2026-05-15 02:15:49,956 - INFO  - []
+2026-05-15 02:15:49,956 - INFO  - 
+2026-05-15 02:15:49,956 - INFO  - Assigns:
+2026-05-15 02:15:49,956 - INFO  - [True, True, True, True]
+2026-05-15 02:15:49,956 - INFO  - 
+2026-05-15 02:15:49,956 - INFO  - Post Condition:
+2026-05-15 02:15:49,956 - INFO  - [True]
+2026-05-15 02:15:49,956 - INFO  - 
+2026-05-15 02:15:49,956 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=3
+2026-05-15 02:15:49,956 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant a + 1 <= i <= b + 1;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:16:27,506 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:16:39,017 - INFO  - syntax Correct
+2026-05-15 02:16:50,567 - INFO  - Loop Invariant:
+2026-05-15 02:16:50,568 - INFO  - [True, True, False, False, False]
+2026-05-15 02:16:50,568 - INFO  - 
+2026-05-15 02:16:50,568 - INFO  - Assertion:
+2026-05-15 02:16:50,568 - INFO  - []
+2026-05-15 02:16:50,568 - INFO  - 
+2026-05-15 02:16:50,568 - INFO  - Assigns:
+2026-05-15 02:16:50,568 - INFO  - [True, True, True, True]
+2026-05-15 02:16:50,568 - INFO  - 
+2026-05-15 02:16:50,569 - INFO  - Post Condition:
+2026-05-15 02:16:50,569 - INFO  - [True]
+2026-05-15 02:16:50,569 - INFO  - 
+2026-05-15 02:16:50,569 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=3
+2026-05-15 02:16:50,569 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            variable = (variable * (i % 10)) % 10;
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:17:25,065 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:17:36,154 - INFO  - syntax Correct
+2026-05-15 02:17:47,798 - INFO  - Loop Invariant:
+2026-05-15 02:17:47,799 - INFO  - [True, True, False, True, False]
+2026-05-15 02:17:47,799 - INFO  - 
+2026-05-15 02:17:47,799 - INFO  - Assertion:
+2026-05-15 02:17:47,799 - INFO  - [True, False]
+2026-05-15 02:17:47,799 - INFO  - 
+2026-05-15 02:17:47,799 - INFO  - Assigns:
+2026-05-15 02:17:47,799 - INFO  - [True, True, True, True]
+2026-05-15 02:17:47,799 - INFO  - 
+2026-05-15 02:17:47,799 - INFO  - Post Condition:
+2026-05-15 02:17:47,799 - INFO  - [True]
+2026-05-15 02:17:47,799 - INFO  - 
+2026-05-15 02:17:47,800 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.80, satisfy=0.50) clauses=3
+2026-05-15 02:17:47,800 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:18:16,846 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:18:27,972 - INFO  - syntax Correct
+2026-05-15 02:18:39,325 - INFO  - Loop Invariant:
+2026-05-15 02:18:39,325 - INFO  - [True, True, False, True, False]
+2026-05-15 02:18:39,326 - INFO  - 
+2026-05-15 02:18:39,326 - INFO  - Assertion:
+2026-05-15 02:18:39,326 - INFO  - [True, False]
+2026-05-15 02:18:39,326 - INFO  - 
+2026-05-15 02:18:39,326 - INFO  - Assigns:
+2026-05-15 02:18:39,326 - INFO  - [True, True, True, True]
+2026-05-15 02:18:39,326 - INFO  - 
+2026-05-15 02:18:39,326 - INFO  - Post Condition:
+2026-05-15 02:18:39,326 - INFO  - [True]
+2026-05-15 02:18:39,326 - INFO  - 
+2026-05-15 02:18:39,327 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.80, satisfy=0.50) clauses=3
+2026-05-15 02:18:39,327 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:18:57,798 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:19:09,559 - INFO  - syntax Correct
+2026-05-15 02:19:20,852 - INFO  - Loop Invariant:
+2026-05-15 02:19:20,853 - INFO  - [True, True, False, True, False]
+2026-05-15 02:19:20,853 - INFO  - 
+2026-05-15 02:19:20,853 - INFO  - Assertion:
+2026-05-15 02:19:20,853 - INFO  - [True, False]
+2026-05-15 02:19:20,853 - INFO  - 
+2026-05-15 02:19:20,853 - INFO  - Assigns:
+2026-05-15 02:19:20,853 - INFO  - [True, True, True, True]
+2026-05-15 02:19:20,853 - INFO  - 
+2026-05-15 02:19:20,853 - INFO  - Post Condition:
+2026-05-15 02:19:20,854 - INFO  - [True]
+2026-05-15 02:19:20,854 - INFO  - 
+2026-05-15 02:19:20,854 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.80, satisfy=0.50) clauses=3
+2026-05-15 02:19:20,854 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:19:31,891 - INFO  - syntax Correct
+2026-05-15 02:19:43,055 - INFO  - Loop Invariant:
+2026-05-15 02:19:43,056 - INFO  - [True, True, False, True, False]
+2026-05-15 02:19:43,056 - INFO  - 
+2026-05-15 02:19:43,056 - INFO  - Assertion:
+2026-05-15 02:19:43,056 - INFO  - [True, False]
+2026-05-15 02:19:43,056 - INFO  - 
+2026-05-15 02:19:43,056 - INFO  - Assigns:
+2026-05-15 02:19:43,057 - INFO  - [True, True, True, True]
+2026-05-15 02:19:43,057 - INFO  - 
+2026-05-15 02:19:43,057 - INFO  - Post Condition:
+2026-05-15 02:19:43,057 - INFO  - [True]
+2026-05-15 02:19:43,057 - INFO  - 
+2026-05-15 02:19:43,058 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.80, satisfy=0.50) clauses=3
+2026-05-15 02:19:43,058 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:20:01,681 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:20:13,097 - INFO  - syntax Correct
+2026-05-15 02:20:24,600 - INFO  - Loop Invariant:
+2026-05-15 02:20:24,601 - INFO  - [True, True, False, True, False]
+2026-05-15 02:20:24,601 - INFO  - 
+2026-05-15 02:20:24,602 - INFO  - Assertion:
+2026-05-15 02:20:24,602 - INFO  - [True, False]
+2026-05-15 02:20:24,602 - INFO  - 
+2026-05-15 02:20:24,602 - INFO  - Assigns:
+2026-05-15 02:20:24,602 - INFO  - [True, True, True, True]
+2026-05-15 02:20:24,602 - INFO  - 
+2026-05-15 02:20:24,602 - INFO  - Post Condition:
+2026-05-15 02:20:24,602 - INFO  - [True]
+2026-05-15 02:20:24,602 - INFO  - 
+2026-05-15 02:20:24,602 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.80, satisfy=0.50) clauses=3
+2026-05-15 02:20:24,603 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:20:35,787 - INFO  - syntax Correct
+2026-05-15 02:20:47,029 - INFO  - Loop Invariant:
+2026-05-15 02:20:47,029 - INFO  - [True, True, False, True, False]
+2026-05-15 02:20:47,029 - INFO  - 
+2026-05-15 02:20:47,029 - INFO  - Assertion:
+2026-05-15 02:20:47,029 - INFO  - [True, False]
+2026-05-15 02:20:47,029 - INFO  - 
+2026-05-15 02:20:47,029 - INFO  - Assigns:
+2026-05-15 02:20:47,029 - INFO  - [True, True, True, True]
+2026-05-15 02:20:47,029 - INFO  - 
+2026-05-15 02:20:47,030 - INFO  - Post Condition:
+2026-05-15 02:20:47,030 - INFO  - [True]
+2026-05-15 02:20:47,030 - INFO  - 
+2026-05-15 02:20:47,030 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.80, satisfy=0.50) clauses=3
+2026-05-15 02:20:47,030 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:21:27,249 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:21:38,249 - INFO  - syntax Correct
+2026-05-15 02:21:49,278 - INFO  - Loop Invariant:
+2026-05-15 02:21:49,279 - INFO  - [True, True, False, True, False]
+2026-05-15 02:21:49,279 - INFO  - 
+2026-05-15 02:21:49,279 - INFO  - Assertion:
+2026-05-15 02:21:49,279 - INFO  - [True, False]
+2026-05-15 02:21:49,279 - INFO  - 
+2026-05-15 02:21:49,279 - INFO  - Assigns:
+2026-05-15 02:21:49,279 - INFO  - [True, True, True, True]
+2026-05-15 02:21:49,279 - INFO  - 
+2026-05-15 02:21:49,279 - INFO  - Post Condition:
+2026-05-15 02:21:49,279 - INFO  - [True]
+2026-05-15 02:21:49,279 - INFO  - 
+2026-05-15 02:21:49,280 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.80, satisfy=0.50) clauses=3
+2026-05-15 02:21:49,280 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:22:00,311 - INFO  - syntax Correct
+2026-05-15 02:22:11,546 - INFO  - Loop Invariant:
+2026-05-15 02:22:11,547 - INFO  - [True, True, False, True, False]
+2026-05-15 02:22:11,547 - INFO  - 
+2026-05-15 02:22:11,547 - INFO  - Assertion:
+2026-05-15 02:22:11,547 - INFO  - [True, False]
+2026-05-15 02:22:11,547 - INFO  - 
+2026-05-15 02:22:11,547 - INFO  - Assigns:
+2026-05-15 02:22:11,547 - INFO  - [True, True, True, True]
+2026-05-15 02:22:11,547 - INFO  - 
+2026-05-15 02:22:11,547 - INFO  - Post Condition:
+2026-05-15 02:22:11,547 - INFO  - [True]
+2026-05-15 02:22:11,547 - INFO  - 
+2026-05-15 02:22:11,548 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.80, satisfy=0.50) clauses=3
+2026-05-15 02:22:11,548 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:22:37,550 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer product_mod_10(integer start, integer end) =
+    (start > end) ? 1 : (start % 10) * product_mod_10(start + 1, end) % 10;
+*/
+
+/*@
+  requires \at(b,Pre) - \at(a,Pre) < 5 && \at(a,Pre) != \at(b,Pre);
+  assigns \nothing;
+  ensures \result == product_mod_10(\at(a,Pre) + 1, \at(b,Pre)) % 10;
+*/
+int foo174(int a, int b) {
+    int variable = 1;
+    if (a == b) {
+        return 1;
+    } else if ((b - a) >= 5) {
+        return 0;
+    } else {
+        /*@
+          loop invariant b == \at(b,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant a + 1 <= i <= b + 1;
+          loop invariant variable == product_mod_10(a + 1, i - 1) % 10;
+          loop invariant \forall integer k; a + 1 <= k < i ==> variable == product_mod_10(a + 1, k) % 10;
+          loop assigns i, variable;
+          loop variant b - i;
+        */
+        for (int i = a + 1; i < b + 1; i++) {
+            /*@
+              assert variable == product_mod_10(a + 1, i - 1) % 10;
+            */
+            variable = (variable * (i % 10)) % 10;
+            /*@
+              assert variable == product_mod_10(a + 1, i) % 10;
+            */
+        }
+        return variable % 10;
+    }
+}
+
+2026-05-15 02:22:37,551 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8, 0.5), clauses=3)
+2026-05-15 02:22:48,540 - INFO  - syntax Correct
+2026-05-15 02:22:59,657 - INFO  - Loop Invariant:
+2026-05-15 02:22:59,658 - INFO  - [True, True, False, True, False]
+2026-05-15 02:22:59,658 - INFO  - 
+2026-05-15 02:22:59,658 - INFO  - Assertion:
+2026-05-15 02:22:59,658 - INFO  - [True, False]
+2026-05-15 02:22:59,658 - INFO  - 
+2026-05-15 02:22:59,658 - INFO  - Assigns:
+2026-05-15 02:22:59,658 - INFO  - [True, True, True, True]
+2026-05-15 02:22:59,658 - INFO  - 
+2026-05-15 02:22:59,658 - INFO  - Post Condition:
+2026-05-15 02:22:59,658 - INFO  - [True]
+2026-05-15 02:22:59,658 - INFO  - 
+2026-05-15 02:23:10,416 - INFO  - syntax Correct
+2026-05-15 02:23:21,280 - INFO  - Loop Invariant:
+2026-05-15 02:23:21,281 - INFO  - [True, True, True]
+2026-05-15 02:23:21,281 - INFO  - 
+2026-05-15 02:23:21,281 - INFO  - Assertion:
+2026-05-15 02:23:21,281 - INFO  - [True, False]
+2026-05-15 02:23:21,281 - INFO  - 
+2026-05-15 02:23:21,281 - INFO  - Assigns:
+2026-05-15 02:23:21,281 - INFO  - [True, True, True, True]
+2026-05-15 02:23:21,281 - INFO  - 
+2026-05-15 02:23:21,282 - INFO  - Post Condition:
+2026-05-15 02:23:21,282 - INFO  - [False]
+2026-05-15 02:23:21,282 - INFO  - 
+2026-05-15 02:23:32,064 - INFO  - syntax Correct
+2026-05-15 02:23:43,030 - INFO  - Loop Invariant:
+2026-05-15 02:23:43,031 - INFO  - [True, True, True]
+2026-05-15 02:23:43,031 - INFO  - 
+2026-05-15 02:23:43,033 - INFO  - Assertion:
+2026-05-15 02:23:43,034 - INFO  - [True, False]
+2026-05-15 02:23:43,034 - INFO  - 
+2026-05-15 02:23:43,034 - INFO  - Assigns:
+2026-05-15 02:23:43,034 - INFO  - [True, True, True, True]
+2026-05-15 02:23:43,034 - INFO  - 
+2026-05-15 02:23:43,034 - INFO  - Post Condition:
+2026-05-15 02:23:43,034 - INFO  - []
+2026-05-15 02:23:43,034 - INFO  - 
+2026-05-15 02:23:54,005 - INFO  - syntax Correct
+2026-05-15 02:24:05,001 - INFO  - Loop Invariant:
+2026-05-15 02:24:05,001 - INFO  - [True, True, True]
+2026-05-15 02:24:05,001 - INFO  - 
+2026-05-15 02:24:05,002 - INFO  - Assertion:
+2026-05-15 02:24:05,002 - INFO  - [True, False]
+2026-05-15 02:24:05,002 - INFO  - 
+2026-05-15 02:24:05,002 - INFO  - Assigns:
+2026-05-15 02:24:05,003 - INFO  - [True, True, True, True]
+2026-05-15 02:24:05,003 - INFO  - 
+2026-05-15 02:24:05,003 - INFO  - Post Condition:
+2026-05-15 02:24:05,003 - INFO  - []
+2026-05-15 02:24:05,003 - INFO  - 
+2026-05-15 02:24:05,003 - INFO  - first_pass:
+2026-05-15 02:24:05,003 - INFO  - syntax=1, valid=1,satisfy=None
+2026-05-15 02:24:05,003 - INFO  - ==================================================
+2026-05-15 02:24:05,003 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 02:24:05,003 - INFO  - Total execution time: 1571.66 seconds (26.19 minutes)
+2026-05-15 02:24:05,003 - INFO  - ==================================================
+2026-05-15 02:24:05,003 - INFO  - ==================================================
+2026-05-15 02:24:05,003 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 02:24:05,004 - INFO  - Total API calls: 21
+2026-05-15 02:24:05,004 - INFO  - Total prompt tokens (input): 141,781
+2026-05-15 02:24:05,004 - INFO  - Total completion tokens (output): 17,195
+2026-05-15 02:24:05,004 - INFO  - Total tokens: 158,976
+2026-05-15 02:24:05,004 - INFO  - Average prompt tokens per call: 6751.5
+2026-05-15 02:24:05,004 - INFO  - Average completion tokens per call: 818.8
+2026-05-15 02:24:05,004 - INFO  - Average total tokens per call: 7570.3
+2026-05-15 02:24:05,004 - INFO  - ==================================================

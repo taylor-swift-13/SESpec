@@ -1,0 +1,13 @@
+int foo35(int input);
+
+
+/*@
+  assigns \nothing;
+  ensures \result == ((((char)(input * 2 + 1) | 2) & 3) == 3);
+  ensures \result == 0 || \result == 1;
+*/
+int foo35(int input) {
+    char c = (char)(input * 2 + 1);
+    int i = (c | 2);
+    return (i & 3) == 3;
+}

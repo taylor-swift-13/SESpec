@@ -1,0 +1,195 @@
+#include <limits.h>
+
+
+/*@
+  predicate ints_unchanged;(int* ints, integer n) =
+    \forall integer k; 0 <= k < n ==> \at(ints[k], L1) == \at(ints[k], L2);
+*/
+
+/*@requires array >= 1;
+  assigns \nothing;
+  ensures \result >= 0;
+  ensures \result < array;
+  ensures array == 1 ==> \result == 0;
+  ensures array > 1 ==> \result <= array - 1;*/
+int stub_A(int * ints, int ints_len, int array);
+
+/*@loop invariant offset < array ==> max <= array;
+		loop invariant offset <= max;
+		loop invariant offset <= max || max <= array;
+		loop invariant offset <= max + find;
+		loop invariant offset <= max + 1;
+		loop invariant offset <= array || max - offset <= 1;
+		loop invariant offset <= array || max - 1 <= offset + find;
+		loop invariant offset <= array || find <= offset + max;
+		loop invariant offset <= array || 1 <= max - offset;
+		loop invariant offset <= array ==> 0 <= max - offset;
+		loop invariant offset + find <= max + array || max - offset <= 1;
+		loop invariant offset + find <= max + array || max - 1 <= offset + find;
+		loop invariant offset + find <= max + array || find <= offset + max;
+		loop invariant offset + find <= max + array || 1 <= max - offset;
+		loop invariant max <= array || max - offset <= 1;
+		loop invariant max <= array || find <= offset + max;
+		loop invariant max <= array || find < offset + max;
+		loop invariant max <= array || 1 <= max - offset;
+		loop invariant max <= array ==> find <= max;
+		loop invariant max - offset == 1 || max - offset >= 0;
+		loop invariant max - offset <= array || 1 <= max - offset;
+		loop invariant max - offset <= 1 || max - offset <= array;
+		loop invariant max - offset <= 1 || 1 <= max - offset;
+		loop invariant max - 1 <= offset + find || max <= array;
+		loop invariant find <= offset;
+		loop invariant find <= offset + max;
+		loop invariant find <= offset + max || max <= array;
+		loop invariant find <= offset + max || max - 1 <= offset + find;
+		loop invariant find <= offset + max || find + offset <= max + array;
+		loop invariant find <= max;
+		loop invariant find <= max - 1;
+		loop invariant find <= array || max - offset <= 1;
+		loop invariant find <= array || 1 <= max - offset;
+		loop invariant find < offset + max;
+		loop invariant find + offset <= max + array || max - offset <= 1;
+		loop invariant find + offset <= max + array || max - 1 <= offset + find;
+		loop invariant find + offset <= max + array || 1 <= max - offset;
+		loop invariant find + offset <= max + array || 0 <= max - find;
+		loop invariant find + 1 <= max;
+		loop invariant find + 1 <= max || find == 0;
+		loop invariant 1 <= max;
+		loop invariant 1 <= max - find;
+		loop invariant 1 <= max - find || offset <= array;
+		loop invariant 1 <= max - find || offset + find <= max + array;
+		loop invariant 1 <= max - find || max <= array;
+		loop invariant 1 <= max - find || max - 1 <= offset + find;
+		loop invariant 1 <= max - find || find <= offset + max;
+		loop invariant 1 <= max - find || find + offset <= max + array;
+		loop invariant 1 <= max - find || 0 <= max - offset;
+		loop invariant 0 <= offset;
+		loop invariant 0 <= max;
+		loop invariant 0 <= max - offset;
+		loop invariant 0 <= max - offset || offset <= array;
+		loop invariant 0 <= max - offset || offset + find <= max + array;
+		loop invariant 0 <= max - offset || max <= array;
+		loop invariant 0 <= max - offset || max - 1 <= offset + find;
+		loop invariant 0 <= max - offset || find <= offset + max;
+		loop invariant 0 <= max - offset || find + offset <= max + array;
+		loop invariant 0 <= max - find;
+		loop invariant 0 <= max - find || offset <= array;
+		loop invariant 0 <= max - find || offset + find <= max + array;
+		loop invariant 0 <= max - find || max <= array;
+		loop invariant 0 <= max - find || max - offset <= array;
+		loop invariant 0 <= max - find || max - offset <= 1;
+		loop invariant 0 <= max - find || find <= array;
+		loop invariant 0 <= max - find || 1 <= max - offset;
+		loop invariant 0 <= find;
+		loop invariant 0 < max - find;
+		loop invariant -1 <= max - offset;
+		loop invariant -1 <= max - offset || offset <= array;
+		loop invariant -1 <= max - offset || offset + find <= max + array;
+		loop invariant -1 <= max - offset || max <= array;
+		loop invariant -1 <= max - offset || max - offset <= array;
+		loop invariant -1 <= max - offset || max - offset <= 1;
+		loop invariant -1 <= max - offset || find <= array;
+		loop invariant -1 <= max - offset || find + offset <= max + array;
+		loop invariant -1 <= max - offset || 1 <= max - offset;
+		loop invariant -1 <= max - offset || 0 <= max - find;
+		loop invariant -1 < max - offset;
+		loop assigns offset;
+		loop assigns max;
+		loop assigns find;*/
+int stub_B(int * ints, int ints_len, int array);
+
+/*@loop invariant offset < array ==> max <= array;
+		loop invariant offset <= max;
+		loop invariant offset <= max || max <= array;
+		loop invariant offset <= max + find;
+		loop invariant offset <= max + 1;
+		loop invariant offset <= array || max - offset <= 1;
+		loop invariant offset <= array || max - 1 <= offset + find;
+		loop invariant offset <= array || find <= offset + max;
+		loop invariant offset <= array || 1 <= max - offset;
+		loop invariant offset <= array ==> 0 <= max - offset;
+		loop invariant offset + find <= max + array || max - offset <= 1;
+		loop invariant offset + find <= max + array || max - 1 <= offset + find;
+		loop invariant offset + find <= max + array || find <= offset + max;
+		loop invariant offset + find <= max + array || 1 <= max - offset;
+		loop invariant max <= array || max - offset <= 1;
+		loop invariant max <= array || find <= offset + max;
+		loop invariant max <= array || find < offset + max;
+		loop invariant max <= array || 1 <= max - offset;
+		loop invariant max <= array ==> find <= max;
+		loop invariant max - offset == 1 || max - offset >= 0;
+		loop invariant max - offset <= array || 1 <= max - offset;
+		loop invariant max - offset <= 1 || max - offset <= array;
+		loop invariant max - offset <= 1 || 1 <= max - offset;
+		loop invariant max - 1 <= offset + find || max <= array;
+		loop invariant find <= offset;
+		loop invariant find <= offset + max;
+		loop invariant find <= offset + max || max <= array;
+		loop invariant find <= offset + max || max - 1 <= offset + find;
+		loop invariant find <= offset + max || find + offset <= max + array;
+		loop invariant find <= max;
+		loop invariant find <= max - 1;
+		loop invariant find <= array || max - offset <= 1;
+		loop invariant find <= array || 1 <= max - offset;
+		loop invariant find < offset + max;
+		loop invariant find + offset <= max + array || max - offset <= 1;
+		loop invariant find + offset <= max + array || max - 1 <= offset + find;
+		loop invariant find + offset <= max + array || 1 <= max - offset;
+		loop invariant find + offset <= max + array || 0 <= max - find;
+		loop invariant find + 1 <= max;
+		loop invariant find + 1 <= max || find == 0;
+		loop invariant 1 <= max;
+		loop invariant 1 <= max - find;
+		loop invariant 1 <= max - find || offset <= array;
+		loop invariant 1 <= max - find || offset + find <= max + array;
+		loop invariant 1 <= max - find || max <= array;
+		loop invariant 1 <= max - find || max - 1 <= offset + find;
+		loop invariant 1 <= max - find || find <= offset + max;
+		loop invariant 1 <= max - find || find + offset <= max + array;
+		loop invariant 1 <= max - find || 0 <= max - offset;
+		loop invariant 0 <= offset;
+		loop invariant 0 <= max;
+		loop invariant 0 <= max - offset;
+		loop invariant 0 <= max - offset || offset <= array;
+		loop invariant 0 <= max - offset || offset + find <= max + array;
+		loop invariant 0 <= max - offset || max <= array;
+		loop invariant 0 <= max - offset || max - 1 <= offset + find;
+		loop invariant 0 <= max - offset || find <= offset + max;
+		loop invariant 0 <= max - offset || find + offset <= max + array;
+		loop invariant 0 <= max - find;
+		loop invariant 0 <= max - find || offset <= array;
+		loop invariant 0 <= max - find || offset + find <= max + array;
+		loop invariant 0 <= max - find || max <= array;
+		loop invariant 0 <= max - find || max - offset <= array;
+		loop invariant 0 <= max - find || max - offset <= 1;
+		loop invariant 0 <= max - find || find <= array;
+		loop invariant 0 <= max - find || 1 <= max - offset;
+		loop invariant 0 <= find;
+		loop invariant 0 < max - find;
+		loop invariant -1 <= max - offset;
+		loop invariant -1 <= max - offset || offset <= array;
+		loop invariant -1 <= max - offset || offset + find <= max + array;
+		loop invariant -1 <= max - offset || max <= array;
+		loop invariant -1 <= max - offset || max - offset <= array;
+		loop invariant -1 <= max - offset || max - offset <= 1;
+		loop invariant -1 <= max - offset || find <= array;
+		loop invariant -1 <= max - offset || find + offset <= max + array;
+		loop invariant -1 <= max - offset || 1 <= max - offset;
+		loop invariant -1 <= max - offset || 0 <= max - find;
+		loop invariant -1 < max - offset;
+		loop assigns offset;
+		loop assigns max;
+		loop assigns find;*/
+int check_A_implies_B(int * ints, int ints_len, int array) {
+    return stub_A(ints, ints_len, array);
+}
+
+/*@requires array >= 1;
+  assigns \nothing;
+  ensures \result >= 0;
+  ensures \result < array;
+  ensures array == 1 ==> \result == 0;
+  ensures array > 1 ==> \result <= array - 1;*/
+int check_B_implies_A(int * ints, int ints_len, int array) {
+    return stub_B(ints, ints_len, array);
+}

@@ -801,6 +801,9 @@ class InvGenerator:
         # `\nothing` mixed with real locations, ...) without paying for
         # an LLM round-trip. Falls through to the LLM if any residual
         # error remains after re-verification.
+        if getattr(self.config, 'trivial_refine', False):
+            self.logger.info('[acsl-fixer] skipped (trivial_refine)')
+            return self.repair_annotations(syntax_error, annotations)
         from .acsl_fixer import ACSLFixer
         fixer = ACSLFixer(logger=self.logger)
         report = fixer.fix(annotations, syntax_error)
@@ -1059,7 +1062,14 @@ class InvGenerator:
         parts = [p for p in (universal, category_block) if p]
         return "\n\n".join(parts)
 
+    def _load_trivial_refine_prompt(self, error_message, c_code):
+        with open("prompt/refine_trivial.txt", "r", encoding="utf-8") as file:
+            prompt_template = file.read()
+        return prompt_template.format(error_str=error_message, c_code=c_code)
+
     def get_error_prompt(self,error_message, c_code):
+        if getattr(self.config, 'trivial_refine', False):
+            return self._load_trivial_refine_prompt(error_message, c_code)
          # Read prompt template from file
         with open("prompt/error.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
@@ -1071,8 +1081,10 @@ class InvGenerator:
             category_hints=category_hints,
         )
         return error_prompt
-    
+
     def get_adjust_prompt(self,error_message, c_code):
+        if getattr(self.config, 'trivial_refine', False):
+            return self._load_trivial_refine_prompt(error_message, c_code)
          # Read prompt template from file
         with open("prompt/loop/adjust.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
@@ -1084,6 +1096,8 @@ class InvGenerator:
         return adjust_prompt
 
     def get_regen_prompt(self,error_message, c_code):
+        if getattr(self.config, 'trivial_refine', False):
+            return self._load_trivial_refine_prompt(error_message, c_code)
          # Read prompt template from file
         with open("prompt/loop/regen.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()
@@ -1095,6 +1109,8 @@ class InvGenerator:
         return regen_prompt
 
     def get_strength_prompt(self,error_message, c_code):
+        if getattr(self.config, 'trivial_refine', False):
+            return self._load_trivial_refine_prompt(error_message, c_code)
          # Read prompt template from file
         with open("prompt/loop/strength.txt", "r", encoding="utf-8") as file:
             prompt_template = file.read()

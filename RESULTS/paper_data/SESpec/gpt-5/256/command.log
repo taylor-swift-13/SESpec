@@ -1,0 +1,1566 @@
+$ /home/yangfp/miniconda3/envs/SpecAutoGen/bin/python main.py --config /home/yangfp/SESpec/src/results/tmp/sespec_default_sespec_256_gpt-5_20260516_135957_3149234_0a1344bf.json
+
+[stdout]
+🚀 Starting specification generation for function: foo119
+📁 Project directory: sespec
+📄 Configuration file: /home/yangfp/SESpec/src/results/tmp/sespec_default_sespec_256_gpt-5_20260516_135957_3149234_0a1344bf.json
+🤖 Using model: gpt-5
+workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b
+
+🚀 Starting generation of function: foo119
+
+OUTER PASS: 1/1
+TRY TIME: 0
+
+FUNCTION INITIALIZATION
+==================================================
+
+[auto only_loop] False — foo119 returns 'int'
+Initial pending functions: ['foo119']
+
+GENERATE ANNOTATION FOR foo119
+==================================================
+
+Function foo119 has been initialized
+Starting to generate annotation code for foo119
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/3_output/foo119.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/1_output/foo119.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/2_output/foo119.c created and written successfully.
+
+GENERATE LOOP INVARIANT FOR foo119
+==================================================
+
+Loop 0 : Outer
+Sorted indices: [0]
+LoopEntry_0:
+args_len@pre > 0 && args_len@pre < 100 && (top == args_len@pre - 1) * (ret == 0) * (Array == Array@pre) * (args_len == args_len@pre) * (args == args@pre) * store_int_array(args@pre, args_len@pre, args_l)
+[1;31mfatal error: [0mCannot derive the precondition of Memory Read.
+ in /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/2_output/foo119.c:24:24
+Successfully generated /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/loop/foo119.json
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/3_output/foo119.c created and written successfully.
+args_len@pre > 0 && args_len@pre < 100 && (top == args_len@pre - 1) * (ret == 0) * (Array == Array@pre) * (args_len == args_len@pre) * (args == args@pre) * store_int_array(args@pre, args_len@pre, args_l)
+Variable Maps:[{'top': 'args_len@pre - 1', 'ret': '0', 'Array': 'Array@pre', 'args_len': 'args_len@pre', 'args': 'args@pre'}]
+Path conditions: ['args_len@pre > 0 && args_len@pre < 100']
+Pre condition: args_len@pre > 0 && args_len@pre < 100 && (top == args_len@pre - 1) * (ret == 0) * (Array == Array@pre) * (args_len == args_len@pre) * (args == args@pre) * store_int_array(args@pre, args_len@pre, args_l)
+Loop Condition: ret <= top
+Array Names: ['args']
+Updated Loop Conditions: ['0 <= args_len@pre - 1']
+Global Unchanged Variables: ['Array', 'args_len', 'args']
+Non Inductive Variables: ['ret', 'top']
+Unchanged Arrays (Read-only): []
+[inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+examples category: array
+examples:
+
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+[inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+[inv-gen] refine 2/10 score=(syntax=True, valid=0.36, satisfy=0.00) clauses=11
+OpenAI API 调用失败: Request timed out.
+[inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+OpenAI API 调用失败: Request timed out.
+[inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+[inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+[inv-gen] refine 5/10 score=(syntax=True, valid=0.36, satisfy=0.00) clauses=11
+OpenAI API 调用失败: Request timed out.
+[inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+[inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+[inv-gen] refine 7/10 score=(syntax=True, valid=0.36, satisfy=0.00) clauses=11
+[inv-gen] refine 8/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=5
+[inv-gen] refine 9/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+[inv-gen] refine 10/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+[inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8333333333333334, 0.0), clauses=6)
+[inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+ACSL format loop invariant
+/*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant top <= \at(args_len,Pre) - 1;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+QCP format loop invariant
+/*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (args_len == args_len@pre) &&
+(args == args@pre) &&
+(Array == Array@pre) &&
+(top <= args_len@pre - 1
+          loop assigns ret, top)
+    */
+    
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+LoopEntry_0:
+args_len@pre > 0 && args_len@pre < 100 && (top == args_len@pre - 1) * (ret == 0) * (Array == Array@pre) * (args_len == args_len@pre) * (args == args@pre) * store_int_array(args@pre, args_len@pre, args_l)
+[1;31mfatal error: [0mbison: syntax error, unexpected PT_IDENT, expecting PT_RPAREN or PT_COLON in /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/2_output/foo119.c:28:14
+Successfully generated /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/loop/foo119.json
+CORRECT INVARIANT
+
+GENERATE FUNCTION SPECIFICATION FOR foo119
+==================================================
+
+Starting to generate ACSL specification for foo119
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:18: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:19: Warning: 
+  logic function count_eq is already declared with the same profile. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:18: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:24: 
+  syntax error:
+  Location: line 24, between columns 11 and 14, before or at token: ...
+  22    */
+  23    
+  24    int foo119(...) { ... }
+        ^^^^^^^^^^^^^^^^^^^^^^^
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:18: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:18: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:18: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:24: 
+  syntax error:
+  Location: line 24, between columns 11 and 14, before or at token: ...
+  22    */
+  23    
+  24    int foo119(...) { ... }
+        ^^^^^^^^^^^^^^^^^^^^^^^
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:18: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:24: 
+  syntax error:
+  Location: line 24, between columns 11 and 14, before or at token: ...
+  22    */
+  23    
+  24    int foo119(...) { ... }
+        ^^^^^^^^^^^^^^^^^^^^^^^
+[kernel] Frama-C aborted: invalid user input.
+
+[spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+[spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:18: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+
+SPECIFICATION FOR foo119
+==================================================
+
+
+QCP Specification for function foo119:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+
+VERIFICATION FOR foo119
+==================================================
+
+syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c:18: Warning: 
+  unexpected token '...'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[False, False]
+
+[spec-gen] refine 1/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=7
+postconditon before refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  assigns \nothing;
+  ensures 0 <= \result <= args_len [POSTCONDITION FAILED];
+  ensures 0 <= \result < args_len ==> args[\result] == Array [POSTCONDITION FAILED];
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant top <= \at(args_len,Pre) - 1;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+postconditon after refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+  ensures \result < args_len && args[\result] == Array ==> 
+           (\exists integer i; 0 <= i < args_len && args[i] == Array && i == \result);
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret && top <= \at(args_len,Pre) - 1;
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] > Array || args[k] == Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, False, False]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[False, False, True, True]
+
+[spec-gen] refine 2/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=9
+postconditon before refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  assigns \nothing;
+  ensures 0 <= \result <= args_len [POSTCONDITION FAILED];
+  ensures \forall integer k [POSTCONDITION FAILED]; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+  ensures \result < args_len && args[\result] == Array ==> 
+           (\exists integer i; 0 <= i < args_len && args[i] == Array && i == \result);
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret && top <= \at(args_len,Pre) - 1;
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] > Array || args[k] == Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+postconditon after refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant top + 1 <= \at(args_len,Pre);
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True, False, False]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True, False, True]
+
+[spec-gen] refine 3/10 score=(syntax=True, valid=0.79, satisfy=0.00) clauses=9
+postconditon before refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k [POSTCONDITION FAILED]; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant top + 1 <= \at(args_len,Pre);
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+postconditon after refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True, False, False]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True, False, False]
+
+[spec-gen] refine 4/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=9
+postconditon before refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k [POSTCONDITION FAILED]; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array [POSTCONDITION FAILED];
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+postconditon after refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant ret <= top + 1;
+          // prefix: all indices before ret are strictly less than Array
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          // suffix: all indices after top are greater or equal to Array
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          // edge facts to help branch reasoning when inside bounds
+          loop invariant ret <= top ==> ret < \at(args_len,Pre);
+          loop invariant ret <= top ==> top >= 0;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True, False, False, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True, False, False]
+
+[spec-gen] refine 5/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=9
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True, False, False]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True, False, True]
+
+[spec-gen] refine 6/10 score=(syntax=True, valid=0.79, satisfy=0.00) clauses=9
+postconditon before refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k [POSTCONDITION FAILED]; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant top + 1 <= \at(args_len,Pre);
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+postconditon after refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant ret <= top + 1;
+          // all elements before ret are strictly less than Array
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          // all elements after top are greater or equal to Array
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+                // args[i] < Array and array is nondecreasing ⇒ all indices <= i are < Array
+				ret = i + 1;
+			} else {
+                // args[i] > Array or >= Array ⇒ all indices >= i are >= Array
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True, False, False]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True, False, False]
+
+[spec-gen] refine 7/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=9
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True, False, False]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True, False, True]
+
+[spec-gen] refine 8/10 score=(syntax=True, valid=0.79, satisfy=0.00) clauses=9
+postconditon before refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k [POSTCONDITION FAILED]; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant top + 1 <= \at(args_len,Pre);
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+postconditon after refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant ret <= top + 1;
+          // elements strictly before ret are proven < Array (excluded low side)
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          // elements strictly after top are proven >= Array (excluded high side)
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True, False, False]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True, False, False]
+
+[spec-gen] refine 9/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=9
+[spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True, False, False]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True, False, True]
+
+[spec-gen] refine 10/10 score=(syntax=True, valid=0.79, satisfy=0.00) clauses=9
+postconditon before refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k [POSTCONDITION FAILED]; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant top + 1 <= \at(args_len,Pre);
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+postconditon after refine: 
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+  ensures \forall integer k; 0 <= k < \result ==> args[k] < Array;
+  ensures \result < args_len ==> args[\result] >= Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret <= top + 1;
+          loop invariant -1 <= top < \at(args_len,Pre);
+          loop invariant \forall integer k; 0 <= k < ret ==> args[k] < Array;
+          loop invariant \forall integer k; top < k < \at(args_len,Pre) ==> args[k] >= Array;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+
+		return ret;
+}
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+[spec-gen] refine exhausted → final Houdini on best (score=(True, 0.7857142857142857, 0.0), clauses=9)
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True, False, False]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True, False, True]
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True, False]
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True]
+
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+File /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c created and written successfully.
+syntax Correct
+Loop Invariant:
+[True, True, True, True, True, True]
+
+Assertion:
+[]
+
+Assigns:
+[True, True, True]
+
+Post Condition:
+[True]
+
+
+🎯 FINAL SPECIFICATION FOR foo119
+==================================================
+Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo119/20260516_135957_3295123_8196951b/output/foo119.c
+Output file content:
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires nondecreasing(args, 0, args_len);
+  assigns \nothing;
+  ensures 0 <= \result <= args_len;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant top + 1 <= \at(args_len,Pre);
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+==================================================
+first_pass:
+syntax=1, valid=1,satisfy=1
+==================================================
+⏰ OVERALL EXECUTION TIME STATISTICS
+Total execution time: 1355.54 seconds (22.59 minutes)
+==================================================
+==================================================
+📊 TOKEN USAGE STATISTICS
+Total API calls: 22
+Total prompt tokens (input): 206,612
+Total completion tokens (output): 14,422
+Total tokens: 221,034
+Average prompt tokens per call: 9391.5
+Average completion tokens per call: 655.5
+Average total tokens per call: 10047.0
+==================================================
+✅ Generation completed!
+
+[stderr]
+

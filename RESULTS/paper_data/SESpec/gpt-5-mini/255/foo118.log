@@ -1,0 +1,1115 @@
+2026-05-14 22:34:08,740 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo118/20260514_223408_313590_16cc35b1
+2026-05-14 22:34:08,740 - INFO  - 
+🚀 Starting generation of function: foo118
+2026-05-14 22:34:08,740 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-14 22:34:08,740 - INFO  - ==================================================
+
+2026-05-14 22:34:08,966 - INFO  - [auto only_loop] False — foo118 returns 'int'
+2026-05-14 22:34:08,966 - INFO  - Initial pending functions: ['foo118']
+2026-05-14 22:34:08,967 - INFO  - 
+GENERATE ANNOTATION FOR foo118
+2026-05-14 22:34:08,967 - INFO  - ==================================================
+
+2026-05-14 22:34:08,967 - INFO  - Function foo118 has been initialized
+2026-05-14 22:34:08,967 - INFO  - Starting to generate annotation code for foo118
+2026-05-14 22:34:09,002 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo118
+2026-05-14 22:34:09,002 - INFO  - ==================================================
+
+2026-05-14 22:34:09,047 - INFO  - Variable Maps:[{'top': 'args_len@pre - 1', 'result': '0', 'array': 'array@pre', 'args_len': 'args_len@pre', 'args': 'args@pre'}]
+2026-05-14 22:34:09,047 - INFO  - Path conditions: ['args_len@pre > 0 && args_len@pre < 100']
+2026-05-14 22:34:09,047 - INFO  - Pre condition: args_len@pre > 0 && args_len@pre < 100 && (top == args_len@pre - 1) * (result == 0) * (array == array@pre) * (args_len == args_len@pre) * (args == args@pre) * store_int_array(args@pre, args_len@pre, args_l)
+2026-05-14 22:34:09,047 - INFO  - Loop Condition: result <= top
+2026-05-14 22:34:09,048 - INFO  - Array Names: ['args']
+2026-05-14 22:34:09,048 - INFO  - Updated Loop Conditions: ['0 <= args_len@pre - 1']
+2026-05-14 22:34:09,049 - INFO  - Global Unchanged Variables: ['array', 'args_len', 'args']
+2026-05-14 22:34:09,049 - INFO  - Non Inductive Variables: ['result', 'top']
+2026-05-14 22:34:09,049 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-14 22:34:09,051 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-14 22:34:09,052 - INFO  - examples category: array
+2026-05-14 22:34:09,052 - INFO  - examples:
+2026-05-14 22:34:09,052 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-14 22:34:20,057 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-14 22:34:29,974 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-14 22:35:03,511 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=8
+2026-05-14 22:35:14,572 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-14 22:35:45,905 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-14 22:35:45,905 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 22:36:08,141 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=8
+2026-05-14 22:36:41,355 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-14 22:36:41,356 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 22:37:03,567 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=8
+2026-05-14 22:37:14,437 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-14 22:37:14,437 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-14 22:37:35,978 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=8
+2026-05-14 22:37:49,549 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.875, 0.0), clauses=8)
+2026-05-14 22:38:36,638 - INFO  - ACSL format loop invariant
+2026-05-14 22:38:36,638 - INFO  - /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+2026-05-14 22:38:36,639 - INFO  - QCP format loop invariant
+2026-05-14 22:38:36,639 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (0 <= result && result <= args_len) &&
+(-1 <= top && top < args_len) &&
+((!(0 <= args_len@pre - 1)) => ((top == args_len@pre - 1)&&(result == 0)&&(array == array@pre)&&(args_len == args_len@pre)&&(args == args@pre))) &&
+(array == array@pre) &&
+(args_len == args_len@pre) &&
+(args == args@pre
+          loop assigns result, top)
+    */
+    
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+2026-05-14 22:38:38,125 - INFO  - CORRECT INVARIANT
+2026-05-14 22:38:38,125 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo118
+2026-05-14 22:38:38,125 - INFO  - ==================================================
+
+2026-05-14 22:38:38,132 - INFO  - Starting to generate ACSL specification for foo118
+2026-05-14 22:39:00,187 - INFO  - syntax Correct
+2026-05-14 22:39:10,942 - INFO  - Loop Invariant:
+2026-05-14 22:39:10,942 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:39:10,943 - INFO  - 
+2026-05-14 22:39:10,943 - INFO  - Assertion:
+2026-05-14 22:39:10,943 - INFO  - []
+2026-05-14 22:39:10,943 - INFO  - 
+2026-05-14 22:39:10,943 - INFO  - Assigns:
+2026-05-14 22:39:10,943 - INFO  - [True, True, True]
+2026-05-14 22:39:10,943 - INFO  - 
+2026-05-14 22:39:10,943 - INFO  - Post Condition:
+2026-05-14 22:39:10,943 - INFO  - [False, True, True]
+2026-05-14 22:39:10,943 - INFO  - 
+2026-05-14 22:39:10,944 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=6
+2026-05-14 22:39:10,944 - INFO  - postconditon before refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+          || (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) [POSTCONDITION FAILED];
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:39:23,574 - INFO  - postconditon after refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+          || (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre)));
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:39:34,261 - INFO  - syntax Correct
+2026-05-14 22:39:44,999 - INFO  - Loop Invariant:
+2026-05-14 22:39:44,999 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:39:44,999 - INFO  - 
+2026-05-14 22:39:44,999 - INFO  - Assertion:
+2026-05-14 22:39:44,999 - INFO  - []
+2026-05-14 22:39:44,999 - INFO  - 
+2026-05-14 22:39:44,999 - INFO  - Assigns:
+2026-05-14 22:39:45,000 - INFO  - [True, True, True]
+2026-05-14 22:39:45,000 - INFO  - 
+2026-05-14 22:39:45,000 - INFO  - Post Condition:
+2026-05-14 22:39:45,000 - INFO  - [False, True, True]
+2026-05-14 22:39:45,000 - INFO  - 
+2026-05-14 22:39:45,000 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=6
+2026-05-14 22:39:45,001 - INFO  - postconditon before refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+          || (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) [POSTCONDITION FAILED];
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:39:55,197 - INFO  - postconditon after refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures ((\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+           || (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))));
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:40:06,275 - INFO  - syntax Correct
+2026-05-14 22:40:17,420 - INFO  - Loop Invariant:
+2026-05-14 22:40:17,420 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:40:17,420 - INFO  - 
+2026-05-14 22:40:17,420 - INFO  - Assertion:
+2026-05-14 22:40:17,420 - INFO  - []
+2026-05-14 22:40:17,420 - INFO  - 
+2026-05-14 22:40:17,420 - INFO  - Assigns:
+2026-05-14 22:40:17,421 - INFO  - [True, True, True]
+2026-05-14 22:40:17,421 - INFO  - 
+2026-05-14 22:40:17,421 - INFO  - Post Condition:
+2026-05-14 22:40:17,421 - INFO  - [False, True, True]
+2026-05-14 22:40:17,421 - INFO  - 
+2026-05-14 22:40:17,421 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=6
+2026-05-14 22:40:17,422 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-14 22:40:28,323 - INFO  - syntax Correct
+2026-05-14 22:40:39,143 - INFO  - Loop Invariant:
+2026-05-14 22:40:39,143 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:40:39,143 - INFO  - 
+2026-05-14 22:40:39,143 - INFO  - Assertion:
+2026-05-14 22:40:39,143 - INFO  - []
+2026-05-14 22:40:39,143 - INFO  - 
+2026-05-14 22:40:39,143 - INFO  - Assigns:
+2026-05-14 22:40:39,143 - INFO  - [True, True, True]
+2026-05-14 22:40:39,143 - INFO  - 
+2026-05-14 22:40:39,143 - INFO  - Post Condition:
+2026-05-14 22:40:39,143 - INFO  - [False, True, True]
+2026-05-14 22:40:39,143 - INFO  - 
+2026-05-14 22:40:39,144 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=6
+2026-05-14 22:40:39,144 - INFO  - postconditon before refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+          || (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) [POSTCONDITION FAILED];
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:40:51,918 - INFO  - postconditon after refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+          || (\result >= 0 && \result <= \at(args_len,Pre) &&
+              (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre)) &&
+              (\forall integer k; \result <= k && k < \at(args_len,Pre) ==> args[k] > \at(array,Pre))
+             );
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && 
+           (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+          ) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:41:02,603 - INFO  - syntax Correct
+2026-05-14 22:41:13,721 - INFO  - Loop Invariant:
+2026-05-14 22:41:13,722 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:41:13,722 - INFO  - 
+2026-05-14 22:41:13,722 - INFO  - Assertion:
+2026-05-14 22:41:13,722 - INFO  - []
+2026-05-14 22:41:13,722 - INFO  - 
+2026-05-14 22:41:13,722 - INFO  - Assigns:
+2026-05-14 22:41:13,722 - INFO  - [True, True, True]
+2026-05-14 22:41:13,722 - INFO  - 
+2026-05-14 22:41:13,722 - INFO  - Post Condition:
+2026-05-14 22:41:13,723 - INFO  - [False, True, True]
+2026-05-14 22:41:13,723 - INFO  - 
+2026-05-14 22:41:13,723 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=6
+2026-05-14 22:41:13,723 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-14 22:41:24,688 - INFO  - syntax Correct
+2026-05-14 22:41:35,608 - INFO  - Loop Invariant:
+2026-05-14 22:41:35,608 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:41:35,608 - INFO  - 
+2026-05-14 22:41:35,608 - INFO  - Assertion:
+2026-05-14 22:41:35,608 - INFO  - []
+2026-05-14 22:41:35,608 - INFO  - 
+2026-05-14 22:41:35,609 - INFO  - Assigns:
+2026-05-14 22:41:35,609 - INFO  - [True, True, True]
+2026-05-14 22:41:35,609 - INFO  - 
+2026-05-14 22:41:35,609 - INFO  - Post Condition:
+2026-05-14 22:41:35,609 - INFO  - [False, True, True]
+2026-05-14 22:41:35,609 - INFO  - 
+2026-05-14 22:41:35,609 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=6
+2026-05-14 22:41:35,610 - INFO  - postconditon before refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+          || (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) [POSTCONDITION FAILED];
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:41:46,760 - INFO  - postconditon after refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+          || (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre)));
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:41:57,850 - INFO  - syntax Correct
+2026-05-14 22:42:08,955 - INFO  - Loop Invariant:
+2026-05-14 22:42:08,956 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:42:08,956 - INFO  - 
+2026-05-14 22:42:08,956 - INFO  - Assertion:
+2026-05-14 22:42:08,956 - INFO  - []
+2026-05-14 22:42:08,956 - INFO  - 
+2026-05-14 22:42:08,956 - INFO  - Assigns:
+2026-05-14 22:42:08,956 - INFO  - [True, True, True]
+2026-05-14 22:42:08,956 - INFO  - 
+2026-05-14 22:42:08,956 - INFO  - Post Condition:
+2026-05-14 22:42:08,956 - INFO  - [False, True, True]
+2026-05-14 22:42:08,957 - INFO  - 
+2026-05-14 22:42:08,957 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=6
+2026-05-14 22:42:08,957 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-14 22:42:20,272 - INFO  - syntax Correct
+2026-05-14 22:42:31,504 - INFO  - Loop Invariant:
+2026-05-14 22:42:31,505 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:42:31,505 - INFO  - 
+2026-05-14 22:42:31,505 - INFO  - Assertion:
+2026-05-14 22:42:31,505 - INFO  - []
+2026-05-14 22:42:31,505 - INFO  - 
+2026-05-14 22:42:31,505 - INFO  - Assigns:
+2026-05-14 22:42:31,505 - INFO  - [True, True, True]
+2026-05-14 22:42:31,505 - INFO  - 
+2026-05-14 22:42:31,506 - INFO  - Post Condition:
+2026-05-14 22:42:31,506 - INFO  - [False, True, True]
+2026-05-14 22:42:31,506 - INFO  - 
+2026-05-14 22:42:31,506 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=6
+2026-05-14 22:42:31,506 - INFO  - postconditon before refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+          || (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) [POSTCONDITION FAILED];
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:42:43,147 - INFO  - postconditon after refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+          || (
+               0 <= \result && \result <= \at(args_len,Pre)
+               && (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+               && (\forall integer k; \result <= k && k < \at(args_len,Pre) ==> args[k] > \at(array,Pre))
+             );
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:42:54,031 - INFO  - syntax Correct
+2026-05-14 22:43:05,008 - INFO  - Loop Invariant:
+2026-05-14 22:43:05,009 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:43:05,009 - INFO  - 
+2026-05-14 22:43:05,009 - INFO  - Assertion:
+2026-05-14 22:43:05,009 - INFO  - []
+2026-05-14 22:43:05,009 - INFO  - 
+2026-05-14 22:43:05,009 - INFO  - Assigns:
+2026-05-14 22:43:05,009 - INFO  - [True, True, True]
+2026-05-14 22:43:05,010 - INFO  - 
+2026-05-14 22:43:05,011 - INFO  - Post Condition:
+2026-05-14 22:43:05,011 - INFO  - [False, True, True]
+2026-05-14 22:43:05,011 - INFO  - 
+2026-05-14 22:43:05,012 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=6
+2026-05-14 22:43:05,013 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-14 22:43:16,119 - INFO  - syntax Correct
+2026-05-14 22:43:27,273 - INFO  - Loop Invariant:
+2026-05-14 22:43:27,273 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:43:27,273 - INFO  - 
+2026-05-14 22:43:27,274 - INFO  - Assertion:
+2026-05-14 22:43:27,274 - INFO  - []
+2026-05-14 22:43:27,274 - INFO  - 
+2026-05-14 22:43:27,274 - INFO  - Assigns:
+2026-05-14 22:43:27,274 - INFO  - [True, True, True]
+2026-05-14 22:43:27,274 - INFO  - 
+2026-05-14 22:43:27,274 - INFO  - Post Condition:
+2026-05-14 22:43:27,274 - INFO  - [False, True, True]
+2026-05-14 22:43:27,274 - INFO  - 
+2026-05-14 22:43:27,275 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=6
+2026-05-14 22:43:27,275 - INFO  - postconditon before refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+          || (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) [POSTCONDITION FAILED];
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:43:37,755 - INFO  - postconditon after refine: 
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures
+    (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre))
+    ||
+    (\result >= 0 && \result <= \at(args_len,Pre) &&
+       (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre)) &&
+       (\forall integer k; \result <= k && k < \at(args_len,Pre) ==> args[k] > \at(array,Pre))
+    );
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:43:37,756 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9166666666666666, 0.0), clauses=6)
+2026-05-14 22:43:48,609 - INFO  - syntax Correct
+2026-05-14 22:43:59,796 - INFO  - Loop Invariant:
+2026-05-14 22:43:59,797 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:43:59,797 - INFO  - 
+2026-05-14 22:43:59,797 - INFO  - Assertion:
+2026-05-14 22:43:59,797 - INFO  - []
+2026-05-14 22:43:59,797 - INFO  - 
+2026-05-14 22:43:59,797 - INFO  - Assigns:
+2026-05-14 22:43:59,798 - INFO  - [True, True, True]
+2026-05-14 22:43:59,798 - INFO  - 
+2026-05-14 22:43:59,798 - INFO  - Post Condition:
+2026-05-14 22:43:59,798 - INFO  - [False, True, True]
+2026-05-14 22:43:59,798 - INFO  - 
+2026-05-14 22:44:01,064 - INFO  - syntax Correct
+2026-05-14 22:44:02,232 - INFO  - Loop Invariant:
+2026-05-14 22:44:02,232 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:44:02,232 - INFO  - 
+2026-05-14 22:44:02,232 - INFO  - Assertion:
+2026-05-14 22:44:02,232 - INFO  - []
+2026-05-14 22:44:02,232 - INFO  - 
+2026-05-14 22:44:02,232 - INFO  - Assigns:
+2026-05-14 22:44:02,232 - INFO  - [True, True, True]
+2026-05-14 22:44:02,232 - INFO  - 
+2026-05-14 22:44:02,232 - INFO  - Post Condition:
+2026-05-14 22:44:02,232 - INFO  - [True, True]
+2026-05-14 22:44:02,232 - INFO  - 
+2026-05-14 22:44:02,235 - INFO  - 
+SPECIFICATION FOR foo118
+2026-05-14 22:44:02,235 - INFO  - ==================================================
+
+2026-05-14 22:44:02,235 - INFO  - 
+QCP Specification for function foo118:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+2026-05-14 22:44:02,339 - INFO  - 
+VERIFICATION FOR foo118
+2026-05-14 22:44:02,344 - INFO  - ==================================================
+
+2026-05-14 22:44:02,345 - INFO  - TRY TIME: 0
+2026-05-14 22:44:03,404 - INFO  - syntax Correct
+2026-05-14 22:44:04,732 - INFO  - Loop Invariant:
+2026-05-14 22:44:04,733 - INFO  - [True, True, True, True, True, True]
+2026-05-14 22:44:04,733 - INFO  - 
+2026-05-14 22:44:04,733 - INFO  - Assertion:
+2026-05-14 22:44:04,733 - INFO  - []
+2026-05-14 22:44:04,733 - INFO  - 
+2026-05-14 22:44:04,733 - INFO  - Assigns:
+2026-05-14 22:44:04,733 - INFO  - [True, True, True]
+2026-05-14 22:44:04,733 - INFO  - 
+2026-05-14 22:44:04,733 - INFO  - Post Condition:
+2026-05-14 22:44:04,734 - INFO  - [True, True]
+2026-05-14 22:44:04,734 - INFO  - 
+2026-05-14 22:44:04,734 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo118
+2026-05-14 22:44:04,734 - INFO  - ==================================================
+2026-05-14 22:44:04,734 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo118/20260514_223408_313590_16cc35b1/output/foo118.c
+2026-05-14 22:44:04,734 - INFO  - Output file content:
+
+/*@
+  predicate bs_outside(int* args, integer n, integer lo, integer hi, int target) =
+    (\forall integer k; 0 <= k < lo && k < n ==> args[k] < target)
+    &&
+    (\forall integer k; hi < k && k < n ==> args[k] > target);
+*/
+
+/*@
+  requires \valid_read(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result >= 0 && \result < \at(args_len,Pre) && args[\result] == \at(array,Pre)) ==> args[\result] == \at(array,Pre);
+  ensures (\result >= 0 && \result <= \at(args_len,Pre) && bs_outside(args, \at(args_len,Pre), \result, \result-1, \at(array,Pre))) ==> 
+            (\forall integer k; 0 <= k < \result && k < \at(args_len,Pre) ==> args[k] < \at(array,Pre))
+;
+*/
+int foo118(int * args, int args_len, int array) {
+
+		int result = 0;
+		int top = args_len - 1;
+		
+            
+        /*@
+          loop invariant 0 <= result <= args_len;
+          loop invariant -1 <= top < args_len;
+          loop invariant (!(0 <= \at(args_len,Pre) - 1)) ==> ((top == \at(args_len,Pre) - 1)&&(result == 0)&&(array == \at(array,Pre))&&(args_len == \at(args_len,Pre))&&(args == \at(args,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop assigns result, top;
+        */
+            while (result <= top) {
+			int i = (result + top) / 2;
+			if (args[i] == array) {
+				return i;
+			} else if (args[i] < array) {
+				result = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return result;
+}
+
+2026-05-14 22:44:04,734 - INFO  - ==================================================
+2026-05-14 22:44:04,734 - INFO  - first_pass:
+2026-05-14 22:44:04,735 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-14 22:44:04,735 - INFO  - ==================================================
+2026-05-14 22:44:04,735 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-14 22:44:04,735 - INFO  - Total execution time: 595.99 seconds (9.93 minutes)
+2026-05-14 22:44:04,735 - INFO  - ==================================================
+2026-05-14 22:44:04,735 - INFO  - ==================================================
+2026-05-14 22:44:04,735 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-14 22:44:04,735 - INFO  - Total API calls: 15
+2026-05-14 22:44:04,735 - INFO  - Total prompt tokens (input): 124,232
+2026-05-14 22:44:04,736 - INFO  - Total completion tokens (output): 11,448
+2026-05-14 22:44:04,736 - INFO  - Total tokens: 135,680
+2026-05-14 22:44:04,736 - INFO  - Average prompt tokens per call: 8282.1
+2026-05-14 22:44:04,736 - INFO  - Average completion tokens per call: 763.2
+2026-05-14 22:44:04,736 - INFO  - Average total tokens per call: 9045.3
+2026-05-14 22:44:04,736 - INFO  - ==================================================

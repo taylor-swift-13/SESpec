@@ -1,0 +1,31 @@
+
+/*@
+  logic integer count_div(integer n, integer lo, integer hi) =
+    lo > hi ? 0
+            : count_div(n, lo, hi - 1) + ((hi >= lo && n % hi == 0) ? 1 : 0);
+*/
+
+const char * foo282(int num) {
+
+		int result = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= result <= c - 1;
+          loop invariant num == \at(num,Pre);
+          loop assigns c, result;
+            */
+            for (int c = 1; c <= num; c++) {
+			if (num % c == 0) {
+				result++;
+			}
+		}
+            
+		if (result % 2 == 0) {
+			return "Even";
+		} else {
+			return "Odd";
+		}
+}

@@ -1,0 +1,45 @@
+
+/*@
+  predicate not_in_range(int *a, integer lo, integer hi, integer v) =
+    \forall integer k; lo <= k <= hi ==> a[k] != v;
+*/
+
+/*@
+  predicate nondecreasing(int *a, integer lo, integer hi) =
+    \forall integer i, j; lo <= i <= j < hi ==> a[i] <= a[j];
+*/
+
+/*@
+  logic integer count_eq(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant Array == \at(Array,Pre);
+          loop invariant top <= \at(args_len,Pre) - 1;
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}

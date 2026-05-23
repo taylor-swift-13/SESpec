@@ -1,0 +1,2293 @@
+2026-05-17 20:59:42,512 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606
+2026-05-17 20:59:42,512 - INFO  - 
+🚀 Starting generation of function: foo152
+2026-05-17 20:59:42,512 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 20:59:42,512 - INFO  - TRY TIME: 0
+2026-05-17 20:59:42,512 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 20:59:42,513 - INFO  - ==================================================
+
+2026-05-17 20:59:44,617 - INFO  - [auto only_loop] False — foo152 returns 'int'
+2026-05-17 20:59:44,618 - INFO  - Initial pending functions: ['foo152', 'malloc']
+2026-05-17 20:59:44,618 - INFO  - Now processing function malloc
+
+2026-05-17 20:59:44,618 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-17 20:59:44,618 - INFO  - 
+GENERATE ANNOTATION FOR foo152
+2026-05-17 20:59:44,618 - INFO  - ==================================================
+
+2026-05-17 20:59:44,618 - INFO  - Function foo152 has been initialized
+2026-05-17 20:59:44,618 - INFO  - Starting to generate annotation code for foo152
+2026-05-17 20:59:44,747 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo152
+2026-05-17 20:59:44,748 - INFO  - ==================================================
+
+2026-05-17 20:59:44,968 - INFO  - Variable Maps:[{}]
+2026-05-17 20:59:44,971 - INFO  - Path conditions: [None]
+2026-05-17 20:59:44,972 - INFO  - Pre condition: 
+2026-05-17 20:59:44,972 - INFO  - Loop Condition: c < number
+2026-05-17 20:59:44,973 - INFO  - Array Names: ['result']
+2026-05-17 20:59:44,979 - INFO  - Updated Loop Conditions: ['c < number']
+2026-05-17 20:59:44,980 - INFO  - Global Unchanged Variables: []
+2026-05-17 20:59:44,980 - INFO  - Non Inductive Variables: []
+2026-05-17 20:59:44,980 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 20:59:44,982 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 20:59:44,985 - INFO  - examples category: array
+2026-05-17 20:59:44,991 - INFO  - examples:
+2026-05-17 20:59:44,992 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 20:59:54,442 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 20:59:54,449 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:00:25,683 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 21:00:42,365 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-17 21:00:42,366 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:00:59,399 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-17 21:00:59,400 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:01:22,577 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 21:01:34,992 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=5
+2026-05-17 21:01:34,993 - INFO  - [inv-gen] converged at refine 6
+2026-05-17 21:01:39,205 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 21:01:42,988 - INFO  - ACSL format loop invariant
+2026-05-17 21:01:42,989 - INFO  - /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+2026-05-17 21:01:42,994 - INFO  - QCP format loop invariant
+2026-05-17 21:01:42,994 - INFO  - /*@ Inv
+    (0 <= c) &&
+(j == 0) &&
+(forall (k:Z), 0 <= k && k < c => result_l[k] == k + 1) &&
+(forall (k:Z), 0 <= k && k < c => result_l[k] % 2 == (k + 1) % 2) &&
+(forall (k:Z), 0 <= k && k < c => result_l[k] > 0
+          loop assigns c, result_l[0..number-1])
+    */
+    
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+2026-05-17 21:01:43,032 - INFO  - Variable Maps:[{}]
+2026-05-17 21:01:43,032 - INFO  - Path conditions: [None]
+2026-05-17 21:01:43,032 - INFO  - Pre condition: 
+2026-05-17 21:01:43,033 - INFO  - Loop Condition: c < number
+2026-05-17 21:01:43,033 - INFO  - Array Names: ['result', 'b']
+2026-05-17 21:01:43,033 - INFO  - Updated Loop Conditions: ['c < number']
+2026-05-17 21:01:43,034 - INFO  - Global Unchanged Variables: []
+2026-05-17 21:01:43,034 - INFO  - Non Inductive Variables: []
+2026-05-17 21:01:43,035 - INFO  - Unchanged Arrays (Read-only): ['result']
+2026-05-17 21:01:43,036 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 21:01:43,039 - INFO  - examples category: array
+2026-05-17 21:01:43,039 - INFO  - examples:
+2026-05-17 21:01:43,039 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 21:02:23,528 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.73, satisfy=0.00) clauses=11
+2026-05-17 21:02:30,892 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-17 21:02:30,893 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:02:36,701 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-17 21:02:36,702 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=17)
+2026-05-17 21:03:07,653 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.73, satisfy=0.00) clauses=11
+2026-05-17 21:03:45,080 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=11
+2026-05-17 21:04:19,930 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=10
+2026-05-17 21:04:54,255 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.90, satisfy=0.00) clauses=10
+2026-05-17 21:05:28,824 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=10
+2026-05-17 21:06:05,300 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.91, satisfy=0.00) clauses=11
+2026-05-17 21:06:45,010 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.73, satisfy=0.00) clauses=11
+2026-05-17 21:06:50,716 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.9090909090909091, 0.0), clauses=11)
+2026-05-17 21:08:09,668 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 21:08:19,389 - INFO  - ACSL format loop invariant
+2026-05-17 21:08:19,390 - INFO  - /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j <= c;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-17 21:08:19,397 - INFO  - QCP format loop invariant
+2026-05-17 21:08:19,397 - INFO  - /*@ Inv
+    (0 <= c) &&
+(0 <= j && j <= c) &&
+(forall (k:Z), 0 <= k && k < number => result_l[k] > 0
+          loop assigns c, b_l[0..number-1], j)
+    */
+    
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-17 21:08:19,459 - INFO  - Variable Maps:[{}]
+2026-05-17 21:08:19,460 - INFO  - Path conditions: [None]
+2026-05-17 21:08:19,460 - INFO  - Pre condition: 
+2026-05-17 21:08:19,460 - INFO  - Loop Condition: c < number
+2026-05-17 21:08:19,462 - INFO  - Array Names: ['result', 'b']
+2026-05-17 21:08:19,462 - INFO  - Updated Loop Conditions: ['c < number']
+2026-05-17 21:08:19,463 - INFO  - Global Unchanged Variables: []
+2026-05-17 21:08:19,463 - INFO  - Non Inductive Variables: []
+2026-05-17 21:08:19,463 - INFO  - Unchanged Arrays (Read-only): ['result']
+2026-05-17 21:08:19,472 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 21:08:19,503 - INFO  - examples category: array
+2026-05-17 21:08:19,503 - INFO  - examples:
+2026-05-17 21:08:19,503 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 21:09:12,546 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.79, satisfy=0.00) clauses=14
+2026-05-17 21:10:18,152 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.79, satisfy=0.00) clauses=14
+2026-05-17 21:10:56,098 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=12
+2026-05-17 21:11:36,579 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=12
+2026-05-17 21:12:14,167 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=12
+2026-05-17 21:12:14,167 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=41)
+2026-05-17 21:12:47,663 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=12
+2026-05-17 21:13:26,085 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=12
+2026-05-17 21:13:26,085 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=41)
+2026-05-17 21:13:59,626 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=12
+2026-05-17 21:14:38,361 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=12
+2026-05-17 21:14:38,361 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=41)
+2026-05-17 21:15:08,070 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.92, satisfy=0.00) clauses=12
+2026-05-17 21:15:15,784 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.9166666666666666, 0.0), clauses=12)
+2026-05-17 21:16:09,457 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 21:16:19,567 - INFO  - ACSL format loop invariant
+2026-05-17 21:16:19,567 - INFO  - /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-17 21:16:19,568 - INFO  - QCP format loop invariant
+2026-05-17 21:16:19,568 - INFO  - /*@ Inv
+    (0 <= c) &&
+(0 <= j) &&
+(forall (k:Z), 0 <= k && k < number => result_l[k] > 0
+          loop assigns c, b_l[0..number-1], j)
+    */
+    
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-17 21:16:29,756 - INFO  - CORRECT INVARIANT
+2026-05-17 21:16:29,760 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo152
+2026-05-17 21:16:29,760 - INFO  - ==================================================
+
+2026-05-17 21:16:29,800 - INFO  - Starting to generate ACSL specification for foo152
+2026-05-17 21:16:37,708 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c:4: Warning: 
+  unbound logic variable result. Ignoring logic specification of function foo152
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:16:37,709 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:17:23,029 - INFO  - syntax Correct
+2026-05-17 21:18:00,836 - INFO  - Loop Invariant:
+2026-05-17 21:18:00,836 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:18:00,837 - INFO  - 
+2026-05-17 21:18:00,837 - INFO  - Assertion:
+2026-05-17 21:18:00,837 - INFO  - []
+2026-05-17 21:18:00,837 - INFO  - 
+2026-05-17 21:18:00,838 - INFO  - Assigns:
+2026-05-17 21:18:00,838 - INFO  - [False, True, False, False, True, False, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:18:00,838 - INFO  - 
+2026-05-17 21:18:00,838 - INFO  - Post Condition:
+2026-05-17 21:18:00,838 - INFO  - [False]
+2026-05-17 21:18:00,839 - INFO  - 
+2026-05-17 21:18:00,839 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=3
+2026-05-17 21:18:00,840 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures \result == 0 || (1 <= \result && \result <= number) [POSTCONDITION FAILED];
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:18:06,101 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures \result == 0 || \result > 0;
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:18:48,250 - INFO  - syntax Correct
+2026-05-17 21:19:27,892 - INFO  - Loop Invariant:
+2026-05-17 21:19:27,893 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:19:27,893 - INFO  - 
+2026-05-17 21:19:27,893 - INFO  - Assertion:
+2026-05-17 21:19:27,893 - INFO  - []
+2026-05-17 21:19:27,894 - INFO  - 
+2026-05-17 21:19:27,894 - INFO  - Assigns:
+2026-05-17 21:19:27,894 - INFO  - [False, True, False, False, True, False, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:19:27,894 - INFO  - 
+2026-05-17 21:19:27,895 - INFO  - Post Condition:
+2026-05-17 21:19:27,895 - INFO  - [False]
+2026-05-17 21:19:27,895 - INFO  - 
+2026-05-17 21:19:27,896 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=3
+2026-05-17 21:19:27,896 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures \result == 0 || \result > 0 [POSTCONDITION FAILED];
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:19:32,470 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires number >= 0;
+  assigns \result;
+  ensures \result == 0 || \result > 0;
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:20:18,302 - INFO  - syntax Correct
+2026-05-17 21:20:58,926 - INFO  - Loop Invariant:
+2026-05-17 21:20:58,926 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:20:58,926 - INFO  - 
+2026-05-17 21:20:58,926 - INFO  - Assertion:
+2026-05-17 21:20:58,926 - INFO  - []
+2026-05-17 21:20:58,926 - INFO  - 
+2026-05-17 21:20:58,926 - INFO  - Assigns:
+2026-05-17 21:20:58,926 - INFO  - [False, True, False, False, True, False, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:20:58,926 - INFO  - 
+2026-05-17 21:20:58,927 - INFO  - Post Condition:
+2026-05-17 21:20:58,927 - INFO  - [False]
+2026-05-17 21:20:58,927 - INFO  - 
+2026-05-17 21:20:58,927 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=3
+2026-05-17 21:20:58,927 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 21:21:45,325 - INFO  - syntax Correct
+2026-05-17 21:22:24,117 - INFO  - Loop Invariant:
+2026-05-17 21:22:24,117 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:22:24,117 - INFO  - 
+2026-05-17 21:22:24,118 - INFO  - Assertion:
+2026-05-17 21:22:24,118 - INFO  - []
+2026-05-17 21:22:24,118 - INFO  - 
+2026-05-17 21:22:24,118 - INFO  - Assigns:
+2026-05-17 21:22:24,118 - INFO  - [False, True, False, False, True, False, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:22:24,118 - INFO  - 
+2026-05-17 21:22:24,118 - INFO  - Post Condition:
+2026-05-17 21:22:24,118 - INFO  - [False]
+2026-05-17 21:22:24,118 - INFO  - 
+2026-05-17 21:22:24,119 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=3
+2026-05-17 21:22:24,119 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures \result == 0 || (1 <= \result && \result <= number) [POSTCONDITION FAILED];
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:22:27,993 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures \result == 0 || (1 <= \result && \result <= number) [POSTCONDITION FAILED];
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:22:28,823 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c:7: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:22:28,824 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:22:28,824 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 21:23:14,372 - INFO  - syntax Correct
+2026-05-17 21:23:59,001 - INFO  - Loop Invariant:
+2026-05-17 21:23:59,002 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:23:59,002 - INFO  - 
+2026-05-17 21:23:59,002 - INFO  - Assertion:
+2026-05-17 21:23:59,002 - INFO  - []
+2026-05-17 21:23:59,002 - INFO  - 
+2026-05-17 21:23:59,002 - INFO  - Assigns:
+2026-05-17 21:23:59,002 - INFO  - [False, True, False, False, True, False, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:23:59,002 - INFO  - 
+2026-05-17 21:23:59,003 - INFO  - Post Condition:
+2026-05-17 21:23:59,003 - INFO  - [False]
+2026-05-17 21:23:59,003 - INFO  - 
+2026-05-17 21:23:59,003 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=3
+2026-05-17 21:23:59,004 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures \result == 0 || (1 <= \result && \result <= number) [POSTCONDITION FAILED];
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:24:04,124 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures 1 == 1;
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:24:53,246 - INFO  - syntax Correct
+2026-05-17 21:25:30,071 - INFO  - Loop Invariant:
+2026-05-17 21:25:30,076 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:25:30,076 - INFO  - 
+2026-05-17 21:25:30,076 - INFO  - Assertion:
+2026-05-17 21:25:30,076 - INFO  - []
+2026-05-17 21:25:30,076 - INFO  - 
+2026-05-17 21:25:30,077 - INFO  - Assigns:
+2026-05-17 21:25:30,077 - INFO  - [False, True, False, False, True, False, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:25:30,077 - INFO  - 
+2026-05-17 21:25:30,077 - INFO  - Post Condition:
+2026-05-17 21:25:30,077 - INFO  - [True]
+2026-05-17 21:25:30,077 - INFO  - 
+2026-05-17 21:25:30,078 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.72, satisfy=0.00) clauses=3
+2026-05-17 21:25:30,078 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures 1 == 1;
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:25:33,887 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires number >= 0;
+  assigns *result, *b, c, j;
+  ensures 1 == 1;
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:25:34,882 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c:6: Warning: 
+  unbound logic variable result. Ignoring logic specification of function foo152
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:25:34,884 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:26:24,304 - INFO  - syntax Correct
+2026-05-17 21:27:02,808 - INFO  - Loop Invariant:
+2026-05-17 21:27:02,810 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:27:02,810 - INFO  - 
+2026-05-17 21:27:02,810 - INFO  - Assertion:
+2026-05-17 21:27:02,810 - INFO  - []
+2026-05-17 21:27:02,810 - INFO  - 
+2026-05-17 21:27:02,810 - INFO  - Assigns:
+2026-05-17 21:27:02,810 - INFO  - [False, True, False, False, True, False, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:27:02,810 - INFO  - 
+2026-05-17 21:27:02,810 - INFO  - Post Condition:
+2026-05-17 21:27:02,810 - INFO  - [True]
+2026-05-17 21:27:02,810 - INFO  - 
+2026-05-17 21:27:02,811 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.72, satisfy=0.00) clauses=3
+2026-05-17 21:27:02,811 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 21:27:02,819 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.71875, 0.0), clauses=3)
+2026-05-17 21:27:49,320 - INFO  - syntax Correct
+2026-05-17 21:28:29,998 - INFO  - Loop Invariant:
+2026-05-17 21:28:29,998 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:28:30,002 - INFO  - 
+2026-05-17 21:28:30,002 - INFO  - Assertion:
+2026-05-17 21:28:30,003 - INFO  - []
+2026-05-17 21:28:30,003 - INFO  - 
+2026-05-17 21:28:30,015 - INFO  - Assigns:
+2026-05-17 21:28:30,016 - INFO  - [False, True, False, False, True, False, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:28:30,016 - INFO  - 
+2026-05-17 21:28:30,016 - INFO  - Post Condition:
+2026-05-17 21:28:30,016 - INFO  - [True]
+2026-05-17 21:28:30,016 - INFO  - 
+2026-05-17 21:28:30,075 - INFO  - 
+SPECIFICATION FOR foo152
+2026-05-17 21:28:30,076 - INFO  - ==================================================
+
+2026-05-17 21:28:30,077 - INFO  - 
+QCP Specification for function foo152:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 21:28:40,380 - INFO  - 
+VERIFICATION FOR foo152
+2026-05-17 21:28:40,380 - INFO  - ==================================================
+
+2026-05-17 21:29:30,222 - INFO  - syntax Correct
+2026-05-17 21:30:09,093 - INFO  - Loop Invariant:
+2026-05-17 21:30:09,094 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:30:09,094 - INFO  - 
+2026-05-17 21:30:09,094 - INFO  - Assertion:
+2026-05-17 21:30:09,094 - INFO  - []
+2026-05-17 21:30:09,094 - INFO  - 
+2026-05-17 21:30:09,095 - INFO  - Assigns:
+2026-05-17 21:30:09,095 - INFO  - [False, True, False, False, True, False, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:30:09,095 - INFO  - 
+2026-05-17 21:30:09,095 - INFO  - Post Condition:
+2026-05-17 21:30:09,095 - INFO  - [True]
+2026-05-17 21:30:09,095 - INFO  - 
+2026-05-17 21:30:14,870 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c:4: Warning: 
+  unbound logic function count_odd_upto. Ignoring logic specification of function foo152
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:30:14,871 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:30:54,360 - INFO  - syntax Correct
+2026-05-17 21:31:26,052 - INFO  - Loop Invariant:
+2026-05-17 21:31:26,053 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:31:26,053 - INFO  - 
+2026-05-17 21:31:26,054 - INFO  - Assertion:
+2026-05-17 21:31:26,054 - INFO  - []
+2026-05-17 21:31:26,054 - INFO  - 
+2026-05-17 21:31:26,054 - INFO  - Assigns:
+2026-05-17 21:31:26,054 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:31:26,054 - INFO  - 
+2026-05-17 21:31:26,054 - INFO  - Post Condition:
+2026-05-17 21:31:26,054 - INFO  - [False]
+2026-05-17 21:31:26,054 - INFO  - 
+2026-05-17 21:31:26,055 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=2
+2026-05-17 21:31:26,055 - INFO  - postconditon before refine: 
+
+/*@
+  assigns \nothing;
+  ensures \result == 0 || (1 <= \result <= \old(number)) [POSTCONDITION FAILED];
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:31:31,583 - INFO  - postconditon after refine: 
+
+/*@
+  assigns result[0..number-1], b[0..number-1];
+  ensures \result == 0 || (1 <= \result <= number);
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:31:32,684 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c:3: Warning: 
+  unbound logic variable result. Ignoring logic specification of function foo152
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:31:32,685 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 21:32:10,324 - INFO  - syntax Correct
+2026-05-17 21:32:41,724 - INFO  - Loop Invariant:
+2026-05-17 21:32:41,729 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:32:41,729 - INFO  - 
+2026-05-17 21:32:41,730 - INFO  - Assertion:
+2026-05-17 21:32:41,730 - INFO  - []
+2026-05-17 21:32:41,730 - INFO  - 
+2026-05-17 21:32:41,730 - INFO  - Assigns:
+2026-05-17 21:32:41,730 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:32:41,730 - INFO  - 
+2026-05-17 21:32:41,736 - INFO  - Post Condition:
+2026-05-17 21:32:41,737 - INFO  - [False]
+2026-05-17 21:32:41,737 - INFO  - 
+2026-05-17 21:32:41,737 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=2
+2026-05-17 21:32:41,738 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 21:33:19,229 - INFO  - syntax Correct
+2026-05-17 21:34:55,835 - INFO  - Loop Invariant:
+2026-05-17 21:34:55,836 - INFO  - [True, True, True, True, True, True, True, False, True, True, False]
+2026-05-17 21:34:55,836 - INFO  - 
+2026-05-17 21:34:55,837 - INFO  - Assertion:
+2026-05-17 21:34:55,837 - INFO  - []
+2026-05-17 21:34:55,837 - INFO  - 
+2026-05-17 21:34:55,837 - INFO  - Assigns:
+2026-05-17 21:34:55,837 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:34:55,837 - INFO  - 
+2026-05-17 21:34:55,837 - INFO  - Post Condition:
+2026-05-17 21:34:55,838 - INFO  - [False]
+2026-05-17 21:34:55,838 - INFO  - 
+2026-05-17 21:34:55,838 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.73, satisfy=0.00) clauses=2
+2026-05-17 21:34:55,841 - INFO  - postconditon before refine: 
+
+/*@
+  assigns \nothing;
+  ensures \result == 0 || (1 <= \result <= \old(number)) [POSTCONDITION FAILED];
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:35:01,648 - INFO  - postconditon after refine: 
+
+/*@
+  assigns \nothing;
+  ensures \result == 0 || \result >= 0;
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:35:56,400 - INFO  - syntax Correct
+2026-05-17 21:36:31,325 - INFO  - Loop Invariant:
+2026-05-17 21:36:31,325 - INFO  - [True, True, True, True, True, True, True, False, True, True, False]
+2026-05-17 21:36:31,325 - INFO  - 
+2026-05-17 21:36:31,325 - INFO  - Assertion:
+2026-05-17 21:36:31,325 - INFO  - []
+2026-05-17 21:36:31,325 - INFO  - 
+2026-05-17 21:36:31,326 - INFO  - Assigns:
+2026-05-17 21:36:31,326 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:36:31,326 - INFO  - 
+2026-05-17 21:36:31,326 - INFO  - Post Condition:
+2026-05-17 21:36:31,326 - INFO  - [False]
+2026-05-17 21:36:31,326 - INFO  - 
+2026-05-17 21:36:31,326 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.73, satisfy=0.00) clauses=2
+2026-05-17 21:36:31,326 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 21:37:08,268 - INFO  - syntax Correct
+2026-05-17 21:37:39,052 - INFO  - Loop Invariant:
+2026-05-17 21:37:39,056 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:37:39,056 - INFO  - 
+2026-05-17 21:37:39,056 - INFO  - Assertion:
+2026-05-17 21:37:39,056 - INFO  - []
+2026-05-17 21:37:39,056 - INFO  - 
+2026-05-17 21:37:39,056 - INFO  - Assigns:
+2026-05-17 21:37:39,056 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:37:39,057 - INFO  - 
+2026-05-17 21:37:39,057 - INFO  - Post Condition:
+2026-05-17 21:37:39,057 - INFO  - [False]
+2026-05-17 21:37:39,057 - INFO  - 
+2026-05-17 21:37:39,057 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=2
+2026-05-17 21:37:39,057 - INFO  - postconditon before refine: 
+
+/*@
+  assigns \nothing;
+  ensures \result == 0 || (1 <= \result <= \old(number)) [POSTCONDITION FAILED];
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:37:42,999 - INFO  - postconditon after refine: 
+
+/*@
+  assigns result[0..number-1], b[0..number-1];
+  ensures 0 <= \result <= \old(number);
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:37:43,832 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c:3: Warning: 
+  unbound logic variable result. Ignoring logic specification of function foo152
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:37:43,833 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 21:37:43,833 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 21:38:20,295 - INFO  - syntax Correct
+2026-05-17 21:38:53,908 - INFO  - Loop Invariant:
+2026-05-17 21:38:53,909 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:38:53,909 - INFO  - 
+2026-05-17 21:38:53,909 - INFO  - Assertion:
+2026-05-17 21:38:53,909 - INFO  - []
+2026-05-17 21:38:53,909 - INFO  - 
+2026-05-17 21:38:53,909 - INFO  - Assigns:
+2026-05-17 21:38:53,909 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:38:53,909 - INFO  - 
+2026-05-17 21:38:53,909 - INFO  - Post Condition:
+2026-05-17 21:38:53,909 - INFO  - [False]
+2026-05-17 21:38:53,909 - INFO  - 
+2026-05-17 21:38:53,910 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=2
+2026-05-17 21:38:53,910 - INFO  - postconditon before refine: 
+
+/*@
+  assigns \nothing;
+  ensures \result == 0 || (1 <= \result <= \old(number)) [POSTCONDITION FAILED];
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:38:57,958 - INFO  - postconditon after refine: 
+
+/*@
+  assigns result[0..number-1], b[0..number-1];
+  ensures \result == 0 || 1 <= \result <= number;
+*/
+int foo152(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant j == 0;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] % 2 == (k + 1) % 2;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] > 0;
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant 0 <= j;
+          loop invariant \forall integer k; 0 <= k < number ==> result[k] > 0;
+          loop assigns c, b[0..number-1], j;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 21:38:59,284 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c:3: Warning: 
+  unbound logic variable result. Ignoring logic specification of function foo152
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo152/20260517_205942_1072836_128fe606/output/foo152.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:38:59,284 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 21:38:59,284 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 21:38:59,286 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8, 0.0), clauses=2)
+2026-05-17 21:39:35,312 - INFO  - syntax Correct
+2026-05-17 21:40:08,829 - INFO  - Loop Invariant:
+2026-05-17 21:40:08,829 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:40:08,830 - INFO  - 
+2026-05-17 21:40:08,830 - INFO  - Assertion:
+2026-05-17 21:40:08,830 - INFO  - []
+2026-05-17 21:40:08,830 - INFO  - 
+2026-05-17 21:40:08,830 - INFO  - Assigns:
+2026-05-17 21:40:08,830 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:40:08,830 - INFO  - 
+2026-05-17 21:40:08,830 - INFO  - Post Condition:
+2026-05-17 21:40:08,830 - INFO  - [False]
+2026-05-17 21:40:08,830 - INFO  - 
+2026-05-17 21:40:44,224 - INFO  - syntax Correct
+2026-05-17 21:41:12,987 - INFO  - Loop Invariant:
+2026-05-17 21:41:12,987 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:41:12,987 - INFO  - 
+2026-05-17 21:41:12,987 - INFO  - Assertion:
+2026-05-17 21:41:12,987 - INFO  - []
+2026-05-17 21:41:12,987 - INFO  - 
+2026-05-17 21:41:12,987 - INFO  - Assigns:
+2026-05-17 21:41:12,987 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:41:12,987 - INFO  - 
+2026-05-17 21:41:12,988 - INFO  - Post Condition:
+2026-05-17 21:41:12,988 - INFO  - []
+2026-05-17 21:41:12,988 - INFO  - 
+2026-05-17 21:41:47,352 - INFO  - syntax Correct
+2026-05-17 21:42:16,247 - INFO  - Loop Invariant:
+2026-05-17 21:42:16,247 - INFO  - [True, True, True, True, True, True, True, True, True, True, True]
+2026-05-17 21:42:16,247 - INFO  - 
+2026-05-17 21:42:16,248 - INFO  - Assertion:
+2026-05-17 21:42:16,248 - INFO  - []
+2026-05-17 21:42:16,248 - INFO  - 
+2026-05-17 21:42:16,248 - INFO  - Assigns:
+2026-05-17 21:42:16,248 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 21:42:16,248 - INFO  - 
+2026-05-17 21:42:16,248 - INFO  - Post Condition:
+2026-05-17 21:42:16,248 - INFO  - []
+2026-05-17 21:42:16,248 - INFO  - 
+2026-05-17 21:42:16,253 - INFO  - first_pass:
+2026-05-17 21:42:16,254 - INFO  - syntax=1, valid=None,satisfy=None
+2026-05-17 21:42:16,255 - INFO  - ==================================================
+2026-05-17 21:42:16,255 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 21:42:16,255 - INFO  - Total execution time: 2553.74 seconds (42.56 minutes)
+2026-05-17 21:42:16,255 - INFO  - ==================================================
+2026-05-17 21:42:16,256 - INFO  - ==================================================
+2026-05-17 21:42:16,256 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 21:42:16,256 - INFO  - Total API calls: 42
+2026-05-17 21:42:16,256 - INFO  - Total prompt tokens (input): 1,062,257
+2026-05-17 21:42:16,256 - INFO  - Total completion tokens (output): 34,524
+2026-05-17 21:42:16,256 - INFO  - Total tokens: 1,096,781
+2026-05-17 21:42:16,256 - INFO  - Average prompt tokens per call: 25291.8
+2026-05-17 21:42:16,256 - INFO  - Average completion tokens per call: 822.0
+2026-05-17 21:42:16,256 - INFO  - Average total tokens per call: 26113.8
+2026-05-17 21:42:16,256 - INFO  - ==================================================

@@ -1,0 +1,1215 @@
+2026-05-17 04:39:34,979 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo40_c185/20260517_043934_246417_9438ef3c
+2026-05-17 04:39:34,979 - INFO  - 
+🚀 Starting generation of function: foo40_c185
+2026-05-17 04:39:34,979 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 04:39:34,979 - INFO  - TRY TIME: 0
+2026-05-17 04:39:34,979 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 04:39:34,980 - INFO  - ==================================================
+
+2026-05-17 04:39:39,352 - INFO  - [auto only_loop] False — foo40_c185 returns 'int'
+2026-05-17 04:39:39,355 - INFO  - Initial pending functions: ['foo40_c185']
+2026-05-17 04:39:39,355 - INFO  - 
+GENERATE ANNOTATION FOR foo40_c185
+2026-05-17 04:39:39,355 - INFO  - ==================================================
+
+2026-05-17 04:39:39,355 - INFO  - Function foo40_c185 has been initialized
+2026-05-17 04:39:39,355 - INFO  - Starting to generate annotation code for foo40_c185
+2026-05-17 04:39:39,543 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo40_c185
+2026-05-17 04:39:39,543 - INFO  - ==================================================
+
+2026-05-17 04:39:39,740 - INFO  - Variable Maps:[{'high': 'a_len@pre - 1', 'low': '0', 'x': 'x@pre', 'a_len': 'a_len@pre', 'a': 'a@pre'}]
+2026-05-17 04:39:39,740 - INFO  - Path conditions: ['a_len@pre > 0 && a_len@pre < 100']
+2026-05-17 04:39:39,741 - INFO  - Pre condition: a_len@pre > 0 && a_len@pre < 100 && (high == a_len@pre - 1) * (low == 0) * (x == x@pre) * (a_len == a_len@pre) * (a == a@pre) * store_int_array(a@pre, a_len@pre, a_l)
+2026-05-17 04:39:39,741 - INFO  - Loop Condition: low <= high
+2026-05-17 04:39:39,743 - INFO  - Array Names: ['a']
+2026-05-17 04:39:39,744 - INFO  - Updated Loop Conditions: ['0 <= a_len@pre - 1']
+2026-05-17 04:39:39,746 - INFO  - Global Unchanged Variables: ['x', 'a_len', 'a']
+2026-05-17 04:39:39,747 - INFO  - Non Inductive Variables: ['high', 'low', 'high']
+2026-05-17 04:39:39,748 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 04:39:39,751 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 04:39:39,772 - INFO  - examples category: array
+2026-05-17 04:39:39,772 - INFO  - examples:
+2026-05-17 04:39:39,772 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 04:40:00,285 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-17 04:40:07,629 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-17 04:40:15,407 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-17 04:40:15,409 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 04:40:15,963 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=8
+2026-05-17 04:40:24,404 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-17 04:41:00,907 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.56, satisfy=0.00) clauses=9
+2026-05-17 04:41:25,406 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=9
+2026-05-17 04:41:47,326 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=10
+2026-05-17 04:42:12,457 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=10
+2026-05-17 04:42:12,459 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=13)
+2026-05-17 04:42:27,491 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.89, satisfy=0.00) clauses=9
+2026-05-17 04:42:35,892 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8888888888888888, 0.0), clauses=9)
+2026-05-17 04:43:00,103 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 04:43:04,459 - INFO  - ACSL format loop invariant
+2026-05-17 04:43:04,459 - INFO  - /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+            */
+            while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+2026-05-17 04:43:04,471 - INFO  - QCP format loop invariant
+2026-05-17 04:43:04,471 - INFO  - /*@ Inv
+    exists  a_l,    
+    store_int_array(a, a_len, a_l) && a_len > 0 && a_len < 100 &&
+    (x == x@pre) &&
+(a_len == a_len@pre) &&
+(a == a@pre) &&
+(\valid_read(a + (0..a_len-1))) &&
+(nondecreasing(a, a_len)) &&
+(a_len > 0 && a_len < 100) &&
+(-1 <= high && high < a_len) &&
+(0 <= low && low <= a_len
+          loop assigns high, low)
+    */
+    
+            while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+2026-05-17 04:43:09,108 - INFO  - CORRECT INVARIANT
+2026-05-17 04:43:09,108 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo40_c185
+2026-05-17 04:43:09,108 - INFO  - ==================================================
+
+2026-05-17 04:43:09,178 - INFO  - Starting to generate ACSL specification for foo40_c185
+2026-05-17 04:43:31,380 - INFO  - syntax Correct
+2026-05-17 04:43:42,895 - INFO  - Loop Invariant:
+2026-05-17 04:43:42,895 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:43:42,895 - INFO  - 
+2026-05-17 04:43:42,895 - INFO  - Assertion:
+2026-05-17 04:43:42,895 - INFO  - []
+2026-05-17 04:43:42,895 - INFO  - 
+2026-05-17 04:43:42,895 - INFO  - Assigns:
+2026-05-17 04:43:42,895 - INFO  - [True, True, True]
+2026-05-17 04:43:42,895 - INFO  - 
+2026-05-17 04:43:42,896 - INFO  - Post Condition:
+2026-05-17 04:43:42,896 - INFO  - [False, False, True, True]
+2026-05-17 04:43:42,896 - INFO  - 
+2026-05-17 04:43:42,897 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.87, satisfy=0.00) clauses=8
+2026-05-17 04:43:42,898 - INFO  - postconditon before refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < a_len ==> a[i] != x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] < x))) [POSTCONDITION FAILED];
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+            */
+            while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:43:49,253 - INFO  - postconditon after refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> (\forall integer i; 0 <= i < a_len ==> a[i] != x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] < x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:44:01,045 - INFO  - syntax Correct
+2026-05-17 04:44:12,883 - INFO  - Loop Invariant:
+2026-05-17 04:44:12,884 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:44:12,884 - INFO  - 
+2026-05-17 04:44:12,884 - INFO  - Assertion:
+2026-05-17 04:44:12,884 - INFO  - []
+2026-05-17 04:44:12,884 - INFO  - 
+2026-05-17 04:44:12,884 - INFO  - Assigns:
+2026-05-17 04:44:12,884 - INFO  - [True, True, True]
+2026-05-17 04:44:12,884 - INFO  - 
+2026-05-17 04:44:12,885 - INFO  - Post Condition:
+2026-05-17 04:44:12,886 - INFO  - [False, False, True, True]
+2026-05-17 04:44:12,886 - INFO  - 
+2026-05-17 04:44:12,886 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.87, satisfy=0.00) clauses=8
+2026-05-17 04:44:12,886 - INFO  - postconditon before refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < a_len ==> a[i] != x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] < x))) [POSTCONDITION FAILED];
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:44:19,133 - INFO  - postconditon after refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> (\forall integer i; 0 <= i < a_len ==> a[i] != x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:44:31,786 - INFO  - syntax Correct
+2026-05-17 04:44:43,842 - INFO  - Loop Invariant:
+2026-05-17 04:44:43,843 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:44:43,843 - INFO  - 
+2026-05-17 04:44:43,843 - INFO  - Assertion:
+2026-05-17 04:44:43,843 - INFO  - []
+2026-05-17 04:44:43,843 - INFO  - 
+2026-05-17 04:44:43,844 - INFO  - Assigns:
+2026-05-17 04:44:43,844 - INFO  - [True, True, True]
+2026-05-17 04:44:43,844 - INFO  - 
+2026-05-17 04:44:43,844 - INFO  - Post Condition:
+2026-05-17 04:44:43,844 - INFO  - [False, True, True, True]
+2026-05-17 04:44:43,845 - INFO  - 
+2026-05-17 04:44:43,845 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=8
+2026-05-17 04:44:43,846 - INFO  - postconditon before refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < a_len ==> a[i] != x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:44:49,507 - INFO  - postconditon after refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> !(\exists integer i; 0 <= i < a_len && a[i] == x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:45:04,199 - INFO  - syntax Correct
+2026-05-17 04:45:16,348 - INFO  - Loop Invariant:
+2026-05-17 04:45:16,349 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:45:16,349 - INFO  - 
+2026-05-17 04:45:16,350 - INFO  - Assertion:
+2026-05-17 04:45:16,350 - INFO  - []
+2026-05-17 04:45:16,350 - INFO  - 
+2026-05-17 04:45:16,350 - INFO  - Assigns:
+2026-05-17 04:45:16,350 - INFO  - [True, True, True]
+2026-05-17 04:45:16,350 - INFO  - 
+2026-05-17 04:45:16,351 - INFO  - Post Condition:
+2026-05-17 04:45:16,354 - INFO  - [False, True, True, True]
+2026-05-17 04:45:16,354 - INFO  - 
+2026-05-17 04:45:16,355 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=8
+2026-05-17 04:45:16,355 - INFO  - postconditon before refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> !(\exists integer i [POSTCONDITION FAILED]; 0 <= i < a_len && a[i] == x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:45:22,055 - INFO  - postconditon after refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/* [POSTCONDITION FAILED] fixed by weakening */
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:45:23,107 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo40_c185/20260517_043934_246417_9438ef3c/output/foo40_c185.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo40_c185/20260517_043934_246417_9438ef3c/output/foo40_c185.c:7: 
+  syntax error:
+  Location: line 7, between columns 11 and 12, before or at token: 0
+  5     
+  6     /* [POSTCONDITION FAILED] fixed by weakening */
+  7       ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  8       ensures \result == -1 || (0 <= \result < a_len);
+  9       ensures \result == -1 || a[\result] == x;
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 04:45:23,108 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 04:45:23,108 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 04:45:36,988 - INFO  - syntax Correct
+2026-05-17 04:45:50,137 - INFO  - Loop Invariant:
+2026-05-17 04:45:50,137 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:45:50,137 - INFO  - 
+2026-05-17 04:45:50,137 - INFO  - Assertion:
+2026-05-17 04:45:50,137 - INFO  - []
+2026-05-17 04:45:50,138 - INFO  - 
+2026-05-17 04:45:50,138 - INFO  - Assigns:
+2026-05-17 04:45:50,138 - INFO  - [True, True, True]
+2026-05-17 04:45:50,138 - INFO  - 
+2026-05-17 04:45:50,138 - INFO  - Post Condition:
+2026-05-17 04:45:50,138 - INFO  - [False, True, True, True]
+2026-05-17 04:45:50,138 - INFO  - 
+2026-05-17 04:45:50,139 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=8
+2026-05-17 04:45:50,139 - INFO  - postconditon before refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < a_len ==> a[i] != x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:45:55,733 - INFO  - postconditon after refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> !(\exists integer i; 0 <= i < a_len && a[i] == x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:46:08,937 - INFO  - syntax Correct
+2026-05-17 04:46:25,703 - INFO  - Loop Invariant:
+2026-05-17 04:46:25,703 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:46:25,704 - INFO  - 
+2026-05-17 04:46:25,704 - INFO  - Assertion:
+2026-05-17 04:46:25,704 - INFO  - []
+2026-05-17 04:46:25,704 - INFO  - 
+2026-05-17 04:46:25,704 - INFO  - Assigns:
+2026-05-17 04:46:25,704 - INFO  - [True, True, True]
+2026-05-17 04:46:25,704 - INFO  - 
+2026-05-17 04:46:25,705 - INFO  - Post Condition:
+2026-05-17 04:46:25,705 - INFO  - [False, True, True, True]
+2026-05-17 04:46:25,705 - INFO  - 
+2026-05-17 04:46:25,710 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=8
+2026-05-17 04:46:25,710 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 04:46:41,399 - INFO  - syntax Correct
+2026-05-17 04:46:57,759 - INFO  - Loop Invariant:
+2026-05-17 04:46:57,760 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:46:57,760 - INFO  - 
+2026-05-17 04:46:57,760 - INFO  - Assertion:
+2026-05-17 04:46:57,761 - INFO  - []
+2026-05-17 04:46:57,761 - INFO  - 
+2026-05-17 04:46:57,761 - INFO  - Assigns:
+2026-05-17 04:46:57,761 - INFO  - [True, True, True]
+2026-05-17 04:46:57,761 - INFO  - 
+2026-05-17 04:46:57,762 - INFO  - Post Condition:
+2026-05-17 04:46:57,762 - INFO  - [False, True, True, True]
+2026-05-17 04:46:57,762 - INFO  - 
+2026-05-17 04:46:57,763 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=8
+2026-05-17 04:46:57,763 - INFO  - postconditon before refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < a_len ==> a[i] != x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:47:03,543 - INFO  - postconditon after refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> !(\exists integer i; 0 <= i < a_len && a[i] == x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:47:29,551 - INFO  - syntax Correct
+2026-05-17 04:47:45,174 - INFO  - Loop Invariant:
+2026-05-17 04:47:45,177 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:47:45,177 - INFO  - 
+2026-05-17 04:47:45,177 - INFO  - Assertion:
+2026-05-17 04:47:45,178 - INFO  - []
+2026-05-17 04:47:45,178 - INFO  - 
+2026-05-17 04:47:45,178 - INFO  - Assigns:
+2026-05-17 04:47:45,178 - INFO  - [True, True, True]
+2026-05-17 04:47:45,179 - INFO  - 
+2026-05-17 04:47:45,180 - INFO  - Post Condition:
+2026-05-17 04:47:45,180 - INFO  - [False, True, True, True]
+2026-05-17 04:47:45,180 - INFO  - 
+2026-05-17 04:47:45,181 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=8
+2026-05-17 04:47:45,181 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 04:48:01,827 - INFO  - syntax Correct
+2026-05-17 04:48:13,337 - INFO  - Loop Invariant:
+2026-05-17 04:48:13,343 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:48:13,343 - INFO  - 
+2026-05-17 04:48:13,343 - INFO  - Assertion:
+2026-05-17 04:48:13,343 - INFO  - []
+2026-05-17 04:48:13,343 - INFO  - 
+2026-05-17 04:48:13,343 - INFO  - Assigns:
+2026-05-17 04:48:13,343 - INFO  - [True, True, True]
+2026-05-17 04:48:13,343 - INFO  - 
+2026-05-17 04:48:13,346 - INFO  - Post Condition:
+2026-05-17 04:48:13,346 - INFO  - [False, True, True, True]
+2026-05-17 04:48:13,346 - INFO  - 
+2026-05-17 04:48:13,347 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.93, satisfy=0.00) clauses=8
+2026-05-17 04:48:13,347 - INFO  - postconditon before refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> (\forall integer i [POSTCONDITION FAILED]; 0 <= i < a_len ==> a[i] != x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:48:18,517 - INFO  - postconditon after refine: 
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (\result == -1 ==> !(\exists integer i; 0 <= i < a_len && a[i] == x));
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:48:18,519 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.9333333333333333, 0.0), clauses=8)
+2026-05-17 04:48:30,786 - INFO  - syntax Correct
+2026-05-17 04:48:47,296 - INFO  - Loop Invariant:
+2026-05-17 04:48:47,302 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:48:47,302 - INFO  - 
+2026-05-17 04:48:47,302 - INFO  - Assertion:
+2026-05-17 04:48:47,302 - INFO  - []
+2026-05-17 04:48:47,302 - INFO  - 
+2026-05-17 04:48:47,302 - INFO  - Assigns:
+2026-05-17 04:48:47,302 - INFO  - [True, True, True]
+2026-05-17 04:48:47,302 - INFO  - 
+2026-05-17 04:48:47,308 - INFO  - Post Condition:
+2026-05-17 04:48:47,308 - INFO  - [False, True, True, True]
+2026-05-17 04:48:47,308 - INFO  - 
+2026-05-17 04:48:56,233 - INFO  - syntax Correct
+2026-05-17 04:48:58,658 - INFO  - Loop Invariant:
+2026-05-17 04:48:58,658 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:48:58,658 - INFO  - 
+2026-05-17 04:48:58,658 - INFO  - Assertion:
+2026-05-17 04:48:58,659 - INFO  - []
+2026-05-17 04:48:58,659 - INFO  - 
+2026-05-17 04:48:58,659 - INFO  - Assigns:
+2026-05-17 04:48:58,659 - INFO  - [True, True, True]
+2026-05-17 04:48:58,659 - INFO  - 
+2026-05-17 04:48:58,659 - INFO  - Post Condition:
+2026-05-17 04:48:58,659 - INFO  - [True, True, True]
+2026-05-17 04:48:58,659 - INFO  - 
+2026-05-17 04:48:58,662 - INFO  - 
+SPECIFICATION FOR foo40_c185
+2026-05-17 04:48:58,662 - INFO  - ==================================================
+
+2026-05-17 04:48:58,662 - INFO  - 
+QCP Specification for function foo40_c185:
+/*@
+With a_l
+Require store_int_array(a, a_len, a_l) && a_len > 0 && a_len < 100
+Ensure Results(__return)
+*/
+2026-05-17 04:48:59,222 - INFO  - 
+VERIFICATION FOR foo40_c185
+2026-05-17 04:48:59,225 - INFO  - ==================================================
+
+2026-05-17 04:49:01,823 - INFO  - syntax Correct
+2026-05-17 04:49:10,757 - INFO  - Loop Invariant:
+2026-05-17 04:49:10,759 - INFO  - [True, True, True, True, True, True, True, True]
+2026-05-17 04:49:10,759 - INFO  - 
+2026-05-17 04:49:10,759 - INFO  - Assertion:
+2026-05-17 04:49:10,759 - INFO  - []
+2026-05-17 04:49:10,759 - INFO  - 
+2026-05-17 04:49:10,759 - INFO  - Assigns:
+2026-05-17 04:49:10,759 - INFO  - [True, True, True]
+2026-05-17 04:49:10,759 - INFO  - 
+2026-05-17 04:49:10,759 - INFO  - Post Condition:
+2026-05-17 04:49:10,759 - INFO  - [True, True, True]
+2026-05-17 04:49:10,759 - INFO  - 
+2026-05-17 04:49:10,760 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo40_c185
+2026-05-17 04:49:10,760 - INFO  - ==================================================
+2026-05-17 04:49:10,760 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo40_c185/20260517_043934_246417_9438ef3c/output/foo40_c185.c
+2026-05-17 04:49:10,762 - INFO  - Output file content:
+
+/*@ predicate nondecreasing{L}(int *a, integer n) =
+      \forall integer i,j; 0 <= i <= j < n ==> a[i] <= a[j];
+*/
+
+/*@
+  requires a_len > 0 && a_len < 100;
+  requires \valid_read(a + (0..a_len-1));
+  requires nondecreasing(a, a_len);
+  assigns \nothing;
+  ensures (0 <= \result < a_len ==> (a[\result] == x && (\result == 0 || a[\result - 1] != x)));
+  ensures \result == -1 || (0 <= \result < a_len);
+  ensures \result == -1 || a[\result] == x;
+*/
+int foo40_c185(int * a, int a_len, int x) {
+
+        int low = 0, high = a_len - 1;
+        
+        /*@
+          loop invariant x == \at(x,Pre);
+          loop invariant a_len == \at(a_len,Pre);
+          loop invariant a == \at(a,Pre);
+          loop invariant \valid_read(a + (0..a_len-1));
+          loop invariant nondecreasing(a, a_len);
+          loop invariant a_len > 0 && a_len < 100;
+          loop invariant -1 <= high < a_len;
+          loop invariant 0 <= low <= a_len;
+          loop assigns high, low;
+        */
+        while (low <= high) {
+            int mid = low + (high - low) / 2;
+            if (a[mid] == x) {
+                if (mid == 0 || a[mid - 1] != x) {
+                    return mid;
+                } else {
+                    high = mid - 1;
+                }
+            } else if (a[mid] < x) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+            
+        return -1;
+}
+
+2026-05-17 04:49:10,762 - INFO  - ==================================================
+2026-05-17 04:49:10,762 - INFO  - first_pass:
+2026-05-17 04:49:10,762 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 04:49:10,762 - INFO  - ==================================================
+2026-05-17 04:49:10,762 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 04:49:10,763 - INFO  - Total execution time: 575.78 seconds (9.60 minutes)
+2026-05-17 04:49:10,763 - INFO  - ==================================================
+2026-05-17 04:49:10,763 - INFO  - ==================================================
+2026-05-17 04:49:10,763 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 04:49:10,763 - INFO  - Total API calls: 19
+2026-05-17 04:49:10,763 - INFO  - Total prompt tokens (input): 237,732
+2026-05-17 04:49:10,763 - INFO  - Total completion tokens (output): 12,226
+2026-05-17 04:49:10,763 - INFO  - Total tokens: 249,958
+2026-05-17 04:49:10,763 - INFO  - Average prompt tokens per call: 12512.2
+2026-05-17 04:49:10,763 - INFO  - Average completion tokens per call: 643.5
+2026-05-17 04:49:10,763 - INFO  - Average total tokens per call: 13155.7
+2026-05-17 04:49:10,764 - INFO  - ==================================================

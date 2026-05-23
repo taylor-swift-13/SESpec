@@ -1,0 +1,826 @@
+2026-05-18 22:14:05,581 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659
+2026-05-18 22:14:05,581 - INFO  - 
+🚀 Starting generation of function: foo256
+2026-05-18 22:14:05,581 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 22:14:05,581 - INFO  - TRY TIME: 0
+2026-05-18 22:14:05,582 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 22:14:05,582 - INFO  - ==================================================
+
+2026-05-18 22:14:06,774 - INFO  - [auto only_loop] False — foo256 returns 'int'
+2026-05-18 22:14:06,775 - INFO  - Initial pending functions: ['foo256']
+2026-05-18 22:14:06,776 - INFO  - 
+GENERATE ANNOTATION FOR foo256
+2026-05-18 22:14:06,776 - INFO  - ==================================================
+
+2026-05-18 22:14:06,776 - INFO  - Function foo256 has been initialized
+2026-05-18 22:14:06,776 - INFO  - Starting to generate annotation code for foo256
+2026-05-18 22:14:06,853 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo256
+2026-05-18 22:14:06,853 - INFO  - ==================================================
+
+2026-05-18 22:14:06,978 - INFO  - Variable Maps:[{'top': 'args_len@pre - 1', 'ret': '0', 'Array': 'Array@pre', 'args_len': 'args_len@pre', 'args': 'args@pre'}]
+2026-05-18 22:14:06,979 - INFO  - Path conditions: ['args_len@pre > 0 && args_len@pre < 100']
+2026-05-18 22:14:06,979 - INFO  - Pre condition: args_len@pre > 0 && args_len@pre < 100 && (top == args_len@pre - 1) * (ret == 0) * (Array == Array@pre) * (args_len == args_len@pre) * (args == args@pre) * store_int_array(args@pre, args_len@pre, args_l)
+2026-05-18 22:14:06,979 - INFO  - Loop Condition: ret <= top
+2026-05-18 22:14:06,981 - INFO  - Array Names: ['args']
+2026-05-18 22:14:06,981 - INFO  - Updated Loop Conditions: ['0 <= args_len@pre - 1']
+2026-05-18 22:14:06,982 - INFO  - Global Unchanged Variables: ['Array', 'args_len', 'args']
+2026-05-18 22:14:06,983 - INFO  - Non Inductive Variables: ['ret', 'top']
+2026-05-18 22:14:06,983 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-18 22:14:06,987 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 22:14:06,993 - INFO  - examples category: array
+2026-05-18 22:14:06,993 - INFO  - examples:
+2026-05-18 22:14:06,993 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 22:14:21,738 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=14
+2026-05-18 22:14:21,739 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'i' (assigns) on line 39
+2026-05-18 22:14:21,986 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:14:33,500 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-18 22:14:33,501 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'i' (assigns) on line 36
+2026-05-18 22:14:33,701 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:14:47,293 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-18 22:14:47,293 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-18 22:14:47,294 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=14)
+2026-05-18 22:14:47,771 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:14:58,702 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-18 22:14:58,703 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'i' (assigns) on line 30
+2026-05-18 22:14:58,957 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:15:13,516 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-18 22:15:13,518 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'i' (assigns) on line 30
+2026-05-18 22:15:13,867 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:15:26,968 - INFO  - [inv-gen] refine 3/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-18 22:15:26,968 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-18 22:15:26,969 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=11)
+2026-05-18 22:15:27,490 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-18 22:15:33,148 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-18 22:15:33,149 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'i' (assigns) on line 28
+2026-05-18 22:15:33,468 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:15:47,614 - INFO  - [inv-gen] refine 2/3 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=7
+2026-05-18 22:15:47,614 - INFO  - [inv-gen] converged at refine 2
+2026-05-18 22:15:50,397 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-18 22:15:52,953 - INFO  - ACSL format loop invariant
+2026-05-18 22:15:52,954 - INFO  - /*@
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant ret <= top + 1;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant sorted(args, 0, \at(args_len,Pre));
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+2026-05-18 22:15:52,956 - INFO  - QCP format loop invariant
+2026-05-18 22:15:52,956 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (0 <= ret && ret <= args_len@pre) &&
+(-1 <= top && top <= args_len@pre - 1) &&
+(ret <= top + 1) &&
+(Array == Array@pre) &&
+(args_len == args_len@pre) &&
+(args == args@pre) &&
+(sorted(args, 0, args_len@pre)
+          loop assigns ret, top)
+    */
+    
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+2026-05-18 22:15:55,466 - INFO  - CORRECT INVARIANT
+2026-05-18 22:15:55,466 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo256
+2026-05-18 22:15:55,467 - INFO  - ==================================================
+
+2026-05-18 22:15:55,487 - INFO  - Starting to generate ACSL specification for foo256
+2026-05-18 22:16:17,350 - INFO  - syntax Correct
+2026-05-18 22:16:28,324 - INFO  - Loop Invariant:
+2026-05-18 22:16:28,324 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:16:28,324 - INFO  - 
+2026-05-18 22:16:28,325 - INFO  - Assertion:
+2026-05-18 22:16:28,325 - INFO  - []
+2026-05-18 22:16:28,325 - INFO  - 
+2026-05-18 22:16:28,325 - INFO  - Assigns:
+2026-05-18 22:16:28,325 - INFO  - [True, True, True]
+2026-05-18 22:16:28,325 - INFO  - 
+2026-05-18 22:16:28,325 - INFO  - Post Condition:
+2026-05-18 22:16:28,325 - INFO  - [False]
+2026-05-18 22:16:28,325 - INFO  - Post Condition: failures:
+2026-05-18 22:16:28,325 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c, line 13) in 'foo256':
+2026-05-18 22:16:28,326 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c at line: 13
+2026-05-18 22:16:28,326 - INFO  - Error line content: (\exists integer i; 0 <= i < \at(args_len,Pre) && \result == i && args[i] == Array)
+2026-05-18 22:16:28,326 - INFO  - 
+2026-05-18 22:16:28,326 - INFO  - 
+2026-05-18 22:16:28,326 - INFO  - Instance:
+2026-05-18 22:16:28,326 - INFO  - []
+2026-05-18 22:16:28,326 - INFO  - 
+2026-05-18 22:16:28,327 - INFO  - [spec-gen] refine 1/3 score=(syntax=True, satisfy=0.00, valid=0.91) clauses=5
+2026-05-18 22:16:28,327 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate sorted(int* a, integer lo, integer hi) =
+    \forall integer x,y; lo <= x <= y < hi ==> a[x] <= a[y];
+*/
+
+/*@
+  requires \valid(args + (0..\at(args_len,Pre)-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  requires sorted(args, 0, \at(args_len,Pre));
+  assigns \nothing;
+  ensures (\exists integer i [POSTCONDITION FAILED]; 0 <= i < \at(args_len,Pre) && \result == i && args[i] == Array)
+    ||
+    (0 <= \result && \result <= \at(args_len,Pre)
+     &&
+     (\forall integer k; 0 <= k < \result ==> args[k] < Array)
+     &&
+     (\forall integer k; \result <= k < \at(args_len,Pre) ==> args[k] > Array)
+    );
+*/
+int foo256(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant ret <= top + 1;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant sorted(args, 0, \at(args_len,Pre));
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:16:38,857 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate sorted(int* a, integer lo, integer hi) =
+    \forall integer x,y; lo <= x <= y < hi ==> a[x] <= a[y];
+*/
+
+/*@
+  requires \valid(args + (0..\at(args_len,Pre)-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  requires sorted(args, 0, \at(args_len,Pre));
+  assigns \nothing;
+  ensures (
+    (\exists integer i [POSTCONDITION FAILED]; 0 <= i < \at(args_len,Pre) && \result == i && \at(args[i],Pre) == Array)
+    ||
+    (0 <= \result && \result <= \at(args_len,Pre)
+     &&
+     (\forall integer k; 0 <= k < \result ==> \at(args[k],Pre) < Array)
+     &&
+     (\forall integer k; \result <= k < \at(args_len,Pre) ==> \at(args[k],Pre) > Array)
+    )
+  );
+*/
+int foo256(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= ret <= \at(args_len,Pre);
+          loop invariant -1 <= top <= \at(args_len,Pre) - 1;
+          loop invariant ret <= top + 1;
+          loop invariant Array == \at(Array,Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant sorted(args, 0, \at(args_len,Pre));
+          loop assigns ret, top;
+            */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:16:39,122 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c:13: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:16:39,123 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=5
+2026-05-18 22:16:39,124 - INFO  - [acsl-fixer] status-bracket: stripped '[POSTCONDITION FAILED]' on line 13
+2026-05-18 22:16:50,339 - INFO  - syntax Correct
+2026-05-18 22:17:01,218 - INFO  - Loop Invariant:
+2026-05-18 22:17:01,218 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:17:01,218 - INFO  - 
+2026-05-18 22:17:01,218 - INFO  - Assertion:
+2026-05-18 22:17:01,218 - INFO  - []
+2026-05-18 22:17:01,218 - INFO  - 
+2026-05-18 22:17:01,218 - INFO  - Assigns:
+2026-05-18 22:17:01,218 - INFO  - [True, True, True]
+2026-05-18 22:17:01,218 - INFO  - 
+2026-05-18 22:17:01,218 - INFO  - Post Condition:
+2026-05-18 22:17:01,218 - INFO  - [False]
+2026-05-18 22:17:01,219 - INFO  - Post Condition: failures:
+2026-05-18 22:17:01,219 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c, line 12) in 'foo256':
+2026-05-18 22:17:01,219 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c at line: 12
+2026-05-18 22:17:01,219 - INFO  - Error line content: ensures (
+2026-05-18 22:17:01,219 - INFO  - 
+2026-05-18 22:17:01,219 - INFO  - 
+2026-05-18 22:17:01,219 - INFO  - Instance:
+2026-05-18 22:17:01,219 - INFO  - []
+2026-05-18 22:17:01,219 - INFO  - 
+2026-05-18 22:17:01,219 - INFO  - [acsl-fixer] deterministic pass cleared syntax; skipping LLM repair
+2026-05-18 22:17:12,281 - INFO  - syntax Correct
+2026-05-18 22:17:23,640 - INFO  - Loop Invariant:
+2026-05-18 22:17:23,640 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:17:23,640 - INFO  - 
+2026-05-18 22:17:23,641 - INFO  - Assertion:
+2026-05-18 22:17:23,641 - INFO  - []
+2026-05-18 22:17:23,641 - INFO  - 
+2026-05-18 22:17:23,641 - INFO  - Assigns:
+2026-05-18 22:17:23,641 - INFO  - [True, True, True]
+2026-05-18 22:17:23,641 - INFO  - 
+2026-05-18 22:17:23,641 - INFO  - Post Condition:
+2026-05-18 22:17:23,641 - INFO  - [False]
+2026-05-18 22:17:23,641 - INFO  - Post Condition: failures:
+2026-05-18 22:17:23,641 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c, line 12) in 'foo256':
+2026-05-18 22:17:23,641 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c at line: 12
+2026-05-18 22:17:23,641 - INFO  - Error line content: ensures (
+2026-05-18 22:17:23,641 - INFO  - 
+2026-05-18 22:17:23,641 - INFO  - 
+2026-05-18 22:17:23,641 - INFO  - Instance:
+2026-05-18 22:17:23,641 - INFO  - []
+2026-05-18 22:17:23,642 - INFO  - 
+2026-05-18 22:17:23,642 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.91) clauses=5
+2026-05-18 22:17:23,642 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 22:17:23,643 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.9090909090909091), clauses=5)
+2026-05-18 22:17:34,552 - INFO  - syntax Correct
+2026-05-18 22:17:45,818 - INFO  - Loop Invariant:
+2026-05-18 22:17:45,818 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:17:45,818 - INFO  - 
+2026-05-18 22:17:45,818 - INFO  - Assertion:
+2026-05-18 22:17:45,818 - INFO  - []
+2026-05-18 22:17:45,819 - INFO  - 
+2026-05-18 22:17:45,819 - INFO  - Assigns:
+2026-05-18 22:17:45,819 - INFO  - [True, True, True]
+2026-05-18 22:17:45,819 - INFO  - 
+2026-05-18 22:17:45,819 - INFO  - Post Condition:
+2026-05-18 22:17:45,819 - INFO  - [False]
+2026-05-18 22:17:45,819 - INFO  - Post Condition: failures:
+2026-05-18 22:17:45,819 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c, line 13) in 'foo256':
+2026-05-18 22:17:45,820 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c at line: 13
+2026-05-18 22:17:45,820 - INFO  - Error line content: (\exists integer i; 0 <= i < \at(args_len,Pre) && \result == i && args[i] == Array)
+2026-05-18 22:17:45,820 - INFO  - 
+2026-05-18 22:17:45,820 - INFO  - 
+2026-05-18 22:17:45,820 - INFO  - Instance:
+2026-05-18 22:17:45,820 - INFO  - []
+2026-05-18 22:17:45,820 - INFO  - 
+2026-05-18 22:17:46,276 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c:12: Warning: 
+  unexpected token '||'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:17:46,278 - INFO  - 
+SPECIFICATION FOR foo256
+2026-05-18 22:17:46,278 - INFO  - ==================================================
+
+2026-05-18 22:17:46,278 - INFO  - 
+QCP Specification for function foo256:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+2026-05-18 22:17:46,521 - INFO  - 
+VERIFICATION FOR foo256
+2026-05-18 22:17:46,531 - INFO  - ==================================================
+
+2026-05-18 22:17:47,006 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c:12: Warning: 
+  unexpected token '||'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:18:01,466 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c:13: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:18:01,467 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=8
+2026-05-18 22:18:01,468 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:18:32,510 - INFO  - syntax Correct
+2026-05-18 22:18:43,789 - INFO  - Loop Invariant:
+2026-05-18 22:18:43,789 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:18:43,789 - INFO  - 
+2026-05-18 22:18:43,789 - INFO  - Assertion:
+2026-05-18 22:18:43,789 - INFO  - []
+2026-05-18 22:18:43,789 - INFO  - 
+2026-05-18 22:18:43,789 - INFO  - Assigns:
+2026-05-18 22:18:43,789 - INFO  - [True, True, True]
+2026-05-18 22:18:43,790 - INFO  - 
+2026-05-18 22:18:43,790 - INFO  - Post Condition:
+2026-05-18 22:18:43,790 - INFO  - [True, False, False]
+2026-05-18 22:18:43,790 - INFO  - Post Condition: failures:
+2026-05-18 22:18:43,790 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c, line 13) in 'foo256':
+2026-05-18 22:18:43,790 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c at line: 13
+2026-05-18 22:18:43,790 - INFO  - Error line content: ensures (\exists integer k; 0 <= k < \at(args_len, Pre) && \at(args[k], Pre) == Array) ==> (0 <= \result < \at(args_len, Pre) && \at(args[\result], Pre) == Array);
+2026-05-18 22:18:43,790 - INFO  - 
+2026-05-18 22:18:43,790 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c, line 14) in 'foo256':
+2026-05-18 22:18:43,790 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c at line: 14
+2026-05-18 22:18:43,790 - INFO  - Error line content: ensures (\forall integer j; 0 <= j < \result ==> \at(args[j], Pre) < Array)
+2026-05-18 22:18:43,791 - INFO  - 
+2026-05-18 22:18:43,791 - INFO  - 
+2026-05-18 22:18:43,791 - INFO  - Instance:
+2026-05-18 22:18:43,791 - INFO  - []
+2026-05-18 22:18:43,791 - INFO  - 
+2026-05-18 22:18:43,791 - INFO  - [spec-gen] refine 2/3 score=(syntax=True, satisfy=0.00, valid=0.85) clauses=7
+2026-05-18 22:18:43,791 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate sorted(int* a, integer lo, integer hi) =
+    \forall integer x,y; lo <= x <= y < hi ==> a[x] <= a[y];
+*/
+
+/*@
+  requires \valid(args + (0..\at(args_len,Pre)-1));
+  requires \at(args_len, Pre) > 0 && \at(args_len, Pre) < 100;
+  requires sorted(args, 0, \at(args_len, Pre));
+  assigns \nothing;
+  ensures 0 <= \result <= \at(args_len, Pre);
+  ensures (\exists integer k [POSTCONDITION FAILED]; 0 <= k < \at(args_len, Pre) && \at(args[k], Pre) == Array) ==> (0 <= \result < \at(args_len, Pre) && \at(args[\result], Pre) == Array);
+  ensures (\forall integer j [POSTCONDITION FAILED]; 0 <= j < \result ==> \at(args[j], Pre) < Array)
+       && (\forall integer j; \result <= j < \at(args_len, Pre) ==> \at(args[j], Pre) >= Array);
+*/
+int foo256(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret <= \at(args_len, Pre);
+          loop invariant -1 <= top <= \at(args_len, Pre) - 1;
+          loop invariant ret <= top + 1;
+          loop invariant Array == \at(Array, Pre);
+          loop invariant args_len == \at(args_len, Pre);
+          loop invariant args == \at(args, Pre);
+          loop invariant sorted(args, 0, \at(args_len, Pre));
+          loop assigns ret, top;
+        */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:19:03,179 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate sorted(int* a, integer lo, integer hi) =
+    \forall integer x,y; lo <= x <= y < hi ==> a[x] <= a[y];
+*/
+
+/*@
+  requires \valid(args + (0..\at(args_len, Pre)-1));
+  requires \at(args_len, Pre) > 0 && \at(args_len, Pre) < 100;
+  requires sorted(args, 0, \at(args_len, Pre));
+  assigns \nothing;
+  ensures 0 <= \result <= \at(args_len, Pre);
+  ensures (\exists integer k; 0 <= k < \at(args_len, Pre) && \at(args[k], Pre) == Array)
+          ==> (0 <= \result < \at(args_len, Pre) && \at(args[\result], Pre) == Array);
+  ensures ( (\forall integer k; 0 <= k < \at(args_len, Pre) ==> \at(args[k], Pre) != Array) )
+          ==> ( (\forall integer j; 0 <= j < \result ==> \at(args[j], Pre) < Array)
+               && (\forall integer j; \result <= j < \at(args_len, Pre) ==> \at(args[j], Pre) >= Array) );
+*/
+int foo256(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret <= \at(args_len, Pre);
+          loop invariant -1 <= top <= \at(args_len, Pre) - 1;
+          loop invariant ret <= top + 1;
+          loop invariant Array == \at(Array, Pre);
+          loop invariant args_len == \at(args_len, Pre);
+          loop invariant args == \at(args, Pre);
+          loop invariant sorted(args, 0, \at(args_len, Pre));
+          loop assigns ret, top;
+        */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:19:15,311 - INFO  - syntax Correct
+2026-05-18 22:19:26,197 - INFO  - Loop Invariant:
+2026-05-18 22:19:26,197 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:19:26,197 - INFO  - 
+2026-05-18 22:19:26,197 - INFO  - Assertion:
+2026-05-18 22:19:26,197 - INFO  - []
+2026-05-18 22:19:26,197 - INFO  - 
+2026-05-18 22:19:26,198 - INFO  - Assigns:
+2026-05-18 22:19:26,198 - INFO  - [True, True, True]
+2026-05-18 22:19:26,198 - INFO  - 
+2026-05-18 22:19:26,198 - INFO  - Post Condition:
+2026-05-18 22:19:26,198 - INFO  - [True, False, False]
+2026-05-18 22:19:26,199 - INFO  - Post Condition: failures:
+2026-05-18 22:19:26,199 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c, line 13) in 'foo256':
+2026-05-18 22:19:26,199 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c at line: 13
+2026-05-18 22:19:26,199 - INFO  - Error line content: ensures (\exists integer k; 0 <= k < \at(args_len, Pre) && \at(args[k], Pre) == Array)
+2026-05-18 22:19:26,199 - INFO  - 
+2026-05-18 22:19:26,199 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c, line 15) in 'foo256':
+2026-05-18 22:19:26,199 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c at line: 15
+2026-05-18 22:19:26,199 - INFO  - Error line content: ensures ( (\forall integer k; 0 <= k < \at(args_len, Pre) ==> \at(args[k], Pre) != Array) )
+2026-05-18 22:19:26,199 - INFO  - 
+2026-05-18 22:19:26,199 - INFO  - 
+2026-05-18 22:19:26,199 - INFO  - Instance:
+2026-05-18 22:19:26,199 - INFO  - []
+2026-05-18 22:19:26,199 - INFO  - 
+2026-05-18 22:19:26,199 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.85) clauses=7
+2026-05-18 22:19:26,199 - INFO  - postconditon before refine: 
+
+/*@ 
+  predicate sorted(int* a, integer lo, integer hi) =
+    \forall integer x,y; lo <= x <= y < hi ==> a[x] <= a[y];
+*/
+
+/*@
+  requires \valid(args + (0..\at(args_len, Pre)-1));
+  requires \at(args_len, Pre) > 0 && \at(args_len, Pre) < 100;
+  requires sorted(args, 0, \at(args_len, Pre));
+  assigns \nothing;
+  ensures 0 <= \result <= \at(args_len, Pre);
+  ensures (\exists integer k [POSTCONDITION FAILED]; 0 <= k < \at(args_len, Pre) && \at(args[k], Pre) == Array)
+          ==> (0 <= \result < \at(args_len, Pre) && \at(args[\result], Pre) == Array);
+  ensures ( (\forall integer k [POSTCONDITION FAILED]; 0 <= k < \at(args_len, Pre) ==> \at(args[k], Pre) != Array) )
+          ==> ( (\forall integer j; 0 <= j < \result ==> \at(args[j], Pre) < Array)
+               && (\forall integer j; \result <= j < \at(args_len, Pre) ==> \at(args[j], Pre) >= Array) );
+*/
+int foo256(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret <= \at(args_len, Pre);
+          loop invariant -1 <= top <= \at(args_len, Pre) - 1;
+          loop invariant ret <= top + 1;
+          loop invariant Array == \at(Array, Pre);
+          loop invariant args_len == \at(args_len, Pre);
+          loop invariant args == \at(args, Pre);
+          loop invariant sorted(args, 0, \at(args_len, Pre));
+          loop assigns ret, top;
+        */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:19:37,687 - INFO  - postconditon after refine: 
+
+/*@ 
+  predicate sorted(int* a, integer lo, integer hi) =
+    \forall integer x,y; lo <= x <= y < hi ==> a[x] <= a[y];
+*/
+
+/*@
+  requires \valid(args + (0..\at(args_len, Pre)-1));
+  requires \at(args_len, Pre) > 0 && \at(args_len, Pre) < 100;
+  requires sorted(args, 0, \at(args_len, Pre));
+  assigns \nothing;
+  ensures 0 <= \result <= \at(args_len, Pre);
+  ensures (\exists integer k; 0 <= k < \at(args_len, Pre) && \at(args[k], Pre) == Array)
+          ==> (0 <= \result < \at(args_len, Pre) && \at(args[\result], Pre) == Array);
+  ensures ( (\forall integer k; 0 <= k < \at(args_len, Pre) ==> \at(args[k], Pre) != Array) )
+          ==> ( (\forall integer j; 0 <= j < \result ==> \at(args[j], Pre) < Array)
+               && (\forall integer j; \result <= j < \at(args_len, Pre) ==> \at(args[j], Pre) >= Array) );
+*/
+int foo256(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret <= \at(args_len, Pre);
+          loop invariant -1 <= top <= \at(args_len, Pre) - 1;
+          loop invariant ret <= top + 1;
+          loop invariant Array == \at(Array, Pre);
+          loop invariant args_len == \at(args_len, Pre);
+          loop invariant args == \at(args, Pre);
+          loop invariant sorted(args, 0, \at(args_len, Pre));
+          loop assigns ret, top;
+        */
+            while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-18 22:19:37,692 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.8461538461538461), clauses=7)
+2026-05-18 22:19:49,805 - INFO  - syntax Correct
+2026-05-18 22:20:01,221 - INFO  - Loop Invariant:
+2026-05-18 22:20:01,221 - INFO  - [True, True, True, True, True, True, True]
+2026-05-18 22:20:01,221 - INFO  - 
+2026-05-18 22:20:01,221 - INFO  - Assertion:
+2026-05-18 22:20:01,221 - INFO  - []
+2026-05-18 22:20:01,221 - INFO  - 
+2026-05-18 22:20:01,221 - INFO  - Assigns:
+2026-05-18 22:20:01,221 - INFO  - [True, True, True]
+2026-05-18 22:20:01,221 - INFO  - 
+2026-05-18 22:20:01,222 - INFO  - Post Condition:
+2026-05-18 22:20:01,222 - INFO  - [True, False, False]
+2026-05-18 22:20:01,222 - INFO  - Post Condition: failures:
+2026-05-18 22:20:01,222 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c, line 13) in 'foo256':
+2026-05-18 22:20:01,222 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c at line: 13
+2026-05-18 22:20:01,222 - INFO  - Error line content: ensures (\exists integer k; 0 <= k < \at(args_len, Pre) && \at(args[k], Pre) == Array) ==> (0 <= \result < \at(args_len, Pre) && \at(args[\result], Pre) == Array);
+2026-05-18 22:20:01,222 - INFO  - 
+2026-05-18 22:20:01,222 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c, line 14) in 'foo256':
+2026-05-18 22:20:01,222 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c at line: 14
+2026-05-18 22:20:01,222 - INFO  - Error line content: ensures (\forall integer j; 0 <= j < \result ==> \at(args[j], Pre) < Array)
+2026-05-18 22:20:01,222 - INFO  - 
+2026-05-18 22:20:01,222 - INFO  - 
+2026-05-18 22:20:01,222 - INFO  - Instance:
+2026-05-18 22:20:01,222 - INFO  - []
+2026-05-18 22:20:01,222 - INFO  - 
+2026-05-18 22:20:01,515 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c:13: Warning: 
+  unexpected token '&&'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:20:01,779 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c:13: Warning: 
+  unexpected token '&&'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo256/20260518_221405_2969668_b2488659/output/foo256.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:20:01,779 - INFO  - first_pass:
+2026-05-18 22:20:01,779 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-18 22:20:01,779 - INFO  - ==================================================
+2026-05-18 22:20:01,779 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 22:20:01,779 - INFO  - Total execution time: 356.20 seconds (5.94 minutes)
+2026-05-18 22:20:01,780 - INFO  - ==================================================
+2026-05-18 22:20:01,780 - INFO  - ==================================================
+2026-05-18 22:20:01,780 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 22:20:01,780 - INFO  - Total API calls: 14
+2026-05-18 22:20:01,780 - INFO  - Total prompt tokens (input): 108,765
+2026-05-18 22:20:01,780 - INFO  - Total completion tokens (output): 11,226
+2026-05-18 22:20:01,780 - INFO  - Total tokens: 119,991
+2026-05-18 22:20:01,780 - INFO  - Average prompt tokens per call: 7768.9
+2026-05-18 22:20:01,780 - INFO  - Average completion tokens per call: 801.9
+2026-05-18 22:20:01,780 - INFO  - Average total tokens per call: 8570.8
+2026-05-18 22:20:01,780 - INFO  - ==================================================

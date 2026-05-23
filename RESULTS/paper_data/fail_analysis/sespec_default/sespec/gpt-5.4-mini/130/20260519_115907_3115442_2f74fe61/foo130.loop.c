@@ -1,0 +1,30 @@
+
+/*@
+  logic integer first_occurrence(int* array, integer len, integer search, integer i) =
+    i >= len ? -1 :
+    (array[i] == search ? i : first_occurrence(array, len, search, i + 1));
+*/
+
+int foo130(int search, int array[], int array_len) {
+
+      int location = -1;
+      int c;
+
+        /*@
+          loop invariant (location == -1) || (0 <= location < c);
+          loop invariant (location == -1) || (array[location] == search);
+          loop invariant (location == -1) || (\forall integer k; 0 <= k < c ==> array[k] != search);
+          loop assigns c, location;
+        */
+        for (c = 0; c < array_len; c++) {
+          if (array[c] == search) {
+	      location = c;
+              break;
+          }
+        }
+            
+       if (c == array_len) {
+            location = -1;
+       }
+     return location;
+}

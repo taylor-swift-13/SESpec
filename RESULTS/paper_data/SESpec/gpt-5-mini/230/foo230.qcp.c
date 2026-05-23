@@ -1,0 +1,56 @@
+#include "../verification_stdlib.h"
+    #include "../verification_list.h"
+    #include "../int_array_def.h"
+
+    /*@ Extern Coq (Result: Assertion) */
+    /*@ Extern Coq (Results: Z -> Assertion) */
+int foo230(int * pairs, int pairs_len, int array) 
+/*@
+With pairs_l
+Require store_int_array(pairs, pairs_len, pairs_l)
+Ensure Results(__return)
+*/{
+
+		int count = 0;
+		int total = pairs_len;
+	
+ 	/*@ Inv
+    exists  pairs_l,    
+    store_int_array(pairs, pairs_len, pairs_l) &&
+    (total == pairs_len@pre) &&
+    (0 <= count) &&
+    (array == array@pre) &&
+    (pairs_len == pairs_len@pre) &&
+    (pairs == pairs@pre) &&
+    (forall (p:Z), 0 <= p && p < pairs_len => 0 <= pairs_l[p] && pairs_l[p] <= 100)
+    */
+for (int index = 0; index < total - 1; index++) {
+
+        /*@
+          loop invariant 0 <= index && index <= total - 1;
+          loop invariant 0 <= count;
+          loop invariant total == \at(pairs_len,Pre);
+          loop invariant pairs_len == \at(pairs_len,Pre);
+          loop invariant pairs == \at(pairs,Pre);
+          loop invariant \forall integer p; 0 <= p < pairs_len ==> 0 <= pairs[p] <= 100;
+          loop assigns count;
+        */
+        /*@ Inv
+    exists  pairs_l,    
+    store_int_array(pairs, pairs_len, pairs_l) &&
+    (0 <= index && index <= total - 1) &&
+    (0 <= count) &&
+    (total == pairs_len@pre) &&
+    (pairs_len == pairs_len@pre) &&
+    (pairs == pairs@pre) &&
+    (forall (p:Z), 0 <= p && p < pairs_len => 0 <= pairs_l[p] && pairs_l[p] <= 100)
+    */
+for (int k = index + 1; k < total; k++) {
+            if (pairs[index] != pairs[k]) {
+                count++;
+            }
+        }
+
+    }
+		return count;
+}

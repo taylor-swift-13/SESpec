@@ -1,0 +1,1334 @@
+2026-05-17 21:21:11,264 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173
+2026-05-17 21:21:11,265 - INFO  - 
+🚀 Starting generation of function: foo191
+2026-05-17 21:21:11,265 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 21:21:11,265 - INFO  - TRY TIME: 0
+2026-05-17 21:21:11,265 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 21:21:11,265 - INFO  - ==================================================
+
+2026-05-17 21:21:12,160 - INFO  - [auto only_loop] False — foo191 returns 'int'
+2026-05-17 21:21:12,164 - INFO  - Initial pending functions: ['foo191', 'malloc']
+2026-05-17 21:21:12,164 - INFO  - Now processing function malloc
+
+2026-05-17 21:21:12,164 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-17 21:21:12,164 - INFO  - 
+GENERATE ANNOTATION FOR foo191
+2026-05-17 21:21:12,164 - INFO  - ==================================================
+
+2026-05-17 21:21:12,164 - INFO  - Function foo191 has been initialized
+2026-05-17 21:21:12,164 - INFO  - Starting to generate annotation code for foo191
+2026-05-17 21:21:12,392 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo191
+2026-05-17 21:21:12,395 - INFO  - ==================================================
+
+2026-05-17 21:21:12,597 - INFO  - Variable Maps:[{}]
+2026-05-17 21:21:12,603 - INFO  - Path conditions: [None]
+2026-05-17 21:21:12,603 - INFO  - Pre condition: 
+2026-05-17 21:21:12,604 - INFO  - Loop Condition: w <= count
+2026-05-17 21:21:12,605 - INFO  - Array Names: ['C', 'W']
+2026-05-17 21:21:12,605 - INFO  - Updated Loop Conditions: ['w <= count']
+2026-05-17 21:21:12,605 - INFO  - Global Unchanged Variables: []
+2026-05-17 21:21:12,605 - INFO  - Non Inductive Variables: []
+2026-05-17 21:21:12,605 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 21:21:12,612 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 21:21:12,618 - INFO  - examples category: array
+2026-05-17 21:21:12,619 - INFO  - examples:
+2026-05-17 21:21:12,619 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 21:21:22,849 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:21:22,860 - INFO  - [acsl-fixer] )-drop: removed line 32: loop invariant (!(w <= count)) ==> ();
+2026-05-17 21:21:23,952 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:21:28,224 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:21:28,226 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:21:32,519 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:21:32,519 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:21:33,433 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:21:33,434 - INFO  - [acsl-fixer] )-drop: removed line 32: loop invariant (!(w <= count)) ==> ();
+2026-05-17 21:21:34,363 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:21:39,568 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:21:39,569 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:21:40,304 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:21:40,305 - INFO  - [acsl-fixer] )-drop: removed line 32: loop invariant (!(w <= count)) ==> ();
+2026-05-17 21:21:41,224 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:21:45,320 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:21:45,320 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:21:46,194 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:21:46,196 - INFO  - [acsl-fixer] )-drop: removed line 32: loop invariant (!(w <= count)) ==> ();
+2026-05-17 21:21:47,054 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:21:51,435 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:21:51,435 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-17 21:21:52,102 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:21:52,104 - INFO  - [acsl-fixer] )-drop: removed line 32: loop invariant (!(w <= count)) ==> ();
+2026-05-17 21:21:52,994 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:21:55,523 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=6)
+2026-05-17 21:21:57,362 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:21:58,210 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:21:58,212 - INFO  - [acsl-fixer] )-drop: removed line 32: loop invariant (!(w <= count)) ==> ();
+2026-05-17 21:21:59,252 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:22:02,670 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:22:02,671 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:22:07,776 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 21:22:07,776 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:22:08,901 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:22:08,902 - INFO  - [acsl-fixer] )-drop: removed line 32: loop invariant (!(w <= count)) ==> ();
+2026-05-17 21:22:10,076 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:22:14,913 - INFO  - [inv-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:22:14,913 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:22:16,112 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:22:16,114 - INFO  - [acsl-fixer] )-drop: removed line 32: loop invariant (!(w <= count)) ==> ();
+2026-05-17 21:22:17,382 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:22:22,549 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:22:22,549 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:22:23,483 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:22:23,484 - INFO  - [acsl-fixer] )-drop: removed line 32: loop invariant (!(w <= count)) ==> ();
+2026-05-17 21:22:24,456 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:22:29,216 - INFO  - [inv-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 21:22:29,216 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 21:22:30,105 - INFO  - [inv-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 21:22:30,107 - INFO  - [acsl-fixer] )-drop: removed line 32: loop invariant (!(w <= count)) ==> ();
+2026-05-17 21:22:30,964 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 21:22:35,055 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=7)
+2026-05-17 21:22:36,961 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:22:37,937 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:22:37,938 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:22:42,161 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:22:42,163 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:22:47,387 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 21:22:47,388 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:22:52,480 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:22:52,481 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:23:29,745 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:23:37,044 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:23:37,045 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 21:23:41,752 - INFO  - [inv-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:23:41,753 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=19)
+2026-05-17 21:24:18,241 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:24:55,406 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:24:55,407 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=19)
+2026-05-17 21:25:29,754 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:25:34,917 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.0), clauses=3)
+2026-05-17 21:27:04,466 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:True | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 21:27:33,290 - INFO  - ACSL format loop invariant
+2026-05-17 21:27:33,290 - INFO  - /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+2026-05-17 21:27:33,312 - INFO  - QCP format loop invariant
+2026-05-17 21:27:33,312 - INFO  - /*@ Inv
+    (loop assigns w, W_l[0..count], C_l[0..count])
+    */
+    
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+2026-05-17 21:28:02,428 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo191
+2026-05-17 21:28:02,439 - INFO  - ==================================================
+
+2026-05-17 21:28:02,501 - INFO  - Starting to generate ACSL specification for foo191
+2026-05-17 21:28:49,323 - INFO  - syntax Correct
+2026-05-17 21:29:25,696 - INFO  - Loop Invariant:
+2026-05-17 21:29:25,697 - INFO  - []
+2026-05-17 21:29:25,697 - INFO  - 
+2026-05-17 21:29:25,698 - INFO  - Assertion:
+2026-05-17 21:29:25,698 - INFO  - []
+2026-05-17 21:29:25,698 - INFO  - 
+2026-05-17 21:29:25,698 - INFO  - Assigns:
+2026-05-17 21:29:25,698 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:29:25,699 - INFO  - 
+2026-05-17 21:29:25,699 - INFO  - Post Condition:
+2026-05-17 21:29:25,699 - INFO  - [False]
+2026-05-17 21:29:25,700 - INFO  - 
+2026-05-17 21:29:25,702 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.29, satisfy=0.00) clauses=3
+2026-05-17 21:29:25,708 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires count >= 1;
+  assigns \nothing;
+  ensures \result == 1 [POSTCONDITION FAILED];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:29:28,607 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires count >= 1;
+  assigns \nothing;
+  ensures \result == W[count];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:29:29,636 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c:7: Warning: 
+  unbound logic variable W. Ignoring logic specification of function foo191
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:29:29,637 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-17 21:30:14,223 - INFO  - syntax Correct
+2026-05-17 21:30:48,488 - INFO  - Loop Invariant:
+2026-05-17 21:30:48,489 - INFO  - []
+2026-05-17 21:30:48,489 - INFO  - 
+2026-05-17 21:30:48,490 - INFO  - Assertion:
+2026-05-17 21:30:48,490 - INFO  - []
+2026-05-17 21:30:48,490 - INFO  - 
+2026-05-17 21:30:48,490 - INFO  - Assigns:
+2026-05-17 21:30:48,490 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:30:48,490 - INFO  - 
+2026-05-17 21:30:48,490 - INFO  - Post Condition:
+2026-05-17 21:30:48,490 - INFO  - []
+2026-05-17 21:30:48,490 - INFO  - 
+2026-05-17 21:30:48,490 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.31, satisfy=0.00) clauses=2
+2026-05-17 21:30:48,490 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires count >= 1;
+  assigns \nothing;
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:30:52,338 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires count >= 1;
+  assigns W[0..count], C[0..count];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:30:53,464 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c:6: Warning: 
+  unbound logic variable W. Ignoring logic specification of function foo191
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:30:53,465 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 21:31:12,194 - INFO  - syntax Correct
+2026-05-17 21:31:24,962 - INFO  - Loop Invariant:
+2026-05-17 21:31:24,962 - INFO  - []
+2026-05-17 21:31:24,962 - INFO  - 
+2026-05-17 21:31:24,963 - INFO  - Assertion:
+2026-05-17 21:31:24,963 - INFO  - []
+2026-05-17 21:31:24,963 - INFO  - 
+2026-05-17 21:31:24,963 - INFO  - Assigns:
+2026-05-17 21:31:24,963 - INFO  - []
+2026-05-17 21:31:24,963 - INFO  - 
+2026-05-17 21:31:24,963 - INFO  - Post Condition:
+2026-05-17 21:31:24,963 - INFO  - []
+2026-05-17 21:31:24,963 - INFO  - 
+2026-05-17 21:31:24,964 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=1
+2026-05-17 21:31:24,964 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 21:32:05,236 - INFO  - syntax Correct
+2026-05-17 21:32:39,840 - INFO  - Loop Invariant:
+2026-05-17 21:32:39,842 - INFO  - []
+2026-05-17 21:32:39,842 - INFO  - 
+2026-05-17 21:32:39,842 - INFO  - Assertion:
+2026-05-17 21:32:39,842 - INFO  - []
+2026-05-17 21:32:39,842 - INFO  - 
+2026-05-17 21:32:39,842 - INFO  - Assigns:
+2026-05-17 21:32:39,842 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:32:39,842 - INFO  - 
+2026-05-17 21:32:39,854 - INFO  - Post Condition:
+2026-05-17 21:32:39,859 - INFO  - []
+2026-05-17 21:32:39,860 - INFO  - 
+2026-05-17 21:32:39,860 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.31, satisfy=0.00) clauses=2
+2026-05-17 21:32:39,860 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires count >= 1;
+  assigns \nothing;
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:32:43,851 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires count >= 1;
+  assigns W[0..count], C[0..count];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:32:45,168 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c:6: Warning: 
+  unbound logic variable W. Ignoring logic specification of function foo191
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:32:45,169 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 21:32:45,169 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 21:33:28,533 - INFO  - syntax Correct
+2026-05-17 21:34:40,298 - INFO  - Loop Invariant:
+2026-05-17 21:34:40,299 - INFO  - []
+2026-05-17 21:34:40,299 - INFO  - 
+2026-05-17 21:34:40,299 - INFO  - Assertion:
+2026-05-17 21:34:40,299 - INFO  - []
+2026-05-17 21:34:40,299 - INFO  - 
+2026-05-17 21:34:40,299 - INFO  - Assigns:
+2026-05-17 21:34:40,299 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:34:40,299 - INFO  - 
+2026-05-17 21:34:40,299 - INFO  - Post Condition:
+2026-05-17 21:34:40,299 - INFO  - []
+2026-05-17 21:34:40,299 - INFO  - 
+2026-05-17 21:34:40,300 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.31, satisfy=0.00) clauses=2
+2026-05-17 21:34:40,300 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires count >= 1;
+  assigns \nothing;
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:34:45,799 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires count >= 1;
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:35:12,096 - INFO  - syntax Correct
+2026-05-17 21:35:27,008 - INFO  - Loop Invariant:
+2026-05-17 21:35:27,010 - INFO  - []
+2026-05-17 21:35:27,010 - INFO  - 
+2026-05-17 21:35:27,010 - INFO  - Assertion:
+2026-05-17 21:35:27,010 - INFO  - []
+2026-05-17 21:35:27,010 - INFO  - 
+2026-05-17 21:35:27,010 - INFO  - Assigns:
+2026-05-17 21:35:27,010 - INFO  - []
+2026-05-17 21:35:27,010 - INFO  - 
+2026-05-17 21:35:27,010 - INFO  - Post Condition:
+2026-05-17 21:35:27,010 - INFO  - []
+2026-05-17 21:35:27,010 - INFO  - 
+2026-05-17 21:35:27,043 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=1
+2026-05-17 21:35:27,044 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 21:36:10,257 - INFO  - syntax Correct
+2026-05-17 21:36:44,535 - INFO  - Loop Invariant:
+2026-05-17 21:36:44,535 - INFO  - []
+2026-05-17 21:36:44,535 - INFO  - 
+2026-05-17 21:36:44,535 - INFO  - Assertion:
+2026-05-17 21:36:44,535 - INFO  - []
+2026-05-17 21:36:44,535 - INFO  - 
+2026-05-17 21:36:44,536 - INFO  - Assigns:
+2026-05-17 21:36:44,536 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:36:44,536 - INFO  - 
+2026-05-17 21:36:44,536 - INFO  - Post Condition:
+2026-05-17 21:36:44,537 - INFO  - []
+2026-05-17 21:36:44,537 - INFO  - 
+2026-05-17 21:36:44,539 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.31, satisfy=0.00) clauses=2
+2026-05-17 21:36:44,540 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires count >= 1;
+  assigns \nothing;
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:36:49,164 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires count >= 1;
+  assigns \nothing;
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:36:49,165 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.3076923076923077, 0.0), clauses=2)
+2026-05-17 21:37:31,173 - INFO  - syntax Correct
+2026-05-17 21:38:05,628 - INFO  - Loop Invariant:
+2026-05-17 21:38:05,629 - INFO  - []
+2026-05-17 21:38:05,629 - INFO  - 
+2026-05-17 21:38:05,629 - INFO  - Assertion:
+2026-05-17 21:38:05,629 - INFO  - []
+2026-05-17 21:38:05,629 - INFO  - 
+2026-05-17 21:38:05,629 - INFO  - Assigns:
+2026-05-17 21:38:05,629 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:38:05,631 - INFO  - 
+2026-05-17 21:38:05,631 - INFO  - Post Condition:
+2026-05-17 21:38:05,631 - INFO  - []
+2026-05-17 21:38:05,631 - INFO  - 
+2026-05-17 21:38:05,641 - INFO  - 
+SPECIFICATION FOR foo191
+2026-05-17 21:38:05,642 - INFO  - ==================================================
+
+2026-05-17 21:38:05,642 - INFO  - 
+QCP Specification for function foo191:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 21:38:10,462 - INFO  - 
+VERIFICATION FOR foo191
+2026-05-17 21:38:10,463 - INFO  - ==================================================
+
+2026-05-17 21:38:51,179 - INFO  - syntax Correct
+2026-05-17 21:39:24,877 - INFO  - Loop Invariant:
+2026-05-17 21:39:24,879 - INFO  - []
+2026-05-17 21:39:24,879 - INFO  - 
+2026-05-17 21:39:24,879 - INFO  - Assertion:
+2026-05-17 21:39:24,879 - INFO  - []
+2026-05-17 21:39:24,879 - INFO  - 
+2026-05-17 21:39:24,879 - INFO  - Assigns:
+2026-05-17 21:39:24,879 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:39:24,879 - INFO  - 
+2026-05-17 21:39:24,879 - INFO  - Post Condition:
+2026-05-17 21:39:24,879 - INFO  - []
+2026-05-17 21:39:24,879 - INFO  - 
+2026-05-17 21:40:10,201 - INFO  - syntax Correct
+2026-05-17 21:40:45,209 - INFO  - Loop Invariant:
+2026-05-17 21:40:45,209 - INFO  - []
+2026-05-17 21:40:45,209 - INFO  - 
+2026-05-17 21:40:45,209 - INFO  - Assertion:
+2026-05-17 21:40:45,209 - INFO  - []
+2026-05-17 21:40:45,209 - INFO  - 
+2026-05-17 21:40:45,210 - INFO  - Assigns:
+2026-05-17 21:40:45,210 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:40:45,210 - INFO  - 
+2026-05-17 21:40:45,210 - INFO  - Post Condition:
+2026-05-17 21:40:45,210 - INFO  - [False]
+2026-05-17 21:40:45,210 - INFO  - 
+2026-05-17 21:40:45,210 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.29, satisfy=0.00) clauses=2
+2026-05-17 21:40:45,210 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 [POSTCONDITION FAILED];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:41:18,374 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns W[0..count], C[0..count];
+  ensures \result >= 0;
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:41:19,744 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c:5: Warning: 
+  unbound logic variable W. Ignoring logic specification of function foo191
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:41:19,744 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 21:42:05,331 - INFO  - syntax Correct
+2026-05-17 21:42:41,472 - INFO  - Loop Invariant:
+2026-05-17 21:42:41,473 - INFO  - []
+2026-05-17 21:42:41,473 - INFO  - 
+2026-05-17 21:42:41,473 - INFO  - Assertion:
+2026-05-17 21:42:41,473 - INFO  - []
+2026-05-17 21:42:41,473 - INFO  - 
+2026-05-17 21:42:41,473 - INFO  - Assigns:
+2026-05-17 21:42:41,473 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:42:41,473 - INFO  - 
+2026-05-17 21:42:41,474 - INFO  - Post Condition:
+2026-05-17 21:42:41,474 - INFO  - [False]
+2026-05-17 21:42:41,474 - INFO  - 
+2026-05-17 21:42:41,475 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.29, satisfy=0.00) clauses=2
+2026-05-17 21:42:41,475 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:43:23,153 - INFO  - syntax Correct
+2026-05-17 21:43:57,488 - INFO  - Loop Invariant:
+2026-05-17 21:43:57,488 - INFO  - []
+2026-05-17 21:43:57,488 - INFO  - 
+2026-05-17 21:43:57,488 - INFO  - Assertion:
+2026-05-17 21:43:57,488 - INFO  - []
+2026-05-17 21:43:57,488 - INFO  - 
+2026-05-17 21:43:57,489 - INFO  - Assigns:
+2026-05-17 21:43:57,489 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:43:57,489 - INFO  - 
+2026-05-17 21:43:57,489 - INFO  - Post Condition:
+2026-05-17 21:43:57,489 - INFO  - [False]
+2026-05-17 21:43:57,489 - INFO  - 
+2026-05-17 21:43:57,489 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.29, satisfy=0.00) clauses=2
+2026-05-17 21:43:57,490 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 [POSTCONDITION FAILED];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:44:13,848 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 [POSTCONDITION FAILED];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:44:14,780 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c:6: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:44:14,781 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 21:44:14,781 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:44:57,238 - INFO  - syntax Correct
+2026-05-17 21:45:32,343 - INFO  - Loop Invariant:
+2026-05-17 21:45:32,344 - INFO  - []
+2026-05-17 21:45:32,344 - INFO  - 
+2026-05-17 21:45:32,344 - INFO  - Assertion:
+2026-05-17 21:45:32,344 - INFO  - []
+2026-05-17 21:45:32,344 - INFO  - 
+2026-05-17 21:45:32,344 - INFO  - Assigns:
+2026-05-17 21:45:32,344 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:45:32,344 - INFO  - 
+2026-05-17 21:45:32,344 - INFO  - Post Condition:
+2026-05-17 21:45:32,345 - INFO  - [False]
+2026-05-17 21:45:32,345 - INFO  - 
+2026-05-17 21:45:32,345 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.29, satisfy=0.00) clauses=2
+2026-05-17 21:45:32,345 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 [POSTCONDITION FAILED];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:45:48,789 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 [POSTCONDITION FAILED];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:45:49,364 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c:6: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:45:49,364 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 21:45:49,364 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:46:30,220 - INFO  - syntax Correct
+2026-05-17 21:47:03,459 - INFO  - Loop Invariant:
+2026-05-17 21:47:03,460 - INFO  - []
+2026-05-17 21:47:03,460 - INFO  - 
+2026-05-17 21:47:03,460 - INFO  - Assertion:
+2026-05-17 21:47:03,460 - INFO  - []
+2026-05-17 21:47:03,460 - INFO  - 
+2026-05-17 21:47:03,460 - INFO  - Assigns:
+2026-05-17 21:47:03,460 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:47:03,460 - INFO  - 
+2026-05-17 21:47:03,461 - INFO  - Post Condition:
+2026-05-17 21:47:03,461 - INFO  - [False]
+2026-05-17 21:47:03,461 - INFO  - 
+2026-05-17 21:47:03,461 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.29, satisfy=0.00) clauses=2
+2026-05-17 21:47:03,462 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 [POSTCONDITION FAILED];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:47:07,024 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns \nothing;
+  ensures \result == W[count];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:47:07,865 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c:6: Warning: 
+  unbound logic variable W. Ignoring logic specification of function foo191
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo191/20260517_212111_1140519_133e6173/output/foo191.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 21:47:07,867 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 21:47:07,867 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 21:47:49,249 - INFO  - syntax Correct
+2026-05-17 21:48:22,912 - INFO  - Loop Invariant:
+2026-05-17 21:48:22,913 - INFO  - []
+2026-05-17 21:48:22,913 - INFO  - 
+2026-05-17 21:48:22,913 - INFO  - Assertion:
+2026-05-17 21:48:22,913 - INFO  - []
+2026-05-17 21:48:22,913 - INFO  - 
+2026-05-17 21:48:22,913 - INFO  - Assigns:
+2026-05-17 21:48:22,913 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:48:22,913 - INFO  - 
+2026-05-17 21:48:22,914 - INFO  - Post Condition:
+2026-05-17 21:48:22,914 - INFO  - [False]
+2026-05-17 21:48:22,914 - INFO  - 
+2026-05-17 21:48:22,914 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.29, satisfy=0.00) clauses=2
+2026-05-17 21:48:22,919 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns \nothing;
+  ensures \result == 1 [POSTCONDITION FAILED];
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:48:25,828 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns *W, *C;
+  ensures \result == 1;
+*/
+int foo191(int count) {
+
+		int *W = (int *)malloc(sizeof(int) * (count + 1));
+int W_len = count + 1;
+		int *C = (int *)malloc(sizeof(int) * (count + 1));
+int C_len = count + 1;
+		W[0] = 1;
+		W[1] = 0;
+		C[0] = 0;
+		C[1] = 1;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop assigns w, W[0..count], C[0..count];
+            */
+            for (int w = 2; w <= count; w++) {
+			W[w] = W[w - 2]
+					+ 2 * C[w - 1];
+			C[w] = W[w - 1] + C[w - 2];
+		}
+            
+		return W[count];
+}
+
+2026-05-17 21:48:25,829 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.2857142857142857, 0.0), clauses=2)
+2026-05-17 21:49:07,279 - INFO  - syntax Correct
+2026-05-17 21:49:40,316 - INFO  - Loop Invariant:
+2026-05-17 21:49:40,318 - INFO  - []
+2026-05-17 21:49:40,318 - INFO  - 
+2026-05-17 21:49:40,318 - INFO  - Assertion:
+2026-05-17 21:49:40,318 - INFO  - []
+2026-05-17 21:49:40,318 - INFO  - 
+2026-05-17 21:49:40,318 - INFO  - Assigns:
+2026-05-17 21:49:40,318 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:49:40,319 - INFO  - 
+2026-05-17 21:49:40,319 - INFO  - Post Condition:
+2026-05-17 21:49:40,319 - INFO  - [False]
+2026-05-17 21:49:40,319 - INFO  - 
+2026-05-17 21:50:21,168 - INFO  - syntax Correct
+2026-05-17 21:50:54,137 - INFO  - Loop Invariant:
+2026-05-17 21:50:54,137 - INFO  - []
+2026-05-17 21:50:54,137 - INFO  - 
+2026-05-17 21:50:54,138 - INFO  - Assertion:
+2026-05-17 21:50:54,138 - INFO  - []
+2026-05-17 21:50:54,138 - INFO  - 
+2026-05-17 21:50:54,138 - INFO  - Assigns:
+2026-05-17 21:50:54,138 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:50:54,138 - INFO  - 
+2026-05-17 21:50:54,138 - INFO  - Post Condition:
+2026-05-17 21:50:54,138 - INFO  - []
+2026-05-17 21:50:54,138 - INFO  - 
+2026-05-17 21:51:35,183 - INFO  - syntax Correct
+2026-05-17 21:52:07,418 - INFO  - Loop Invariant:
+2026-05-17 21:52:07,419 - INFO  - []
+2026-05-17 21:52:07,419 - INFO  - 
+2026-05-17 21:52:07,419 - INFO  - Assertion:
+2026-05-17 21:52:07,419 - INFO  - []
+2026-05-17 21:52:07,419 - INFO  - 
+2026-05-17 21:52:07,420 - INFO  - Assigns:
+2026-05-17 21:52:07,420 - INFO  - [False, True, False, False, True, False, True, False, False, False, False, False, True]
+2026-05-17 21:52:07,420 - INFO  - 
+2026-05-17 21:52:07,420 - INFO  - Post Condition:
+2026-05-17 21:52:07,420 - INFO  - []
+2026-05-17 21:52:07,420 - INFO  - 
+2026-05-17 21:52:07,423 - INFO  - first_pass:
+2026-05-17 21:52:07,424 - INFO  - syntax=1, valid=None,satisfy=None
+2026-05-17 21:52:07,424 - INFO  - ==================================================
+2026-05-17 21:52:07,424 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 21:52:07,424 - INFO  - Total execution time: 1856.16 seconds (30.94 minutes)
+2026-05-17 21:52:07,424 - INFO  - ==================================================
+2026-05-17 21:52:07,425 - INFO  - ==================================================
+2026-05-17 21:52:07,425 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 21:52:07,425 - INFO  - Total API calls: 36
+2026-05-17 21:52:07,425 - INFO  - Total prompt tokens (input): 497,878
+2026-05-17 21:52:07,425 - INFO  - Total completion tokens (output): 18,058
+2026-05-17 21:52:07,425 - INFO  - Total tokens: 515,936
+2026-05-17 21:52:07,426 - INFO  - Average prompt tokens per call: 13829.9
+2026-05-17 21:52:07,426 - INFO  - Average completion tokens per call: 501.6
+2026-05-17 21:52:07,426 - INFO  - Average total tokens per call: 14331.6
+2026-05-17 21:52:07,426 - INFO  - ==================================================

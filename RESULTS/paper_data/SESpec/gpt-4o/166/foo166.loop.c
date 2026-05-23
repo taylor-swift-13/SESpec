@@ -1,0 +1,55 @@
+
+#include <stddef.h> // Include the header to define NULL
+
+/*@
+  // Predicate to check if a number is even
+  predicate is_even(integer x) = (x % 2 == 0);
+*/
+
+/*@
+  requires \valid(&a[0] + (0..a_len-1));
+  requires \forall integer i; 0 <= i < a_len ==> 0 <= a[i] <= 100;
+  requires a_len >= 0; // Strengthen precondition to ensure a_len is non-negative
+*/
+int foo166(int * a, int a_len, int n) {
+
+    if (a == NULL) {
+        return -1;
+    }
+    if (a_len == 1) {
+        return 0;
+    }
+
+    int evenPairCount = 0;
+
+    /*@
+      loop invariant 0 <= i && i <= a_len; // Weakened invariant to ensure establishment
+      loop invariant evenPairCount >= 0;
+      loop invariant \forall integer k, l; 0 <= k < l < i ==> 
+                     (is_even(a[k] ^ a[l]) ==> evenPairCount >= 0);
+      loop invariant \forall integer k; 0 <= k < a_len ==> a[k] == \at(a[k], Pre);
+      loop assigns i, evenPairCount;
+    */
+    for (int i = 0; i < a_len; i++) {
+
+        /*@
+          loop invariant i + 1 <= j <= a_len;
+          loop invariant evenPairCount >= 0;
+          loop invariant \forall integer k, l; 0 <= k < l < i || 
+                         (k == i && i + 1 <= l < j) ==> 
+                         (is_even(a[k] ^ a[l]) ==> evenPairCount >= 0);
+          loop invariant \forall integer k; 0 <= k < a_len ==> a[k] == \at(a[k], Pre);
+          loop assigns j, evenPairCount;
+        */
+        for (int j = i + 1; j < a_len; j++) {
+            int x = a[i];
+            int y = a[j];
+            int v = x ^ y;
+            if ((v & 1) == 0) {
+                evenPairCount++;
+            }
+        }
+    }
+
+    return evenPairCount;
+}

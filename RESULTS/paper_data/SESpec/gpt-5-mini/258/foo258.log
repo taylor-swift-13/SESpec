@@ -1,0 +1,1075 @@
+2026-05-18 22:14:27,062 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171
+2026-05-18 22:14:27,063 - INFO  - 
+🚀 Starting generation of function: foo258
+2026-05-18 22:14:27,063 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 22:14:27,063 - INFO  - TRY TIME: 0
+2026-05-18 22:14:27,063 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 22:14:27,063 - INFO  - ==================================================
+
+2026-05-18 22:14:27,927 - INFO  - [auto only_loop] False — foo258 returns 'int'
+2026-05-18 22:14:27,928 - INFO  - Initial pending functions: ['foo258']
+2026-05-18 22:14:27,928 - INFO  - 
+GENERATE ANNOTATION FOR foo258
+2026-05-18 22:14:27,928 - INFO  - ==================================================
+
+2026-05-18 22:14:27,928 - INFO  - Function foo258 has been initialized
+2026-05-18 22:14:27,928 - INFO  - Starting to generate annotation code for foo258
+2026-05-18 22:14:27,966 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo258
+2026-05-18 22:14:27,966 - INFO  - ==================================================
+
+2026-05-18 22:14:28,025 - INFO  - Variable Maps:[{'stop': 'array@pre - 1', 'ret': '0', 'array': 'array@pre', 'i_len': 'i_len@pre', 'i': 'i@pre'}]
+2026-05-18 22:14:28,025 - INFO  - Path conditions: ['i_len@pre > 0 && i_len@pre < 100']
+2026-05-18 22:14:28,025 - INFO  - Pre condition: i_len@pre > 0 && i_len@pre < 100 && (stop == array@pre - 1) * (ret == 0) * (array == array@pre) * (i_len == i_len@pre) * (i == i@pre) * store_int_array(i@pre, i_len@pre, i_l)
+2026-05-18 22:14:28,025 - INFO  - Loop Condition: ret <= stop
+2026-05-18 22:14:28,026 - INFO  - Array Names: ['i']
+2026-05-18 22:14:28,027 - INFO  - Updated Loop Conditions: ['0 <= array@pre - 1']
+2026-05-18 22:14:28,028 - INFO  - Global Unchanged Variables: ['array', 'i_len', 'i']
+2026-05-18 22:14:28,028 - INFO  - Non Inductive Variables: ['ret', 'stop']
+2026-05-18 22:14:28,028 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-18 22:14:28,030 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 22:14:28,033 - INFO  - examples category: array
+2026-05-18 22:14:28,033 - INFO  - examples:
+2026-05-18 22:14:28,033 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 22:14:40,506 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=10
+2026-05-18 22:14:40,507 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:14:51,555 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=10
+2026-05-18 22:14:51,557 - INFO  - [acsl-fixer] unbound-name: dropped cited clause referencing 'cur' (assigns) on line 36
+2026-05-18 22:14:51,870 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-18 22:15:47,248 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.60, satisfy=0.00) clauses=10
+2026-05-18 22:16:13,989 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6, 0.0), clauses=10)
+2026-05-18 22:17:21,662 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-18 22:17:23,262 - INFO  - ACSL format loop invariant
+2026-05-18 22:17:23,262 - INFO  - /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+2026-05-18 22:17:23,263 - INFO  - QCP format loop invariant
+2026-05-18 22:17:23,263 - INFO  - /*@ Inv
+    exists  i_l,    
+    store_int_array(i, i_len, i_l) && i_len > 0 && i_len < 100 &&
+    ((0 <= array@pre - 1) => (ret >= 0 && stop <= array@pre - 1)) &&
+((!(0 <= array@pre - 1)) => ((stop == array@pre - 1)&&(ret == 0)&&(array == array@pre)&&(i_len == i_len@pre)&&(i == i@pre))) &&
+(array == array@pre) &&
+(i_len == i_len@pre) &&
+(i == i@pre)
+    */
+    
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+2026-05-18 22:17:24,938 - INFO  - CORRECT INVARIANT
+2026-05-18 22:17:24,939 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo258
+2026-05-18 22:17:24,939 - INFO  - ==================================================
+
+2026-05-18 22:17:24,962 - INFO  - Starting to generate ACSL specification for foo258
+2026-05-18 22:26:27,972 - INFO  - syntax Correct
+2026-05-18 22:26:41,048 - INFO  - Loop Invariant:
+2026-05-18 22:26:41,049 - INFO  - [True, True, True, True, True]
+2026-05-18 22:26:41,049 - INFO  - 
+2026-05-18 22:26:41,049 - INFO  - Assertion:
+2026-05-18 22:26:41,049 - INFO  - []
+2026-05-18 22:26:41,049 - INFO  - 
+2026-05-18 22:26:41,049 - INFO  - Assigns:
+2026-05-18 22:26:41,049 - INFO  - [False, True, True]
+2026-05-18 22:26:41,049 - INFO  - Assigns: failures:
+2026-05-18 22:26:41,049 - INFO  - Goal Assigns nothing in 'foo258' (1/3):
+2026-05-18 22:26:41,049 - INFO  - 
+2026-05-18 22:26:41,049 - INFO  - 
+2026-05-18 22:26:41,050 - INFO  - Post Condition:
+2026-05-18 22:26:41,050 - INFO  - [True, False]
+2026-05-18 22:26:41,050 - INFO  - Post Condition: failures:
+2026-05-18 22:26:41,050 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 26) in 'foo258':
+2026-05-18 22:26:41,050 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 26
+2026-05-18 22:26:41,050 - INFO  - Error line content: ensures (\result == -1) ==> (\forall integer k; 0 <= k && k < array ==> i[k] != k);
+2026-05-18 22:26:41,050 - INFO  - 
+2026-05-18 22:26:41,050 - INFO  - 
+2026-05-18 22:26:41,050 - INFO  - Instance:
+2026-05-18 22:26:41,050 - INFO  - []
+2026-05-18 22:26:41,050 - INFO  - 
+2026-05-18 22:26:41,051 - INFO  - [spec-gen] refine 1/3 score=(syntax=True, satisfy=0.00, valid=0.80) clauses=7
+2026-05-18 22:26:41,052 - INFO  - postconditon before refine: 
+
+/* The loop performs a binary search for an index cur such that i[cur] == cur.
+   The invariants below capture that the search interval is always within
+   the original bounds and that if a solution has been found it must be the
+   one returned. I added a simple logic predicate to express that all inspected
+   indices outside the current search interval do not satisfy i[k]==k, which
+   helps relate ret/stop with the existence of a fixed point inside the
+   current interval. */
+
+/*@
+  logic integer lo_pre(integer a) = a - 1;
+*/
+
+/*@
+  predicate no_fixed_outside(int *i, integer lo, integer hi) =
+    \forall integer k; k < lo || k > hi ==> i[k] != k;
+*/
+
+/*@
+  requires \valid(&i[0] + (0..i_len-1));
+  requires \forall integer j; 0 <= j < i_len ==> 0 <= i[j] <= 100;
+  requires i_len > 0;
+  requires i_len < 100;
+  assigns \nothing;
+  ensures (\result != -1) ==> (0 <= \result && \result < array && i[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer k [POSTCONDITION FAILED]; 0 <= k && k < array ==> i[k] != k);
+*/
+int foo258(int * i, int i_len, int array) {
+
+		int ret = 0;
+		int stop = array - 1;
+		
+            
+        /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+            
+		return -1;
+}
+
+2026-05-18 22:26:58,605 - INFO  - postconditon after refine: 
+
+/* The loop performs a binary search for an index cur such that i[cur] == cur.
+   The invariants below capture that the search interval is always within
+   the original bounds and that if a solution has been found it must be the
+   one returned. I added a simple logic predicate to express that all inspected
+   indices outside the current search interval do not satisfy i[k]==k, which
+   helps relate ret/stop with the existence of a fixed point inside the
+   current interval. */
+
+/*@
+  logic integer lo_pre(integer a) = a - 1;
+*/
+
+/*@
+  predicate no_fixed_outside(int *i, integer lo, integer hi) =
+    \forall integer k; k < lo || k > hi ==> i[k] != k;
+*/
+
+/*@
+  requires \valid(&i[0] + (0..i_len-1));
+  requires \forall integer j; 0 <= j < i_len ==> 0 <= i[j] <= 100;
+  requires i_len > 0;
+  requires i_len < 100;
+  requires array == i_len;
+  assigns \nothing;
+  ensures (\result != -1) ==> (0 <= \result && \result < array && i[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer k; 0 <= k && k < i_len ==> i[k] != k);
+*/
+int foo258(int * i, int i_len, int array) {
+
+		int ret = 0;
+		int stop = array - 1;
+		
+            
+        /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+            
+		return -1;
+}
+
+2026-05-18 22:27:13,160 - INFO  - syntax Correct
+2026-05-18 22:27:25,720 - INFO  - Loop Invariant:
+2026-05-18 22:27:25,721 - INFO  - [True, True, True, True, True]
+2026-05-18 22:27:25,721 - INFO  - 
+2026-05-18 22:27:25,721 - INFO  - Assertion:
+2026-05-18 22:27:25,721 - INFO  - []
+2026-05-18 22:27:25,721 - INFO  - 
+2026-05-18 22:27:25,721 - INFO  - Assigns:
+2026-05-18 22:27:25,721 - INFO  - [False, True, True]
+2026-05-18 22:27:25,721 - INFO  - Assigns: failures:
+2026-05-18 22:27:25,721 - INFO  - Goal Assigns nothing in 'foo258' (1/3):
+2026-05-18 22:27:25,721 - INFO  - 
+2026-05-18 22:27:25,721 - INFO  - 
+2026-05-18 22:27:25,721 - INFO  - Post Condition:
+2026-05-18 22:27:25,722 - INFO  - [True, False]
+2026-05-18 22:27:25,722 - INFO  - Post Condition: failures:
+2026-05-18 22:27:25,722 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 27) in 'foo258':
+2026-05-18 22:27:25,722 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 27
+2026-05-18 22:27:25,722 - INFO  - Error line content: ensures (\result == -1) ==> (\forall integer k; 0 <= k && k < i_len ==> i[k] != k);
+2026-05-18 22:27:25,722 - INFO  - 
+2026-05-18 22:27:25,722 - INFO  - 
+2026-05-18 22:27:25,722 - INFO  - Instance:
+2026-05-18 22:27:25,722 - INFO  - []
+2026-05-18 22:27:25,722 - INFO  - 
+2026-05-18 22:27:25,722 - INFO  - [spec-gen] refine 2/3 score=(syntax=True, satisfy=0.00, valid=0.80) clauses=8
+2026-05-18 22:27:25,722 - INFO  - postconditon before refine: 
+
+/* The loop performs a binary search for an index cur such that i[cur] == cur.
+   The invariants below capture that the search interval is always within
+   the original bounds and that if a solution has been found it must be the
+   one returned. I added a simple logic predicate to express that all inspected
+   indices outside the current search interval do not satisfy i[k]==k, which
+   helps relate ret/stop with the existence of a fixed point inside the
+   current interval. */
+
+/*@
+  logic integer lo_pre(integer a) = a - 1;
+*/
+
+/*@
+  predicate no_fixed_outside(int *i, integer lo, integer hi) =
+    \forall integer k; k < lo || k > hi ==> i[k] != k;
+*/
+
+/*@
+  requires \valid(&i[0] + (0..i_len-1));
+  requires \forall integer j; 0 <= j < i_len ==> 0 <= i[j] <= 100;
+  requires i_len > 0;
+  requires i_len < 100;
+  requires array == i_len;
+  assigns \nothing;
+  ensures (\result != -1) ==> (0 <= \result && \result < array && i[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer k [POSTCONDITION FAILED]; 0 <= k && k < i_len ==> i[k] != k);
+*/
+int foo258(int * i, int i_len, int array) {
+
+		int ret = 0;
+		int stop = array - 1;
+		
+            
+        /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+            
+		return -1;
+}
+
+2026-05-18 22:27:37,442 - INFO  - postconditon after refine: 
+
+/* The loop performs a binary search for an index cur such that i[cur] == cur.
+   The invariants below capture that the search interval is always within
+   the original bounds and that if a solution has been found it must be the
+   one returned. I added a simple logic predicate to express that all inspected
+   indices outside the current search interval do not satisfy i[k]==k, which
+   helps relate ret/stop with the existence of a fixed point inside the
+   current interval. */
+
+/*@
+  logic integer lo_pre(integer a) = a - 1;
+*/
+
+/*@
+  predicate no_fixed_outside(int *i, integer lo, integer hi) =
+    \forall integer k; k < lo || k > hi ==> i[k] != k;
+*/
+
+/*@
+  requires \valid(&i[0] + (0..i_len-1));
+  requires \forall integer j; 0 <= j < i_len ==> 0 <= i[j] <= 100;
+  requires i_len > 0;
+  requires i_len < 100;
+  requires array == i_len;
+  assigns \nothing;
+  ensures (\result != -1) ==> (0 <= \result && \result < array && i[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer k; 0 <= k && k < i_len ==> i[k] != k);
+*/
+int foo258(int * i, int i_len, int array) {
+
+		int ret = 0;
+		int stop = array - 1;
+		
+            
+        /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+            
+		return -1;
+}
+
+2026-05-18 22:27:51,500 - INFO  - syntax Correct
+2026-05-18 22:28:03,925 - INFO  - Loop Invariant:
+2026-05-18 22:28:03,925 - INFO  - [True, True, True, True, True]
+2026-05-18 22:28:03,925 - INFO  - 
+2026-05-18 22:28:03,925 - INFO  - Assertion:
+2026-05-18 22:28:03,925 - INFO  - []
+2026-05-18 22:28:03,925 - INFO  - 
+2026-05-18 22:28:03,925 - INFO  - Assigns:
+2026-05-18 22:28:03,925 - INFO  - [False, True, True]
+2026-05-18 22:28:03,925 - INFO  - Assigns: failures:
+2026-05-18 22:28:03,926 - INFO  - Goal Assigns nothing in 'foo258' (1/3):
+2026-05-18 22:28:03,926 - INFO  - 
+2026-05-18 22:28:03,926 - INFO  - 
+2026-05-18 22:28:03,926 - INFO  - Post Condition:
+2026-05-18 22:28:03,926 - INFO  - [True, False]
+2026-05-18 22:28:03,926 - INFO  - Post Condition: failures:
+2026-05-18 22:28:03,926 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 27) in 'foo258':
+2026-05-18 22:28:03,926 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 27
+2026-05-18 22:28:03,926 - INFO  - Error line content: ensures (\result == -1) ==> (\forall integer k; 0 <= k && k < i_len ==> i[k] != k);
+2026-05-18 22:28:03,926 - INFO  - 
+2026-05-18 22:28:03,926 - INFO  - 
+2026-05-18 22:28:03,926 - INFO  - Instance:
+2026-05-18 22:28:03,926 - INFO  - []
+2026-05-18 22:28:03,926 - INFO  - 
+2026-05-18 22:28:03,927 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.80) clauses=8
+2026-05-18 22:28:03,927 - INFO  - postconditon before refine: 
+
+/* The loop performs a binary search for an index cur such that i[cur] == cur.
+   The invariants below capture that the search interval is always within
+   the original bounds and that if a solution has been found it must be the
+   one returned. I added a simple logic predicate to express that all inspected
+   indices outside the current search interval do not satisfy i[k]==k, which
+   helps relate ret/stop with the existence of a fixed point inside the
+   current interval. */
+
+/*@
+  logic integer lo_pre(integer a) = a - 1;
+*/
+
+/*@
+  predicate no_fixed_outside(int *i, integer lo, integer hi) =
+    \forall integer k; k < lo || k > hi ==> i[k] != k;
+*/
+
+/*@
+  requires \valid(&i[0] + (0..i_len-1));
+  requires \forall integer j; 0 <= j < i_len ==> 0 <= i[j] <= 100;
+  requires i_len > 0;
+  requires i_len < 100;
+  requires array == i_len;
+  assigns \nothing;
+  ensures (\result != -1) ==> (0 <= \result && \result < array && i[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer k [POSTCONDITION FAILED]; 0 <= k && k < i_len ==> i[k] != k);
+*/
+int foo258(int * i, int i_len, int array) {
+
+		int ret = 0;
+		int stop = array - 1;
+		
+            
+        /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+            
+		return -1;
+}
+
+2026-05-18 22:28:18,412 - INFO  - postconditon after refine: 
+
+/* The loop performs a binary search for an index cur such that i[cur] == cur.
+   The invariants below capture that the search interval is always within
+   the original bounds and that if a solution has been found it must be the
+   one returned. I added a simple logic predicate to express that all inspected
+   indices outside the current search interval do not satisfy i[k]==k, which
+   helps relate ret/stop with the existence of a fixed point inside the
+   current interval. */
+
+/*@
+  logic integer lo_pre(integer a) = a - 1;
+*/
+
+/*@
+  predicate no_fixed_outside(int *i, integer lo, integer hi) =
+    \forall integer k; k < lo || k > hi ==> i[k] != k;
+*/
+
+/*@
+  requires \valid(&i[0] + (0..i_len-1));
+  requires \forall integer j; 0 <= j < i_len ==> 0 <= i[j] <= 100;
+  requires i_len > 0;
+  requires i_len < 100;
+  requires array == i_len;
+  assigns \nothing;
+  ensures (\result != -1) ==> (0 <= \result && \result < array && i[\result] == \result);
+  ensures (\result == -1) ==> (\forall integer k; 0 <= k && k < i_len ==> i[k] != k);
+*/
+int foo258(int * i, int i_len, int array) {
+
+		int ret = 0;
+		int stop = array - 1;
+		
+            
+        /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+            
+		return -1;
+}
+
+2026-05-18 22:28:18,414 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.8), clauses=8)
+2026-05-18 22:28:31,696 - INFO  - syntax Correct
+2026-05-18 22:28:45,235 - INFO  - Loop Invariant:
+2026-05-18 22:28:45,236 - INFO  - [True, True, True, True, True]
+2026-05-18 22:28:45,236 - INFO  - 
+2026-05-18 22:28:45,236 - INFO  - Assertion:
+2026-05-18 22:28:45,236 - INFO  - []
+2026-05-18 22:28:45,236 - INFO  - 
+2026-05-18 22:28:45,236 - INFO  - Assigns:
+2026-05-18 22:28:45,239 - INFO  - [False, True, True]
+2026-05-18 22:28:45,240 - INFO  - Assigns: failures:
+2026-05-18 22:28:45,240 - INFO  - Goal Assigns nothing in 'foo258' (1/3):
+2026-05-18 22:28:45,240 - INFO  - 
+2026-05-18 22:28:45,240 - INFO  - 
+2026-05-18 22:28:45,240 - INFO  - Post Condition:
+2026-05-18 22:28:45,240 - INFO  - [True, False]
+2026-05-18 22:28:45,240 - INFO  - Post Condition: failures:
+2026-05-18 22:28:45,240 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 27) in 'foo258':
+2026-05-18 22:28:45,240 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 27
+2026-05-18 22:28:45,240 - INFO  - Error line content: ensures (\result == -1) ==> (\forall integer k; 0 <= k && k < i_len ==> i[k] != k);
+2026-05-18 22:28:45,240 - INFO  - 
+2026-05-18 22:28:45,240 - INFO  - 
+2026-05-18 22:28:45,240 - INFO  - Instance:
+2026-05-18 22:28:45,240 - INFO  - []
+2026-05-18 22:28:45,240 - INFO  - 
+2026-05-18 22:28:59,152 - INFO  - syntax Correct
+2026-05-18 22:29:11,453 - INFO  - Loop Invariant:
+2026-05-18 22:29:11,453 - INFO  - [True, True, True, True, True]
+2026-05-18 22:29:11,453 - INFO  - 
+2026-05-18 22:29:11,453 - INFO  - Assertion:
+2026-05-18 22:29:11,453 - INFO  - []
+2026-05-18 22:29:11,453 - INFO  - 
+2026-05-18 22:29:11,454 - INFO  - Assigns:
+2026-05-18 22:29:11,454 - INFO  - [False, True, True]
+2026-05-18 22:29:11,454 - INFO  - Assigns: failures:
+2026-05-18 22:29:11,454 - INFO  - Goal Assigns nothing in 'foo258' (1/3):
+2026-05-18 22:29:11,454 - INFO  - 
+2026-05-18 22:29:11,454 - INFO  - 
+2026-05-18 22:29:11,454 - INFO  - Post Condition:
+2026-05-18 22:29:11,454 - INFO  - [True]
+2026-05-18 22:29:11,454 - INFO  - 
+2026-05-18 22:29:11,454 - INFO  - Instance:
+2026-05-18 22:29:11,454 - INFO  - []
+2026-05-18 22:29:11,454 - INFO  - 
+2026-05-18 22:29:11,457 - INFO  - 
+SPECIFICATION FOR foo258
+2026-05-18 22:29:11,457 - INFO  - ==================================================
+
+2026-05-18 22:29:11,457 - INFO  - 
+QCP Specification for function foo258:
+/*@
+With i_l
+Require store_int_array(i, i_len, i_l) && i_len > 0 && i_len < 100
+Ensure Results(__return)
+*/
+2026-05-18 22:29:11,918 - INFO  - 
+VERIFICATION FOR foo258
+2026-05-18 22:29:11,924 - INFO  - ==================================================
+
+2026-05-18 22:29:27,193 - INFO  - syntax Correct
+2026-05-18 22:29:40,285 - INFO  - Loop Invariant:
+2026-05-18 22:29:40,285 - INFO  - [True, True, True, True, True]
+2026-05-18 22:29:40,285 - INFO  - 
+2026-05-18 22:29:40,285 - INFO  - Assertion:
+2026-05-18 22:29:40,285 - INFO  - []
+2026-05-18 22:29:40,285 - INFO  - 
+2026-05-18 22:29:40,285 - INFO  - Assigns:
+2026-05-18 22:29:40,285 - INFO  - [False, True, True]
+2026-05-18 22:29:40,285 - INFO  - Assigns: failures:
+2026-05-18 22:29:40,285 - INFO  - Goal Assigns nothing in 'foo258' (1/3):
+2026-05-18 22:29:40,286 - INFO  - 
+2026-05-18 22:29:40,286 - INFO  - 
+2026-05-18 22:29:40,286 - INFO  - Post Condition:
+2026-05-18 22:29:40,286 - INFO  - [True]
+2026-05-18 22:29:40,286 - INFO  - 
+2026-05-18 22:29:40,286 - INFO  - Instance:
+2026-05-18 22:29:40,286 - INFO  - []
+2026-05-18 22:29:40,286 - INFO  - 
+2026-05-18 22:39:47,591 - INFO  - syntax Correct
+2026-05-18 22:39:59,683 - INFO  - Loop Invariant:
+2026-05-18 22:39:59,684 - INFO  - [True, True, True, True, True]
+2026-05-18 22:39:59,684 - INFO  - 
+2026-05-18 22:39:59,684 - INFO  - Assertion:
+2026-05-18 22:39:59,684 - INFO  - []
+2026-05-18 22:39:59,684 - INFO  - 
+2026-05-18 22:39:59,684 - INFO  - Assigns:
+2026-05-18 22:39:59,685 - INFO  - [False, True, True]
+2026-05-18 22:39:59,685 - INFO  - Assigns: failures:
+2026-05-18 22:39:59,685 - INFO  - Goal Assigns nothing in 'foo258' (1/3):
+2026-05-18 22:39:59,685 - INFO  - 
+2026-05-18 22:39:59,685 - INFO  - 
+2026-05-18 22:39:59,685 - INFO  - Post Condition:
+2026-05-18 22:39:59,685 - INFO  - [False, False, False]
+2026-05-18 22:39:59,685 - INFO  - Post Condition: failures:
+2026-05-18 22:39:59,685 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 25) in 'foo258':
+2026-05-18 22:39:59,685 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 25
+2026-05-18 22:39:59,686 - INFO  - Error line content: ensures (\exists integer idx; 0 <= idx < i_len && i[idx] == idx) ==> (\result >= 0 && 0 <= \result < i_len && i[\result] == \result);
+2026-05-18 22:39:59,686 - INFO  - 
+2026-05-18 22:39:59,686 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 26) in 'foo258':
+2026-05-18 22:39:59,686 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 26
+2026-05-18 22:39:59,686 - INFO  - Error line content: ensures (\forall integer idx; 0 <= idx < i_len ==> i[idx] != idx) ==> \result == -1;
+2026-05-18 22:39:59,686 - INFO  - 
+2026-05-18 22:39:59,686 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 27) in 'foo258':
+2026-05-18 22:39:59,686 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 27
+2026-05-18 22:39:59,686 - INFO  - Error line content: ensures !(\result == -1) ==> (\exists integer k; 0 <= k < i_len && i[k] == k && k == \result);
+2026-05-18 22:39:59,686 - INFO  - 
+2026-05-18 22:39:59,686 - INFO  - 
+2026-05-18 22:39:59,686 - INFO  - Instance:
+2026-05-18 22:39:59,690 - INFO  - []
+2026-05-18 22:39:59,691 - INFO  - 
+2026-05-18 22:39:59,691 - INFO  - [spec-gen] refine 1/3 score=(syntax=True, satisfy=0.00, valid=0.64) clauses=8
+2026-05-18 22:39:59,691 - INFO  - postconditon before refine: 
+
+/* The loop performs a binary search for an index cur such that i[cur] == cur.
+   The invariants below capture that the search interval is always within
+   the original bounds and that if a solution has been found it must be the
+   one returned. I added a simple logic predicate to express that all inspected
+   indices outside the current search interval do not satisfy i[k]==k, which
+   helps relate ret/stop with the existence of a fixed point inside the
+   current interval. */
+
+/*@
+  logic integer lo_pre(integer a) = a - 1;
+*/
+
+/*@
+  predicate no_fixed_outside(int *i, integer lo, integer hi) =
+    \forall integer k; k < lo || k > hi ==> i[k] != k;
+*/
+
+/*@
+  requires \valid(&i[0] + (0..i_len-1));
+  requires \forall integer j; 0 <= j < i_len ==> 0 <= i[j] <= 100;
+  requires i_len > 0;
+  requires i_len < 100;
+  assigns \nothing;
+  ensures (\exists integer idx [POSTCONDITION FAILED]; 0 <= idx < i_len && i[idx] == idx) ==> (\result >= 0 && 0 <= \result < i_len && i[\result] == \result);
+  ensures (\forall integer idx [POSTCONDITION FAILED]; 0 <= idx < i_len ==> i[idx] != idx) ==> \result == -1;
+  ensures !(\result == -1) ==> (\exists integer k [POSTCONDITION FAILED]; 0 <= k < i_len && i[k] == k && k == \result);
+*/
+int foo258(int * i, int i_len, int array) {
+
+		int ret = 0;
+		int stop = array - 1;
+		
+            
+        /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+            
+		return -1;
+}
+
+2026-05-18 22:40:10,642 - INFO  - postconditon after refine: 
+
+/* The loop performs a binary search for an index cur such that i[cur] == cur.
+   The invariants below capture that the search interval is always within
+   the original bounds and that if a solution has been found it must be the
+   one returned. I added a simple logic predicate to express that all inspected
+   indices outside the current search interval do not satisfy i[k]==k, which
+   helps relate ret/stop with the existence of a fixed point inside the
+   current interval. */
+
+/*@
+  logic integer lo_pre(integer a) = a - 1;
+*/
+
+/*@
+  predicate no_fixed_outside(int *i, integer lo, integer hi) =
+    \forall integer k; k < lo || k > hi ==> i[k] != k;
+*/
+
+/* If the function returns an index it points to a fixed point inside bounds.
+     If it returns -1 then no index in the whole array is a fixed point. */
+  ensures !(\result == -1) ==> (0 <= \result && \result < i_len && i[\result] == \result);
+  ensures \result == -1 ==> (\forall integer idx; 0 <= idx < i_len ==> i[idx] != idx);
+*/
+int foo258(int * i, int i_len, int array) {
+
+		int ret = 0;
+		int stop = array - 1;
+		
+            
+        /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+            
+		return -1;
+}
+
+2026-05-18 22:40:11,045 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c:21: 
+  syntax error:
+  Location: line 21, between columns 10 and 11, before or at token: !
+  19    /* If the function returns an index it points to a fixed point inside bounds.
+  20         If it returns -1 then no index in the whole array is a fixed point. */
+  21      ensures !(\result == -1) ==> (0 <= \result && \result < i_len && i[\result] == \result);
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  22      ensures \result == -1 ==> (\forall integer idx; 0 <= idx < i_len ==> i[idx] != idx);
+  23    */
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:40:11,046 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=2
+2026-05-18 22:40:11,047 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:40:32,788 - INFO  - syntax Correct
+2026-05-18 22:40:43,896 - INFO  - Loop Invariant:
+2026-05-18 22:40:43,897 - INFO  - [True, True, True, True, True]
+2026-05-18 22:40:43,897 - INFO  - 
+2026-05-18 22:40:43,897 - INFO  - Assertion:
+2026-05-18 22:40:43,897 - INFO  - []
+2026-05-18 22:40:43,897 - INFO  - 
+2026-05-18 22:40:43,897 - INFO  - Assigns:
+2026-05-18 22:40:43,897 - INFO  - []
+2026-05-18 22:40:43,897 - INFO  - 
+2026-05-18 22:40:43,897 - INFO  - Post Condition:
+2026-05-18 22:40:43,897 - INFO  - [False, False]
+2026-05-18 22:40:43,897 - INFO  - Post Condition: failures:
+2026-05-18 22:40:43,897 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 20) in 'foo258':
+2026-05-18 22:40:43,897 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 20
+2026-05-18 22:40:43,897 - INFO  - Error line content: ensures !(\result == -1) ==> (0 <= \result && \result < i_len && i[\result] == \result);
+2026-05-18 22:40:43,897 - INFO  - 
+2026-05-18 22:40:43,898 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 21) in 'foo258':
+2026-05-18 22:40:43,898 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 21
+2026-05-18 22:40:43,898 - INFO  - Error line content: ensures \result == -1 ==> (\forall integer idx; 0 <= idx < i_len ==> i[idx] != idx);
+2026-05-18 22:40:43,898 - INFO  - 
+2026-05-18 22:40:43,898 - INFO  - 
+2026-05-18 22:40:43,898 - INFO  - Instance:
+2026-05-18 22:40:43,898 - INFO  - []
+2026-05-18 22:40:43,898 - INFO  - 
+2026-05-18 22:40:43,898 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.71) clauses=2
+2026-05-18 22:40:43,899 - INFO  - postconditon before refine: 
+
+/* The loop performs a binary search for an index cur such that i[cur] == cur.
+   The invariants below capture that the search interval is always within
+   the original bounds and that if a solution has been found it must be the
+   one returned. I added a simple logic predicate to express that all inspected
+   indices outside the current search interval do not satisfy i[k]==k, which
+   helps relate ret/stop with the existence of a fixed point inside the
+   current interval. */
+
+/*@
+  logic integer lo_pre(integer a) = a - 1;
+*/
+
+/*@
+  predicate no_fixed_outside(int *i, integer lo, integer hi) =
+    \forall integer k; k < lo || k > hi ==> i[k] != k;
+*/
+
+/*@
+  ensures !(\result == -1) ==> (0 <= \result && \result < i_len && i[\result] == \result) [POSTCONDITION FAILED];
+  ensures \result == -1 ==> (\forall integer idx [POSTCONDITION FAILED]; 0 <= idx < i_len ==> i[idx] != idx);
+*/
+int foo258(int * i, int i_len, int array) {
+
+		int ret = 0;
+		int stop = array - 1;
+		
+            
+        /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+            
+		return -1;
+}
+
+2026-05-18 22:40:55,403 - INFO  - postconditon after refine: 
+
+/* The loop performs a binary search for an index cur such that i[cur] == cur.
+   The invariants below capture that the search interval is always within
+   the original bounds and that if a solution has been found it must be the
+   one returned. I added a simple logic predicate to express that all inspected
+   indices outside the current search interval do not satisfy i[k]==k, which
+   helps relate ret/stop with the existence of a fixed point inside the
+   current interval. */
+
+/*@
+  logic integer lo_pre(integer a) = a - 1;
+*/
+
+/*@
+  predicate no_fixed_outside(int *i, integer lo, integer hi) =
+    \forall integer k; k < lo || k > hi ==> i[k] != k;
+*/
+
+/* If the function returns an index it points to a fixed point inside bounds.
+     If it returns -1 then no index in the searched interval [0 .. array-1]
+     is a fixed point (the function only searches that interval). */
+  ensures !(\result == -1) ==> (0 <= \result && \result < i_len && i[\result] == \result);
+  ensures \result == -1 ==> (\forall integer idx; 0 <= idx < array ==> i[idx] != idx);
+*/
+int foo258(int * i, int i_len, int array) {
+
+		int ret = 0;
+		int stop = array - 1;
+		
+            
+        /*@
+          loop invariant (0 <= \at(array,Pre) - 1) ==> (ret >= 0 && stop <= \at(array,Pre) - 1);
+          loop invariant (!(0 <= \at(array,Pre) - 1)) ==> ((stop == \at(array,Pre) - 1)&&(ret == 0)&&(array == \at(array,Pre))&&(i_len == \at(i_len,Pre))&&(i == \at(i,Pre)));
+          loop invariant array == \at(array,Pre);
+          loop invariant i_len == \at(i_len,Pre);
+          loop invariant i == \at(i,Pre);
+        */
+            while (ret <= stop) {
+			int cur = ret + (stop - ret) / 2;
+			if (i[cur] == cur) {
+				return cur;
+			} else if (i[cur] < cur) {
+				ret = cur + 1;
+			} else {
+				stop = cur - 1;
+			}
+		}
+            
+		return -1;
+}
+
+2026-05-18 22:40:55,412 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.7142857142857143), clauses=2)
+2026-05-18 22:41:09,283 - INFO  - syntax Correct
+2026-05-18 22:41:20,467 - INFO  - Loop Invariant:
+2026-05-18 22:41:20,468 - INFO  - [True, True, True, True, True]
+2026-05-18 22:41:20,468 - INFO  - 
+2026-05-18 22:41:20,468 - INFO  - Assertion:
+2026-05-18 22:41:20,468 - INFO  - []
+2026-05-18 22:41:20,468 - INFO  - 
+2026-05-18 22:41:20,468 - INFO  - Assigns:
+2026-05-18 22:41:20,468 - INFO  - []
+2026-05-18 22:41:20,468 - INFO  - 
+2026-05-18 22:41:20,469 - INFO  - Post Condition:
+2026-05-18 22:41:20,469 - INFO  - [False, False]
+2026-05-18 22:41:20,469 - INFO  - Post Condition: failures:
+2026-05-18 22:41:20,469 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 20) in 'foo258':
+2026-05-18 22:41:20,469 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 20
+2026-05-18 22:41:20,469 - INFO  - Error line content: ensures !(\result == -1) ==> (0 <= \result && \result < i_len && i[\result] == \result);
+2026-05-18 22:41:20,469 - INFO  - 
+2026-05-18 22:41:20,469 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c, line 21) in 'foo258':
+2026-05-18 22:41:20,469 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c at line: 21
+2026-05-18 22:41:20,469 - INFO  - Error line content: ensures \result == -1 ==> (\forall integer idx; 0 <= idx < i_len ==> i[idx] != idx);
+2026-05-18 22:41:20,469 - INFO  - 
+2026-05-18 22:41:20,469 - INFO  - 
+2026-05-18 22:41:20,469 - INFO  - Instance:
+2026-05-18 22:41:20,469 - INFO  - []
+2026-05-18 22:41:20,469 - INFO  - 
+2026-05-18 22:41:20,789 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c:19: Warning: 
+  unexpected token ''
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:41:21,093 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c:19: Warning: 
+  unexpected token ''
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo258/20260518_221427_2970814_46c98171/output/foo258.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:41:21,094 - INFO  - first_pass:
+2026-05-18 22:41:21,094 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-18 22:41:21,094 - INFO  - ==================================================
+2026-05-18 22:41:21,094 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 22:41:21,094 - INFO  - Total execution time: 1614.03 seconds (26.90 minutes)
+2026-05-18 22:41:21,094 - INFO  - ==================================================
+2026-05-18 22:41:21,094 - INFO  - ==================================================
+2026-05-18 22:41:21,094 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 22:41:21,094 - INFO  - Total API calls: 12
+2026-05-18 22:41:21,094 - INFO  - Total prompt tokens (input): 97,548
+2026-05-18 22:41:21,094 - INFO  - Total completion tokens (output): 9,991
+2026-05-18 22:41:21,094 - INFO  - Total tokens: 107,539
+2026-05-18 22:41:21,094 - INFO  - Average prompt tokens per call: 8129.0
+2026-05-18 22:41:21,094 - INFO  - Average completion tokens per call: 832.6
+2026-05-18 22:41:21,094 - INFO  - Average total tokens per call: 8961.6
+2026-05-18 22:41:21,094 - INFO  - ==================================================

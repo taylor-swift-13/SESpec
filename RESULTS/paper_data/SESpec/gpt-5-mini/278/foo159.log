@@ -1,0 +1,1138 @@
+2026-05-15 01:17:52,985 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo159/20260515_011752_695098_6791928b
+2026-05-15 01:17:52,985 - INFO  - 
+🚀 Starting generation of function: foo159
+2026-05-15 01:17:52,985 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 01:17:52,985 - INFO  - ==================================================
+
+2026-05-15 01:17:53,777 - INFO  - [auto only_loop] False — foo159 returns 'int'
+2026-05-15 01:17:53,778 - INFO  - Initial pending functions: ['foo159']
+2026-05-15 01:17:53,778 - INFO  - 
+GENERATE ANNOTATION FOR foo159
+2026-05-15 01:17:53,778 - INFO  - ==================================================
+
+2026-05-15 01:17:53,778 - INFO  - Function foo159 has been initialized
+2026-05-15 01:17:53,778 - INFO  - Starting to generate annotation code for foo159
+2026-05-15 01:17:53,859 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo159
+2026-05-15 01:17:53,859 - INFO  - ==================================================
+
+2026-05-15 01:17:53,982 - INFO  - Variable Maps:[{'tmp': 'args[0]', 'ret': '0', 'args_len': 'args_len@pre', 'args': 'args@pre'}]
+2026-05-15 01:17:53,982 - INFO  - Path conditions: ['args_len@pre > 0 && args_len@pre < 100']
+2026-05-15 01:17:53,982 - INFO  - Pre condition: args_len@pre > 0 && args_len@pre < 100 && store_int_array(args@pre, args_len@pre, args_l) * (tmp == args_l[0]) * (ret == 0) * (args_len == args_len@pre) * (args == args@pre)
+2026-05-15 01:17:53,982 - INFO  - Loop Condition: j < args_len
+2026-05-15 01:17:53,984 - INFO  - Array Names: ['args']
+2026-05-15 01:17:53,984 - INFO  - Updated Loop Conditions: ['j < args_len@pre']
+2026-05-15 01:17:53,985 - INFO  - Global Unchanged Variables: ['args_len', 'args']
+2026-05-15 01:17:53,986 - INFO  - Non Inductive Variables: ['tmp']
+2026-05-15 01:17:53,988 - INFO  - Unchanged Arrays (Read-only): ['args']
+2026-05-15 01:17:53,990 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 01:17:53,992 - INFO  - examples category: array
+2026-05-15 01:17:53,992 - INFO  - examples:
+2026-05-15 01:17:53,992 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-15 01:18:03,383 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-15 01:18:35,832 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=7
+2026-05-15 01:18:53,649 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 01:19:04,010 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 01:19:04,010 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 01:19:25,819 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=7
+2026-05-15 01:20:11,170 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=7
+2026-05-15 01:20:11,171 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 01:20:34,055 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=7
+2026-05-15 01:20:52,241 - INFO  - [inv-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 01:20:52,242 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 01:21:14,788 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=7
+2026-05-15 01:21:47,986 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 01:22:04,821 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8333333333333334, 0.0), clauses=6)
+2026-05-15 01:22:21,062 - INFO  - ACSL format loop invariant
+2026-05-15 01:22:21,062 - INFO  - /*@
+          loop invariant 1 <= j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+2026-05-15 01:22:21,064 - INFO  - QCP format loop invariant
+2026-05-15 01:22:21,064 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (1 <= j && j <= args_len@pre) &&
+(exists (p:Z), 0 <= p && p < j && tmp == args_l[p]@pre) &&
+(args_len == args_len@pre) &&
+(args == args@pre) &&
+(forall (k:Z), 0 <= k && k < args_len => args_l[k] == args_l[k]@pre
+          loop assigns j, ret, tmp)
+    */
+    
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+2026-05-15 01:22:22,905 - INFO  - CORRECT INVARIANT
+2026-05-15 01:22:22,906 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo159
+2026-05-15 01:22:22,906 - INFO  - ==================================================
+
+2026-05-15 01:22:22,919 - INFO  - Starting to generate ACSL specification for foo159
+2026-05-15 01:22:34,708 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo159/20260515_011752_695098_6791928b/output/foo159.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo159/20260515_011752_695098_6791928b/output/foo159.c:25: Warning: 
+  unbound logic function max_beaten. Ignoring logic specification of function foo159
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo159/20260515_011752_695098_6791928b/output/foo159.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 01:22:34,709 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-15 01:23:06,045 - INFO  - syntax Correct
+2026-05-15 01:23:17,246 - INFO  - Loop Invariant:
+2026-05-15 01:23:17,246 - INFO  - [True, True, True, True, True]
+2026-05-15 01:23:17,246 - INFO  - 
+2026-05-15 01:23:17,247 - INFO  - Assertion:
+2026-05-15 01:23:17,247 - INFO  - []
+2026-05-15 01:23:17,247 - INFO  - 
+2026-05-15 01:23:17,247 - INFO  - Assigns:
+2026-05-15 01:23:17,247 - INFO  - [True]
+2026-05-15 01:23:17,247 - INFO  - 
+2026-05-15 01:23:17,247 - INFO  - Post Condition:
+2026-05-15 01:23:17,247 - INFO  - [False]
+2026-05-15 01:23:17,247 - INFO  - 
+2026-05-15 01:23:17,248 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-15 01:23:17,248 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures \result == max_of_greater(\at(args,Pre), 0, \at(args_len,Pre), \at(args[0],Pre)) [POSTCONDITION FAILED];
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:23:31,235 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result == 0)
+       || (\exists integer i; 0 <= i < \at(args_len,Pre) && \result == \at(args[i],Pre));
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:23:42,111 - INFO  - syntax Correct
+2026-05-15 01:23:53,100 - INFO  - Loop Invariant:
+2026-05-15 01:23:53,100 - INFO  - [True, True, True, True, True]
+2026-05-15 01:23:53,100 - INFO  - 
+2026-05-15 01:23:53,100 - INFO  - Assertion:
+2026-05-15 01:23:53,100 - INFO  - []
+2026-05-15 01:23:53,100 - INFO  - 
+2026-05-15 01:23:53,101 - INFO  - Assigns:
+2026-05-15 01:23:53,101 - INFO  - [True]
+2026-05-15 01:23:53,101 - INFO  - 
+2026-05-15 01:23:53,101 - INFO  - Post Condition:
+2026-05-15 01:23:53,101 - INFO  - [False]
+2026-05-15 01:23:53,101 - INFO  - 
+2026-05-15 01:23:53,102 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-15 01:23:53,102 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\result == 0)
+       || (\exists integer i [POSTCONDITION FAILED]; 0 <= i < \at(args_len,Pre) && \result == \at(args[i],Pre));
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:24:01,425 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures (\exists integer i; 0 <= i < \at(args_len,Pre) && \result == \at(args[i],Pre));
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:24:12,497 - INFO  - syntax Correct
+2026-05-15 01:24:23,875 - INFO  - Loop Invariant:
+2026-05-15 01:24:23,876 - INFO  - [True, True, True, True, True]
+2026-05-15 01:24:23,876 - INFO  - 
+2026-05-15 01:24:23,876 - INFO  - Assertion:
+2026-05-15 01:24:23,876 - INFO  - []
+2026-05-15 01:24:23,876 - INFO  - 
+2026-05-15 01:24:23,877 - INFO  - Assigns:
+2026-05-15 01:24:23,877 - INFO  - [True]
+2026-05-15 01:24:23,877 - INFO  - 
+2026-05-15 01:24:23,877 - INFO  - Post Condition:
+2026-05-15 01:24:23,877 - INFO  - [False]
+2026-05-15 01:24:23,878 - INFO  - 
+2026-05-15 01:24:23,878 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-15 01:24:23,878 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 01:24:34,921 - INFO  - syntax Correct
+2026-05-15 01:24:45,822 - INFO  - Loop Invariant:
+2026-05-15 01:24:45,823 - INFO  - [True, True, True, True, True]
+2026-05-15 01:24:45,823 - INFO  - 
+2026-05-15 01:24:45,823 - INFO  - Assertion:
+2026-05-15 01:24:45,823 - INFO  - []
+2026-05-15 01:24:45,823 - INFO  - 
+2026-05-15 01:24:45,823 - INFO  - Assigns:
+2026-05-15 01:24:45,823 - INFO  - [True]
+2026-05-15 01:24:45,823 - INFO  - 
+2026-05-15 01:24:45,824 - INFO  - Post Condition:
+2026-05-15 01:24:45,824 - INFO  - [False]
+2026-05-15 01:24:45,824 - INFO  - 
+2026-05-15 01:24:45,824 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-15 01:24:45,824 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures \result == max_of_greater(\at(args,Pre), 0, \at(args_len,Pre), \at(args[0],Pre)) [POSTCONDITION FAILED];
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:24:57,624 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures \result == 0 || (\exists integer i; 0 <= i < \at(args_len,Pre) && \result == \at(args[i],Pre));
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:25:08,481 - INFO  - syntax Correct
+2026-05-15 01:25:19,529 - INFO  - Loop Invariant:
+2026-05-15 01:25:19,529 - INFO  - [True, True, True, True, True]
+2026-05-15 01:25:19,529 - INFO  - 
+2026-05-15 01:25:19,530 - INFO  - Assertion:
+2026-05-15 01:25:19,530 - INFO  - []
+2026-05-15 01:25:19,530 - INFO  - 
+2026-05-15 01:25:19,530 - INFO  - Assigns:
+2026-05-15 01:25:19,530 - INFO  - [True]
+2026-05-15 01:25:19,530 - INFO  - 
+2026-05-15 01:25:19,530 - INFO  - Post Condition:
+2026-05-15 01:25:19,530 - INFO  - [False]
+2026-05-15 01:25:19,531 - INFO  - 
+2026-05-15 01:25:19,531 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-15 01:25:19,531 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 01:25:30,730 - INFO  - syntax Correct
+2026-05-15 01:25:41,775 - INFO  - Loop Invariant:
+2026-05-15 01:25:41,775 - INFO  - [True, True, True, True, True]
+2026-05-15 01:25:41,775 - INFO  - 
+2026-05-15 01:25:41,775 - INFO  - Assertion:
+2026-05-15 01:25:41,775 - INFO  - []
+2026-05-15 01:25:41,775 - INFO  - 
+2026-05-15 01:25:41,776 - INFO  - Assigns:
+2026-05-15 01:25:41,776 - INFO  - [True]
+2026-05-15 01:25:41,776 - INFO  - 
+2026-05-15 01:25:41,776 - INFO  - Post Condition:
+2026-05-15 01:25:41,776 - INFO  - [False]
+2026-05-15 01:25:41,776 - INFO  - 
+2026-05-15 01:25:41,776 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-15 01:25:41,777 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures \result == max_of_greater(\at(args,Pre), 0, \at(args_len,Pre), \at(args[0],Pre)) [POSTCONDITION FAILED];
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:25:53,048 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures \result >= 0;
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:26:03,829 - INFO  - syntax Correct
+2026-05-15 01:26:15,146 - INFO  - Loop Invariant:
+2026-05-15 01:26:15,147 - INFO  - [True, True, True, True, True]
+2026-05-15 01:26:15,147 - INFO  - 
+2026-05-15 01:26:15,148 - INFO  - Assertion:
+2026-05-15 01:26:15,148 - INFO  - []
+2026-05-15 01:26:15,148 - INFO  - 
+2026-05-15 01:26:15,149 - INFO  - Assigns:
+2026-05-15 01:26:15,149 - INFO  - [True]
+2026-05-15 01:26:15,149 - INFO  - 
+2026-05-15 01:26:15,150 - INFO  - Post Condition:
+2026-05-15 01:26:15,150 - INFO  - [False]
+2026-05-15 01:26:15,150 - INFO  - 
+2026-05-15 01:26:15,151 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-15 01:26:15,151 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 01:26:26,567 - INFO  - syntax Correct
+2026-05-15 01:26:37,846 - INFO  - Loop Invariant:
+2026-05-15 01:26:37,847 - INFO  - [True, True, True, True, True]
+2026-05-15 01:26:37,847 - INFO  - 
+2026-05-15 01:26:37,847 - INFO  - Assertion:
+2026-05-15 01:26:37,847 - INFO  - []
+2026-05-15 01:26:37,848 - INFO  - 
+2026-05-15 01:26:37,848 - INFO  - Assigns:
+2026-05-15 01:26:37,849 - INFO  - [True]
+2026-05-15 01:26:37,849 - INFO  - 
+2026-05-15 01:26:37,849 - INFO  - Post Condition:
+2026-05-15 01:26:37,849 - INFO  - [False]
+2026-05-15 01:26:37,849 - INFO  - 
+2026-05-15 01:26:37,850 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-15 01:26:37,850 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures \result == max_of_greater(\at(args,Pre), 0, \at(args_len,Pre), \at(args[0],Pre)) [POSTCONDITION FAILED];
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:26:46,965 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures 0 <= \result;
+  ensures \exists integer k; 0 <= k < \at(args_len,Pre) ==> (\result == 0 || \result == \at(args[k],Pre));
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:26:58,270 - INFO  - syntax Correct
+2026-05-15 01:27:09,143 - INFO  - Loop Invariant:
+2026-05-15 01:27:09,144 - INFO  - [True, True, True, True, True]
+2026-05-15 01:27:09,144 - INFO  - 
+2026-05-15 01:27:09,144 - INFO  - Assertion:
+2026-05-15 01:27:09,144 - INFO  - []
+2026-05-15 01:27:09,144 - INFO  - 
+2026-05-15 01:27:09,144 - INFO  - Assigns:
+2026-05-15 01:27:09,144 - INFO  - [True]
+2026-05-15 01:27:09,145 - INFO  - 
+2026-05-15 01:27:09,145 - INFO  - Post Condition:
+2026-05-15 01:27:09,145 - INFO  - [False, True]
+2026-05-15 01:27:09,145 - INFO  - 
+2026-05-15 01:27:09,146 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=5
+2026-05-15 01:27:09,146 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures 0 <= \result [POSTCONDITION FAILED];
+  ensures \exists integer k; 0 <= k < \at(args_len,Pre) ==> (\result == 0 || \result == \at(args[k],Pre));
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:27:17,705 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures \exists integer k; 0 <= k < \at(args_len,Pre) ==> (\result == 0 || \result == \at(args[k],Pre));
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:27:17,706 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.875, 0.0), clauses=5)
+2026-05-15 01:27:28,480 - INFO  - syntax Correct
+2026-05-15 01:27:39,556 - INFO  - Loop Invariant:
+2026-05-15 01:27:39,557 - INFO  - [True, True, True, True, True]
+2026-05-15 01:27:39,557 - INFO  - 
+2026-05-15 01:27:39,557 - INFO  - Assertion:
+2026-05-15 01:27:39,557 - INFO  - []
+2026-05-15 01:27:39,557 - INFO  - 
+2026-05-15 01:27:39,557 - INFO  - Assigns:
+2026-05-15 01:27:39,557 - INFO  - [True]
+2026-05-15 01:27:39,557 - INFO  - 
+2026-05-15 01:27:39,557 - INFO  - Post Condition:
+2026-05-15 01:27:39,557 - INFO  - [False, True]
+2026-05-15 01:27:39,557 - INFO  - 
+2026-05-15 01:27:40,490 - INFO  - syntax Correct
+2026-05-15 01:27:41,601 - INFO  - Loop Invariant:
+2026-05-15 01:27:41,601 - INFO  - [True, True, True, True, True]
+2026-05-15 01:27:41,602 - INFO  - 
+2026-05-15 01:27:41,602 - INFO  - Assertion:
+2026-05-15 01:27:41,602 - INFO  - []
+2026-05-15 01:27:41,602 - INFO  - 
+2026-05-15 01:27:41,602 - INFO  - Assigns:
+2026-05-15 01:27:41,602 - INFO  - [True]
+2026-05-15 01:27:41,602 - INFO  - 
+2026-05-15 01:27:41,602 - INFO  - Post Condition:
+2026-05-15 01:27:41,602 - INFO  - [True]
+2026-05-15 01:27:41,602 - INFO  - 
+2026-05-15 01:27:41,603 - INFO  - 
+SPECIFICATION FOR foo159
+2026-05-15 01:27:41,604 - INFO  - ==================================================
+
+2026-05-15 01:27:41,604 - INFO  - 
+QCP Specification for function foo159:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+2026-05-15 01:27:41,718 - INFO  - 
+VERIFICATION FOR foo159
+2026-05-15 01:27:41,719 - INFO  - ==================================================
+
+2026-05-15 01:27:41,719 - INFO  - TRY TIME: 0
+2026-05-15 01:27:42,713 - INFO  - syntax Correct
+2026-05-15 01:27:43,864 - INFO  - Loop Invariant:
+2026-05-15 01:27:43,865 - INFO  - [True, True, True, True, True]
+2026-05-15 01:27:43,865 - INFO  - 
+2026-05-15 01:27:43,865 - INFO  - Assertion:
+2026-05-15 01:27:43,865 - INFO  - []
+2026-05-15 01:27:43,866 - INFO  - 
+2026-05-15 01:27:43,866 - INFO  - Assigns:
+2026-05-15 01:27:43,866 - INFO  - [True]
+2026-05-15 01:27:43,866 - INFO  - 
+2026-05-15 01:27:43,866 - INFO  - Post Condition:
+2026-05-15 01:27:43,866 - INFO  - [True]
+2026-05-15 01:27:43,866 - INFO  - 
+2026-05-15 01:27:43,866 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo159
+2026-05-15 01:27:43,866 - INFO  - ==================================================
+2026-05-15 01:27:43,867 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo159/20260515_011752_695098_6791928b/output/foo159.c
+2026-05-15 01:27:43,867 - INFO  - Output file content:
+
+/*@
+  logic integer min_prefix(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : min_prefix(a, lo, hi - 1);
+*/
+
+/*@
+  logic integer max_of_greater(int* a, integer begin, integer end, integer init_min) =
+    begin >= end ? 0
+    : max_of_greater(a, begin, end-1, init_min)
+        + (a[end-1] > init_min ? (a[end-1]) : 0);
+*/
+
+/*@
+  predicate seen_properties(int* a, integer seen_len, integer cur_min, integer cur_ret, integer init_len, int* init_a) =
+    0 <= seen_len && seen_len <= init_len
+    &&
+    \true;
+*/
+
+/*@
+  requires \valid(args + (0 .. args_len-1));
+  requires \at(args_len,Pre) > 0 && \at(args_len,Pre) < 100;
+  assigns \nothing;
+  ensures \exists integer k; 0 <= k < \at(args_len,Pre) ==> (\result == 0 || \result == \at(args[k],Pre));
+*/
+int foo159(int * args, int args_len) {
+
+		int ret = 0;
+		int tmp = args[0];
+		
+            
+        /*@
+          loop invariant 1 <= j && j <= \at(args_len,Pre);
+          loop invariant \exists integer p; 0 <= p < j && tmp == \at(args[p],Pre);
+          loop invariant args_len == \at(args_len,Pre);
+          loop invariant args == \at(args,Pre);
+          loop invariant \forall integer k; 0 <= k < args_len ==> args[k] == \at(args[k],Pre);
+          loop assigns j, ret, tmp;
+        */
+        for (int j = 1; j < args_len; j++) {
+			if (args[j] > tmp) {
+				ret = ret > tmp ? ret : tmp;
+			} else {
+				tmp = args[j];
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:27:43,867 - INFO  - ==================================================
+2026-05-15 01:27:43,867 - INFO  - first_pass:
+2026-05-15 01:27:43,867 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 01:27:43,867 - INFO  - ==================================================
+2026-05-15 01:27:43,867 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 01:27:43,868 - INFO  - Total execution time: 590.88 seconds (9.85 minutes)
+2026-05-15 01:27:43,868 - INFO  - ==================================================
+2026-05-15 01:27:43,868 - INFO  - ==================================================
+2026-05-15 01:27:43,868 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 01:27:43,868 - INFO  - Total API calls: 16
+2026-05-15 01:27:43,868 - INFO  - Total prompt tokens (input): 141,673
+2026-05-15 01:27:43,868 - INFO  - Total completion tokens (output): 15,978
+2026-05-15 01:27:43,868 - INFO  - Total tokens: 157,651
+2026-05-15 01:27:43,868 - INFO  - Average prompt tokens per call: 8854.6
+2026-05-15 01:27:43,868 - INFO  - Average completion tokens per call: 998.6
+2026-05-15 01:27:43,869 - INFO  - Average total tokens per call: 9853.2
+2026-05-15 01:27:43,869 - INFO  - ==================================================

@@ -1,0 +1,42 @@
+#include "../verification_stdlib.h"
+    #include "../verification_list.h"
+    #include "../int_array_def.h"
+
+    /*@ Extern Coq (Result: Assertion) */
+    /*@ Extern Coq (Results: Z -> Assertion) */
+
+void foo214() 
+/*@
+
+Require emp
+
+Ensure emp
+*/{
+
+    int x;
+    int y;
+
+    x = 0;
+
+   
+  /*@ Print user assertion at number LoopEntry_0*/ 
+/*@ Inv
+    (0 <= x && x <= 100) &&
+(x <= 100) &&
+(1 <= 100) &&
+(1 == 1) &&
+(x == x) &&
+(undef_data_at(&y) && x == 0 => x % 2 == 0
+      loop assigns x)
+    */
+    
+    while (x < 99) {
+       if(y % 2 == 0){
+         x = x + 2;
+       }
+       else{
+         x = x + 1;
+       }
+    }
+
+  }

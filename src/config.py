@@ -43,6 +43,7 @@ class MainConfig:
     think:bool = True
     use_se:bool = True  # False forces LLM for all postcondition generation; also disables structural loop-invariant template
     use_examples:bool = True  # False disables loading category-specific examples into inv_gen prompts; useful for ablation
+    trivial_refine:bool = False  # True swaps refine prompt to refine_trivial.txt: only {error_str} + {c_code}, no strategy/category hints; used for ablation
 
 @dataclass
 class LLMConfig:
@@ -54,6 +55,10 @@ class LLMConfig:
     api_temperature = 0.2 # Temperature parameter for API calls
     api_top_p=0.7
     think_mode_enabled = False
+    # OpenAI reasoning models accept reasoning_effort in {minimal, low, medium, high}.
+    # Default low keeps the pipeline (7-17 sequential calls) fast; raise to high
+    # for one-off depth experiments via the REASONING_EFFORT env var.
+    reasoning_effort:str = os.environ.get("REASONING_EFFORT", "low")
     
 
 

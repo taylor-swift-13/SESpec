@@ -1,0 +1,1016 @@
+2026-05-15 02:47:41,620 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo322/20260515_024741_924039_5d211cbd
+2026-05-15 02:47:41,620 - INFO  - 
+🚀 Starting generation of function: foo322
+2026-05-15 02:47:41,620 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 02:47:41,620 - INFO  - ==================================================
+
+2026-05-15 02:47:43,235 - INFO  - [auto only_loop] False — foo322 returns 'int'
+2026-05-15 02:47:43,235 - INFO  - Initial pending functions: ['foo322']
+2026-05-15 02:47:43,236 - INFO  - 
+GENERATE ANNOTATION FOR foo322
+2026-05-15 02:47:43,236 - INFO  - ==================================================
+
+2026-05-15 02:47:43,236 - INFO  - Function foo322 has been initialized
+2026-05-15 02:47:43,236 - INFO  - Starting to generate annotation code for foo322
+2026-05-15 02:47:43,294 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo322
+2026-05-15 02:47:43,295 - INFO  - ==================================================
+
+2026-05-15 02:47:43,398 - INFO  - Variable Maps:[{'even': '0', 'p': 'p@pre'}]
+2026-05-15 02:47:43,398 - INFO  - Path conditions: [None]
+2026-05-15 02:47:43,398 - INFO  - Pre condition: (even == 0) * (p == p@pre)
+2026-05-15 02:47:43,398 - INFO  - Loop Condition: c <= p
+2026-05-15 02:47:43,399 - INFO  - Array Names: []
+2026-05-15 02:47:43,399 - INFO  - Updated Loop Conditions: ['c <= p@pre']
+2026-05-15 02:47:43,400 - INFO  - Global Unchanged Variables: ['p']
+2026-05-15 02:47:43,400 - INFO  - Non Inductive Variables: []
+2026-05-15 02:47:43,400 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 02:47:43,402 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 02:47:43,403 - INFO  - examples category: numeric
+2026-05-15 02:47:43,404 - INFO  - examples:
+2026-05-15 02:47:43,404 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 02:47:51,469 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-15 02:48:23,022 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.25, satisfy=0.00) clauses=4
+2026-05-15 02:48:54,443 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:49:41,704 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:50:11,709 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:50:11,710 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-15 02:50:33,592 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:51:22,468 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:51:22,468 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-15 02:51:44,286 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:52:15,842 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:52:15,843 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-15 02:52:37,445 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-15 02:52:45,967 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.3333333333333333, 0.0), clauses=3)
+2026-05-15 02:53:09,241 - INFO  - ACSL format loop invariant
+2026-05-15 02:53:09,241 - INFO  - /*@
+      loop invariant p == \at(p,Pre);
+      loop assigns c, even;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+2026-05-15 02:53:09,243 - INFO  - QCP format loop invariant
+2026-05-15 02:53:09,243 - INFO  - /*@ Inv
+    (p == p@pre
+      loop assigns c, even)
+    */
+    
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+2026-05-15 02:53:10,120 - INFO  - CORRECT INVARIANT
+2026-05-15 02:53:10,120 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo322
+2026-05-15 02:53:10,120 - INFO  - ==================================================
+
+2026-05-15 02:53:10,146 - INFO  - Starting to generate ACSL specification for foo322
+2026-05-15 02:53:33,105 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo322/20260515_024741_924039_5d211cbd/output/foo322.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo322/20260515_024741_924039_5d211cbd/output/foo322.c:10: Warning: 
+  unbound logic function sum_of_even_powers. Ignoring logic specification of function foo322
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo322/20260515_024741_924039_5d211cbd/output/foo322.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:53:33,106 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 02:54:03,285 - INFO  - syntax Correct
+2026-05-15 02:54:14,126 - INFO  - Loop Invariant:
+2026-05-15 02:54:14,126 - INFO  - [True, False, True]
+2026-05-15 02:54:14,126 - INFO  - 
+2026-05-15 02:54:14,126 - INFO  - Assertion:
+2026-05-15 02:54:14,126 - INFO  - []
+2026-05-15 02:54:14,126 - INFO  - 
+2026-05-15 02:54:14,126 - INFO  - Assigns:
+2026-05-15 02:54:14,126 - INFO  - [True]
+2026-05-15 02:54:14,126 - INFO  - 
+2026-05-15 02:54:14,126 - INFO  - Post Condition:
+2026-05-15 02:54:14,126 - INFO  - [True]
+2026-05-15 02:54:14,126 - INFO  - 
+2026-05-15 02:54:14,127 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=3
+2026-05-15 02:54:14,127 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:54:29,383 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:54:40,342 - INFO  - syntax Correct
+2026-05-15 02:54:51,475 - INFO  - Loop Invariant:
+2026-05-15 02:54:51,475 - INFO  - [True, False, True, True]
+2026-05-15 02:54:51,475 - INFO  - 
+2026-05-15 02:54:51,475 - INFO  - Assertion:
+2026-05-15 02:54:51,475 - INFO  - []
+2026-05-15 02:54:51,475 - INFO  - 
+2026-05-15 02:54:51,475 - INFO  - Assigns:
+2026-05-15 02:54:51,475 - INFO  - [True]
+2026-05-15 02:54:51,475 - INFO  - 
+2026-05-15 02:54:51,475 - INFO  - Post Condition:
+2026-05-15 02:54:51,475 - INFO  - [True]
+2026-05-15 02:54:51,475 - INFO  - 
+2026-05-15 02:54:51,476 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-15 02:54:51,476 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:54:58,379 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:55:09,385 - INFO  - syntax Correct
+2026-05-15 02:55:20,318 - INFO  - Loop Invariant:
+2026-05-15 02:55:20,318 - INFO  - [True, False, True, True]
+2026-05-15 02:55:20,318 - INFO  - 
+2026-05-15 02:55:20,318 - INFO  - Assertion:
+2026-05-15 02:55:20,318 - INFO  - []
+2026-05-15 02:55:20,318 - INFO  - 
+2026-05-15 02:55:20,318 - INFO  - Assigns:
+2026-05-15 02:55:20,318 - INFO  - [True]
+2026-05-15 02:55:20,319 - INFO  - 
+2026-05-15 02:55:20,319 - INFO  - Post Condition:
+2026-05-15 02:55:20,319 - INFO  - [True]
+2026-05-15 02:55:20,319 - INFO  - 
+2026-05-15 02:55:20,319 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-15 02:55:20,319 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:55:33,052 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:55:44,047 - INFO  - syntax Correct
+2026-05-15 02:55:54,734 - INFO  - Loop Invariant:
+2026-05-15 02:55:54,734 - INFO  - [True, False, True, True]
+2026-05-15 02:55:54,734 - INFO  - 
+2026-05-15 02:55:54,734 - INFO  - Assertion:
+2026-05-15 02:55:54,734 - INFO  - []
+2026-05-15 02:55:54,734 - INFO  - 
+2026-05-15 02:55:54,734 - INFO  - Assigns:
+2026-05-15 02:55:54,734 - INFO  - [True]
+2026-05-15 02:55:54,734 - INFO  - 
+2026-05-15 02:55:54,734 - INFO  - Post Condition:
+2026-05-15 02:55:54,734 - INFO  - [True]
+2026-05-15 02:55:54,734 - INFO  - 
+2026-05-15 02:55:54,735 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-15 02:55:54,735 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:56:05,562 - INFO  - syntax Correct
+2026-05-15 02:56:16,374 - INFO  - Loop Invariant:
+2026-05-15 02:56:16,375 - INFO  - [True, False, True, True]
+2026-05-15 02:56:16,375 - INFO  - 
+2026-05-15 02:56:16,375 - INFO  - Assertion:
+2026-05-15 02:56:16,375 - INFO  - []
+2026-05-15 02:56:16,375 - INFO  - 
+2026-05-15 02:56:16,375 - INFO  - Assigns:
+2026-05-15 02:56:16,375 - INFO  - [True]
+2026-05-15 02:56:16,375 - INFO  - 
+2026-05-15 02:56:16,375 - INFO  - Post Condition:
+2026-05-15 02:56:16,375 - INFO  - [True]
+2026-05-15 02:56:16,375 - INFO  - 
+2026-05-15 02:56:16,376 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-15 02:56:16,376 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:56:26,014 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:56:36,881 - INFO  - syntax Correct
+2026-05-15 02:56:47,685 - INFO  - Loop Invariant:
+2026-05-15 02:56:47,685 - INFO  - [True, False, True, True]
+2026-05-15 02:56:47,685 - INFO  - 
+2026-05-15 02:56:47,685 - INFO  - Assertion:
+2026-05-15 02:56:47,685 - INFO  - []
+2026-05-15 02:56:47,685 - INFO  - 
+2026-05-15 02:56:47,685 - INFO  - Assigns:
+2026-05-15 02:56:47,685 - INFO  - [True]
+2026-05-15 02:56:47,685 - INFO  - 
+2026-05-15 02:56:47,685 - INFO  - Post Condition:
+2026-05-15 02:56:47,685 - INFO  - [True]
+2026-05-15 02:56:47,685 - INFO  - 
+2026-05-15 02:56:47,686 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-15 02:56:47,686 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:56:58,439 - INFO  - syntax Correct
+2026-05-15 02:57:09,592 - INFO  - Loop Invariant:
+2026-05-15 02:57:09,592 - INFO  - [True, False, True, True]
+2026-05-15 02:57:09,592 - INFO  - 
+2026-05-15 02:57:09,592 - INFO  - Assertion:
+2026-05-15 02:57:09,592 - INFO  - []
+2026-05-15 02:57:09,592 - INFO  - 
+2026-05-15 02:57:09,592 - INFO  - Assigns:
+2026-05-15 02:57:09,592 - INFO  - [True]
+2026-05-15 02:57:09,593 - INFO  - 
+2026-05-15 02:57:09,593 - INFO  - Post Condition:
+2026-05-15 02:57:09,593 - INFO  - [True]
+2026-05-15 02:57:09,593 - INFO  - 
+2026-05-15 02:57:09,593 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-15 02:57:09,593 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:57:17,415 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:57:28,401 - INFO  - syntax Correct
+2026-05-15 02:57:39,328 - INFO  - Loop Invariant:
+2026-05-15 02:57:39,328 - INFO  - [True, False, True, True]
+2026-05-15 02:57:39,328 - INFO  - 
+2026-05-15 02:57:39,328 - INFO  - Assertion:
+2026-05-15 02:57:39,328 - INFO  - []
+2026-05-15 02:57:39,328 - INFO  - 
+2026-05-15 02:57:39,328 - INFO  - Assigns:
+2026-05-15 02:57:39,329 - INFO  - [True]
+2026-05-15 02:57:39,329 - INFO  - 
+2026-05-15 02:57:39,329 - INFO  - Post Condition:
+2026-05-15 02:57:39,329 - INFO  - [True]
+2026-05-15 02:57:39,329 - INFO  - 
+2026-05-15 02:57:39,329 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-15 02:57:39,329 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-15 02:57:50,195 - INFO  - syntax Correct
+2026-05-15 02:58:01,469 - INFO  - Loop Invariant:
+2026-05-15 02:58:01,470 - INFO  - [True, False, True, True]
+2026-05-15 02:58:01,470 - INFO  - 
+2026-05-15 02:58:01,470 - INFO  - Assertion:
+2026-05-15 02:58:01,470 - INFO  - []
+2026-05-15 02:58:01,470 - INFO  - 
+2026-05-15 02:58:01,470 - INFO  - Assigns:
+2026-05-15 02:58:01,470 - INFO  - [True]
+2026-05-15 02:58:01,470 - INFO  - 
+2026-05-15 02:58:01,470 - INFO  - Post Condition:
+2026-05-15 02:58:01,470 - INFO  - [True]
+2026-05-15 02:58:01,470 - INFO  - 
+2026-05-15 02:58:01,471 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-15 02:58:01,471 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:58:16,890 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+  ensures \result == sum_of_even_powers(p);
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant even == sum_of_even_powers(c - 1);
+      loop invariant even + power(2 * c, 4) == sum_of_even_powers(c);
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:58:16,893 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8333333333333334, 0.0), clauses=3)
+2026-05-15 02:58:27,973 - INFO  - syntax Correct
+2026-05-15 02:58:38,998 - INFO  - Loop Invariant:
+2026-05-15 02:58:38,998 - INFO  - [True, False, True, True]
+2026-05-15 02:58:38,998 - INFO  - 
+2026-05-15 02:58:38,998 - INFO  - Assertion:
+2026-05-15 02:58:38,998 - INFO  - []
+2026-05-15 02:58:38,998 - INFO  - 
+2026-05-15 02:58:38,998 - INFO  - Assigns:
+2026-05-15 02:58:38,998 - INFO  - [True]
+2026-05-15 02:58:38,999 - INFO  - 
+2026-05-15 02:58:38,999 - INFO  - Post Condition:
+2026-05-15 02:58:38,999 - INFO  - [True]
+2026-05-15 02:58:38,999 - INFO  - 
+2026-05-15 02:58:49,856 - INFO  - syntax Correct
+2026-05-15 02:59:01,091 - INFO  - Loop Invariant:
+2026-05-15 02:59:01,091 - INFO  - [True, False, True]
+2026-05-15 02:59:01,091 - INFO  - 
+2026-05-15 02:59:01,091 - INFO  - Assertion:
+2026-05-15 02:59:01,091 - INFO  - []
+2026-05-15 02:59:01,092 - INFO  - 
+2026-05-15 02:59:01,092 - INFO  - Assigns:
+2026-05-15 02:59:01,097 - INFO  - [True]
+2026-05-15 02:59:01,097 - INFO  - 
+2026-05-15 02:59:01,098 - INFO  - Post Condition:
+2026-05-15 02:59:01,098 - INFO  - [True]
+2026-05-15 02:59:01,098 - INFO  - 
+2026-05-15 02:59:13,469 - INFO  - syntax Correct
+2026-05-15 02:59:24,895 - INFO  - Loop Invariant:
+2026-05-15 02:59:24,899 - INFO  - [True, True]
+2026-05-15 02:59:24,899 - INFO  - 
+2026-05-15 02:59:24,899 - INFO  - Assertion:
+2026-05-15 02:59:24,899 - INFO  - []
+2026-05-15 02:59:24,899 - INFO  - 
+2026-05-15 02:59:24,899 - INFO  - Assigns:
+2026-05-15 02:59:24,899 - INFO  - [True]
+2026-05-15 02:59:24,900 - INFO  - 
+2026-05-15 02:59:24,900 - INFO  - Post Condition:
+2026-05-15 02:59:24,900 - INFO  - [False]
+2026-05-15 02:59:24,900 - INFO  - 
+2026-05-15 02:59:25,577 - INFO  - syntax Correct
+2026-05-15 02:59:26,303 - INFO  - Loop Invariant:
+2026-05-15 02:59:26,303 - INFO  - [True, True]
+2026-05-15 02:59:26,303 - INFO  - 
+2026-05-15 02:59:26,303 - INFO  - Assertion:
+2026-05-15 02:59:26,303 - INFO  - []
+2026-05-15 02:59:26,303 - INFO  - 
+2026-05-15 02:59:26,303 - INFO  - Assigns:
+2026-05-15 02:59:26,303 - INFO  - [True]
+2026-05-15 02:59:26,303 - INFO  - 
+2026-05-15 02:59:26,303 - INFO  - Post Condition:
+2026-05-15 02:59:26,303 - INFO  - []
+2026-05-15 02:59:26,303 - INFO  - 
+2026-05-15 02:59:26,305 - INFO  - 
+SPECIFICATION FOR foo322
+2026-05-15 02:59:26,305 - INFO  - ==================================================
+
+2026-05-15 02:59:26,305 - INFO  - 
+QCP Specification for function foo322:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-15 02:59:26,625 - INFO  - 
+VERIFICATION FOR foo322
+2026-05-15 02:59:26,627 - INFO  - ==================================================
+
+2026-05-15 02:59:26,627 - INFO  - TRY TIME: 0
+2026-05-15 02:59:27,291 - INFO  - syntax Correct
+2026-05-15 02:59:27,931 - INFO  - Loop Invariant:
+2026-05-15 02:59:27,932 - INFO  - [True, True]
+2026-05-15 02:59:27,932 - INFO  - 
+2026-05-15 02:59:27,932 - INFO  - Assertion:
+2026-05-15 02:59:27,932 - INFO  - []
+2026-05-15 02:59:27,932 - INFO  - 
+2026-05-15 02:59:27,933 - INFO  - Assigns:
+2026-05-15 02:59:27,933 - INFO  - [True]
+2026-05-15 02:59:27,933 - INFO  - 
+2026-05-15 02:59:27,933 - INFO  - Post Condition:
+2026-05-15 02:59:27,933 - INFO  - []
+2026-05-15 02:59:27,933 - INFO  - 
+2026-05-15 02:59:27,933 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo322
+2026-05-15 02:59:27,933 - INFO  - ==================================================
+2026-05-15 02:59:27,933 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo322/20260515_024741_924039_5d211cbd/output/foo322.c
+2026-05-15 02:59:27,934 - INFO  - Output file content:
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  logic integer sum_of_even_powers(integer n) =
+    n <= 0 ? 0 : power(2 * n, 4) + sum_of_even_powers(n - 1);
+*/
+
+/*@
+  requires p >= 0;
+  assigns \nothing;
+*/
+int foo322(int p) {
+
+    int even = 0;
+
+    /*@
+      loop invariant 1 <= c <= p + 1;
+      loop invariant p == \at(p, Pre);
+      loop assigns c, even;
+      loop variant p - c;
+    */
+    for (int c = 1; c <= p; c++) {
+        int count = 2 * c;
+        even = even + (count * count * count * count);
+    }
+
+    return even;
+}
+
+2026-05-15 02:59:27,934 - INFO  - ==================================================
+2026-05-15 02:59:27,934 - INFO  - first_pass:
+2026-05-15 02:59:27,934 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 02:59:27,934 - INFO  - ==================================================
+2026-05-15 02:59:27,934 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 02:59:27,934 - INFO  - Total execution time: 706.31 seconds (11.77 minutes)
+2026-05-15 02:59:27,934 - INFO  - ==================================================
+2026-05-15 02:59:27,934 - INFO  - ==================================================
+2026-05-15 02:59:27,935 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 02:59:27,935 - INFO  - Total API calls: 16
+2026-05-15 02:59:27,935 - INFO  - Total prompt tokens (input): 139,042
+2026-05-15 02:59:27,935 - INFO  - Total completion tokens (output): 8,425
+2026-05-15 02:59:27,935 - INFO  - Total tokens: 147,467
+2026-05-15 02:59:27,935 - INFO  - Average prompt tokens per call: 8690.1
+2026-05-15 02:59:27,935 - INFO  - Average completion tokens per call: 526.6
+2026-05-15 02:59:27,935 - INFO  - Average total tokens per call: 9216.7
+2026-05-15 02:59:27,935 - INFO  - ==================================================

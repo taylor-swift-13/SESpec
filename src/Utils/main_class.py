@@ -4,7 +4,9 @@ from typing import Union, List, Optional, Tuple
 
 @dataclass
 class Parameter:
-    def __init__(self, name = None, type = None, is_ptr = False, ptr_depth = 0, is_struct = False,array_length = -1,is_recursive = False):
+    def __init__(self, name=None, type=None, is_ptr=False, ptr_depth=0,
+                 is_struct=False, array_length=-1, is_recursive=False,
+                 length_expr=None, length_dims=None, length_source='none'):
         self.name = name
         self.type = type
         self.is_ptr = is_ptr
@@ -12,6 +14,14 @@ class Parameter:
         self.is_struct = is_struct
         self.array_length = array_length
         self.is_recursive = is_recursive
+        # Resolved array-length metadata (see Utils/utils.resolve_array_lengths).
+        # length_expr is an ACSL-valid expression that references only this
+        # function's other parameters; length_dims is the 2D row-major
+        # breakdown when both row and col scalars are known; length_source
+        # is the rule that produced it ('name'|'body'|'llm'|'none').
+        self.length_expr: Optional[str] = length_expr
+        self.length_dims: Optional[List[str]] = length_dims
+        self.length_source: str = length_source
     name: str
     type: Union[str, 'StructInfo']  # 参数Type可以是字符串或StructInfo
     is_ptr: bool
@@ -19,6 +29,9 @@ class Parameter:
     is_struct: bool
     array_length: int
     is_recursive: bool
+    length_expr: Optional[str]
+    length_dims: Optional[List[str]]
+    length_source: str
 
 @dataclass
 class StructInfo:

@@ -1,0 +1,993 @@
+2026-05-15 01:04:01,302 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo139/20260515_010401_660349_52cb530a
+2026-05-15 01:04:01,302 - INFO  - 
+🚀 Starting generation of function: foo139
+2026-05-15 01:04:01,302 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 01:04:01,302 - INFO  - ==================================================
+
+2026-05-15 01:04:02,975 - INFO  - [auto only_loop] False — foo139 returns 'const char *'
+2026-05-15 01:04:02,976 - INFO  - Initial pending functions: ['foo139']
+2026-05-15 01:04:02,976 - INFO  - 
+GENERATE ANNOTATION FOR foo139
+2026-05-15 01:04:02,976 - INFO  - ==================================================
+
+2026-05-15 01:04:02,976 - INFO  - Function foo139 has been initialized
+2026-05-15 01:04:02,976 - INFO  - Starting to generate annotation code for foo139
+2026-05-15 01:04:03,022 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo139
+2026-05-15 01:04:03,022 - INFO  - ==================================================
+
+2026-05-15 01:04:03,115 - INFO  - Variable Maps:[{}]
+2026-05-15 01:04:03,115 - INFO  - Path conditions: [None]
+2026-05-15 01:04:03,115 - INFO  - Pre condition: 
+2026-05-15 01:04:03,115 - INFO  - Loop Condition: i < seqNums_len
+2026-05-15 01:04:03,116 - INFO  - Array Names: ['seqNums']
+2026-05-15 01:04:03,116 - INFO  - Updated Loop Conditions: ['i < seqNums_len']
+2026-05-15 01:04:03,116 - INFO  - Global Unchanged Variables: []
+2026-05-15 01:04:03,116 - INFO  - Non Inductive Variables: []
+2026-05-15 01:04:03,117 - INFO  - Unchanged Arrays (Read-only): ['seqNums']
+2026-05-15 01:04:03,119 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 01:04:03,120 - INFO  - examples category: array
+2026-05-15 01:04:03,120 - INFO  - examples:
+2026-05-15 01:04:03,120 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-15 01:04:17,336 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 01:04:55,622 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=3
+2026-05-15 01:04:55,622 - INFO  - [inv-gen] converged at refine 2
+2026-05-15 01:05:17,543 - INFO  - ACSL format loop invariant
+2026-05-15 01:05:17,544 - INFO  - /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+2026-05-15 01:05:17,545 - INFO  - QCP format loop invariant
+2026-05-15 01:05:17,545 - INFO  - /*@ Inv
+    exists  seqNums_l,    
+    store_int_array(seqNums, seqNums_len, seqNums_l) && seqNums_len > 0 && seqNums_len < 100 &&
+    (1 <= i && i <= seqNums_len) &&
+(forall (k:Z), 1 <= k && k < i => seqNums_l[k] - seqNums_l[k - 1] == difference) &&
+(\valid(seqNums + (0..seqNums_len-1))
+      loop assigns i)
+    */
+    
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+2026-05-15 01:05:39,618 - INFO  - CORRECT INVARIANT
+2026-05-15 01:05:39,618 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo139
+2026-05-15 01:05:39,618 - INFO  - ==================================================
+
+2026-05-15 01:05:39,644 - INFO  - Starting to generate ACSL specification for foo139
+2026-05-15 01:06:01,610 - INFO  - syntax Correct
+2026-05-15 01:06:12,660 - INFO  - Loop Invariant:
+2026-05-15 01:06:12,660 - INFO  - [True, True, True]
+2026-05-15 01:06:12,660 - INFO  - 
+2026-05-15 01:06:12,660 - INFO  - Assertion:
+2026-05-15 01:06:12,660 - INFO  - []
+2026-05-15 01:06:12,661 - INFO  - 
+2026-05-15 01:06:12,661 - INFO  - Assigns:
+2026-05-15 01:06:12,661 - INFO  - [True, True, True, True]
+2026-05-15 01:06:12,661 - INFO  - 
+2026-05-15 01:06:12,662 - INFO  - Post Condition:
+2026-05-15 01:06:12,662 - INFO  - [False, False]
+2026-05-15 01:06:12,662 - INFO  - 
+2026-05-15 01:06:12,663 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=5
+2026-05-15 01:06:12,663 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures \result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]) [POSTCONDITION FAILED];
+  ensures \result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]) [POSTCONDITION FAILED];
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:06:28,746 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures seqNums_len == 1 ==> \result == "Linear Sequence";
+  ensures seqNums_len > 1 ==> (\result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]));
+  ensures seqNums_len > 1 ==> (\result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]));
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:06:39,992 - INFO  - syntax Correct
+2026-05-15 01:06:50,889 - INFO  - Loop Invariant:
+2026-05-15 01:06:50,889 - INFO  - [True, True, True]
+2026-05-15 01:06:50,889 - INFO  - 
+2026-05-15 01:06:50,889 - INFO  - Assertion:
+2026-05-15 01:06:50,890 - INFO  - []
+2026-05-15 01:06:50,890 - INFO  - 
+2026-05-15 01:06:50,890 - INFO  - Assigns:
+2026-05-15 01:06:50,890 - INFO  - [True, True, True, True]
+2026-05-15 01:06:50,890 - INFO  - 
+2026-05-15 01:06:50,890 - INFO  - Post Condition:
+2026-05-15 01:06:50,891 - INFO  - [False, False, False]
+2026-05-15 01:06:50,891 - INFO  - 
+2026-05-15 01:06:50,891 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=6
+2026-05-15 01:06:50,891 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures seqNums_len == 1 ==> \result == "Linear Sequence" [POSTCONDITION FAILED];
+  ensures seqNums_len > 1 ==> (\result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0])) [POSTCONDITION FAILED];
+  ensures seqNums_len > 1 ==> (\result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0])) [POSTCONDITION FAILED];
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:07:02,555 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures seqNums_len == 1 ==> \result == "Linear Sequence";
+  ensures seqNums_len > 1 ==> (\result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]));
+  ensures seqNums_len > 1 ==> (\result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]));
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:07:13,606 - INFO  - syntax Correct
+2026-05-15 01:07:24,865 - INFO  - Loop Invariant:
+2026-05-15 01:07:24,865 - INFO  - [True, True, True]
+2026-05-15 01:07:24,865 - INFO  - 
+2026-05-15 01:07:24,865 - INFO  - Assertion:
+2026-05-15 01:07:24,866 - INFO  - []
+2026-05-15 01:07:24,866 - INFO  - 
+2026-05-15 01:07:24,866 - INFO  - Assigns:
+2026-05-15 01:07:24,866 - INFO  - [True, True, True, True]
+2026-05-15 01:07:24,866 - INFO  - 
+2026-05-15 01:07:24,866 - INFO  - Post Condition:
+2026-05-15 01:07:24,866 - INFO  - [False, False, False]
+2026-05-15 01:07:24,866 - INFO  - 
+2026-05-15 01:07:24,867 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=6
+2026-05-15 01:07:24,867 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:07:35,979 - INFO  - syntax Correct
+2026-05-15 01:07:47,358 - INFO  - Loop Invariant:
+2026-05-15 01:07:47,358 - INFO  - [True, True, True]
+2026-05-15 01:07:47,358 - INFO  - 
+2026-05-15 01:07:47,358 - INFO  - Assertion:
+2026-05-15 01:07:47,358 - INFO  - []
+2026-05-15 01:07:47,358 - INFO  - 
+2026-05-15 01:07:47,358 - INFO  - Assigns:
+2026-05-15 01:07:47,359 - INFO  - [True, True, True, True]
+2026-05-15 01:07:47,359 - INFO  - 
+2026-05-15 01:07:47,359 - INFO  - Post Condition:
+2026-05-15 01:07:47,359 - INFO  - [False, False]
+2026-05-15 01:07:47,359 - INFO  - 
+2026-05-15 01:07:47,359 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=5
+2026-05-15 01:07:47,359 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures \result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]) [POSTCONDITION FAILED];
+  ensures \result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]) [POSTCONDITION FAILED];
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:07:58,846 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures \result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums_len > 1 ? seqNums[1] - seqNums[0] : 0);
+  ensures \result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums_len > 1 ? seqNums[1] - seqNums[0] : 0);
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:08:09,916 - INFO  - syntax Correct
+2026-05-15 01:08:20,937 - INFO  - Loop Invariant:
+2026-05-15 01:08:20,938 - INFO  - [True, True, True]
+2026-05-15 01:08:20,938 - INFO  - 
+2026-05-15 01:08:20,938 - INFO  - Assertion:
+2026-05-15 01:08:20,938 - INFO  - []
+2026-05-15 01:08:20,938 - INFO  - 
+2026-05-15 01:08:20,939 - INFO  - Assigns:
+2026-05-15 01:08:20,939 - INFO  - [True, True, True, True]
+2026-05-15 01:08:20,939 - INFO  - 
+2026-05-15 01:08:20,940 - INFO  - Post Condition:
+2026-05-15 01:08:20,940 - INFO  - [False, False]
+2026-05-15 01:08:20,940 - INFO  - 
+2026-05-15 01:08:20,940 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=5
+2026-05-15 01:08:20,941 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:08:32,151 - INFO  - syntax Correct
+2026-05-15 01:08:43,395 - INFO  - Loop Invariant:
+2026-05-15 01:08:43,395 - INFO  - [True, True, True]
+2026-05-15 01:08:43,395 - INFO  - 
+2026-05-15 01:08:43,395 - INFO  - Assertion:
+2026-05-15 01:08:43,395 - INFO  - []
+2026-05-15 01:08:43,395 - INFO  - 
+2026-05-15 01:08:43,396 - INFO  - Assigns:
+2026-05-15 01:08:43,396 - INFO  - [True, True, True, True]
+2026-05-15 01:08:43,396 - INFO  - 
+2026-05-15 01:08:43,396 - INFO  - Post Condition:
+2026-05-15 01:08:43,396 - INFO  - [False, False]
+2026-05-15 01:08:43,396 - INFO  - 
+2026-05-15 01:08:43,397 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=5
+2026-05-15 01:08:43,397 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures \result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]) [POSTCONDITION FAILED];
+  ensures \result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]) [POSTCONDITION FAILED];
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:09:08,464 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures seqNums_len == 1 ==> \result == "Linear Sequence";
+  ensures seqNums_len > 1 && \result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]);
+  ensures seqNums_len > 1 && \result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]);
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:09:20,143 - INFO  - syntax Correct
+2026-05-15 01:09:31,517 - INFO  - Loop Invariant:
+2026-05-15 01:09:31,518 - INFO  - [True, True, True]
+2026-05-15 01:09:31,518 - INFO  - 
+2026-05-15 01:09:31,518 - INFO  - Assertion:
+2026-05-15 01:09:31,518 - INFO  - []
+2026-05-15 01:09:31,518 - INFO  - 
+2026-05-15 01:09:31,518 - INFO  - Assigns:
+2026-05-15 01:09:31,518 - INFO  - [True, True, True, True]
+2026-05-15 01:09:31,519 - INFO  - 
+2026-05-15 01:09:31,519 - INFO  - Post Condition:
+2026-05-15 01:09:31,519 - INFO  - [False, False, False]
+2026-05-15 01:09:31,519 - INFO  - 
+2026-05-15 01:09:31,520 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=6
+2026-05-15 01:09:31,520 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:09:42,762 - INFO  - syntax Correct
+2026-05-15 01:09:54,172 - INFO  - Loop Invariant:
+2026-05-15 01:09:54,173 - INFO  - [True, True, True]
+2026-05-15 01:09:54,173 - INFO  - 
+2026-05-15 01:09:54,173 - INFO  - Assertion:
+2026-05-15 01:09:54,173 - INFO  - []
+2026-05-15 01:09:54,173 - INFO  - 
+2026-05-15 01:09:54,173 - INFO  - Assigns:
+2026-05-15 01:09:54,173 - INFO  - [True, True, True, True]
+2026-05-15 01:09:54,173 - INFO  - 
+2026-05-15 01:09:54,173 - INFO  - Post Condition:
+2026-05-15 01:09:54,173 - INFO  - [False, False]
+2026-05-15 01:09:54,173 - INFO  - 
+2026-05-15 01:09:54,174 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=5
+2026-05-15 01:09:54,174 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures \result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]) [POSTCONDITION FAILED];
+  ensures \result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]) [POSTCONDITION FAILED];
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:10:17,744 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures seqNums_len == 1 ==> \result == "Linear Sequence";
+  ensures seqNums_len > 1 && \result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]);
+  ensures seqNums_len > 1 && \result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]);
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:10:29,091 - INFO  - syntax Correct
+2026-05-15 01:10:40,431 - INFO  - Loop Invariant:
+2026-05-15 01:10:40,431 - INFO  - [True, True, True]
+2026-05-15 01:10:40,431 - INFO  - 
+2026-05-15 01:10:40,431 - INFO  - Assertion:
+2026-05-15 01:10:40,431 - INFO  - []
+2026-05-15 01:10:40,431 - INFO  - 
+2026-05-15 01:10:40,432 - INFO  - Assigns:
+2026-05-15 01:10:40,432 - INFO  - [True, True, True, True]
+2026-05-15 01:10:40,432 - INFO  - 
+2026-05-15 01:10:40,432 - INFO  - Post Condition:
+2026-05-15 01:10:40,433 - INFO  - [False, False, False]
+2026-05-15 01:10:40,433 - INFO  - 
+2026-05-15 01:10:40,433 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=6
+2026-05-15 01:10:40,433 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:10:51,528 - INFO  - syntax Correct
+2026-05-15 01:11:02,576 - INFO  - Loop Invariant:
+2026-05-15 01:11:02,576 - INFO  - [True, True, True]
+2026-05-15 01:11:02,576 - INFO  - 
+2026-05-15 01:11:02,576 - INFO  - Assertion:
+2026-05-15 01:11:02,577 - INFO  - []
+2026-05-15 01:11:02,577 - INFO  - 
+2026-05-15 01:11:02,577 - INFO  - Assigns:
+2026-05-15 01:11:02,577 - INFO  - [True, True, True, True]
+2026-05-15 01:11:02,577 - INFO  - 
+2026-05-15 01:11:02,577 - INFO  - Post Condition:
+2026-05-15 01:11:02,577 - INFO  - [False, False]
+2026-05-15 01:11:02,577 - INFO  - 
+2026-05-15 01:11:02,578 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=5
+2026-05-15 01:11:02,578 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures \result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]) [POSTCONDITION FAILED];
+  ensures \result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]) [POSTCONDITION FAILED];
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:11:20,478 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+  ensures seqNums_len == 1 ==> \result == "Linear Sequence";
+  ensures seqNums_len > 1 && \result == "Linear Sequence" ==> is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]);
+  ensures seqNums_len > 1 && \result == "Non Linear Sequence" ==> !is_linear_sequence(seqNums, seqNums_len, seqNums[1] - seqNums[0]);
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:11:20,480 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.7777777777777778, 0.0), clauses=5)
+2026-05-15 01:11:31,583 - INFO  - syntax Correct
+2026-05-15 01:11:42,767 - INFO  - Loop Invariant:
+2026-05-15 01:11:42,767 - INFO  - [True, True, True]
+2026-05-15 01:11:42,768 - INFO  - 
+2026-05-15 01:11:42,768 - INFO  - Assertion:
+2026-05-15 01:11:42,768 - INFO  - []
+2026-05-15 01:11:42,768 - INFO  - 
+2026-05-15 01:11:42,768 - INFO  - Assigns:
+2026-05-15 01:11:42,768 - INFO  - [True, True, True, True]
+2026-05-15 01:11:42,768 - INFO  - 
+2026-05-15 01:11:42,769 - INFO  - Post Condition:
+2026-05-15 01:11:42,769 - INFO  - [False, False]
+2026-05-15 01:11:42,769 - INFO  - 
+2026-05-15 01:11:43,778 - INFO  - syntax Correct
+2026-05-15 01:11:46,247 - INFO  - Loop Invariant:
+2026-05-15 01:11:46,247 - INFO  - [True, True, True]
+2026-05-15 01:11:46,247 - INFO  - 
+2026-05-15 01:11:46,247 - INFO  - Assertion:
+2026-05-15 01:11:46,247 - INFO  - []
+2026-05-15 01:11:46,247 - INFO  - 
+2026-05-15 01:11:46,248 - INFO  - Assigns:
+2026-05-15 01:11:46,248 - INFO  - [True, True, True, True]
+2026-05-15 01:11:46,248 - INFO  - 
+2026-05-15 01:11:46,248 - INFO  - Post Condition:
+2026-05-15 01:11:46,248 - INFO  - []
+2026-05-15 01:11:46,248 - INFO  - 
+2026-05-15 01:11:46,250 - INFO  - 
+SPECIFICATION FOR foo139
+2026-05-15 01:11:46,250 - INFO  - ==================================================
+
+2026-05-15 01:11:46,250 - INFO  - 
+QCP Specification for function foo139:
+/*@
+With seqNums_l
+Require store_int_array(seqNums, seqNums_len, seqNums_l) && seqNums_len > 0 && seqNums_len < 100
+Ensure Results(__return)
+*/
+2026-05-15 01:11:46,458 - INFO  - 
+VERIFICATION FOR foo139
+2026-05-15 01:11:46,464 - INFO  - ==================================================
+
+2026-05-15 01:11:46,464 - INFO  - TRY TIME: 0
+2026-05-15 01:11:47,492 - INFO  - syntax Correct
+2026-05-15 01:11:50,366 - INFO  - Loop Invariant:
+2026-05-15 01:11:50,366 - INFO  - [True, True, True]
+2026-05-15 01:11:50,367 - INFO  - 
+2026-05-15 01:11:50,367 - INFO  - Assertion:
+2026-05-15 01:11:50,367 - INFO  - []
+2026-05-15 01:11:50,367 - INFO  - 
+2026-05-15 01:11:50,367 - INFO  - Assigns:
+2026-05-15 01:11:50,367 - INFO  - [True, True, True, True]
+2026-05-15 01:11:50,367 - INFO  - 
+2026-05-15 01:11:50,367 - INFO  - Post Condition:
+2026-05-15 01:11:50,367 - INFO  - []
+2026-05-15 01:11:50,367 - INFO  - 
+2026-05-15 01:11:50,368 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo139
+2026-05-15 01:11:50,368 - INFO  - ==================================================
+2026-05-15 01:11:50,368 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo139/20260515_010401_660349_52cb530a/output/foo139.c
+2026-05-15 01:11:50,368 - INFO  - Output file content:
+
+/*@
+  logic integer diff(int* seqNums, integer i) =
+    i <= 0 ? 0 : seqNums[i] - seqNums[i - 1];
+*/
+
+/*@
+  predicate is_linear_sequence(int* seqNums, integer len, integer difference) =
+    len <= 1 || (\forall integer i; 1 <= i < len ==> seqNums[i] - seqNums[i - 1] == difference);
+*/
+
+/*@
+  requires \valid(seqNums + (0..seqNums_len-1));
+  requires seqNums_len > 0;
+  assigns \nothing;
+*/
+const char * foo139(int * seqNums, int seqNums_len) {
+
+    if (seqNums_len == 1)
+        return "Linear Sequence";
+
+    int difference = seqNums[1] - seqNums[0];
+
+    /*@
+      loop invariant 1 <= i <= seqNums_len;
+      loop invariant \forall integer k; 1 <= k < i ==> seqNums[k] - seqNums[k - 1] == difference;
+      loop invariant \valid(seqNums + (0..seqNums_len-1));
+      loop assigns i;
+      loop variant seqNums_len - i;
+    */
+    for (int i = 1; i < seqNums_len; i++) {
+        if (seqNums[i] - seqNums[i - 1] != difference) {
+            return "Non Linear Sequence";
+        }
+    }
+
+    return "Linear Sequence";
+}
+
+2026-05-15 01:11:50,368 - INFO  - ==================================================
+2026-05-15 01:11:50,368 - INFO  - first_pass:
+2026-05-15 01:11:50,369 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 01:11:50,369 - INFO  - ==================================================
+2026-05-15 01:11:50,369 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 01:11:50,369 - INFO  - Total execution time: 469.07 seconds (7.82 minutes)
+2026-05-15 01:11:50,369 - INFO  - ==================================================
+2026-05-15 01:11:50,369 - INFO  - ==================================================
+2026-05-15 01:11:50,369 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 01:11:50,369 - INFO  - Total API calls: 9
+2026-05-15 01:11:50,369 - INFO  - Total prompt tokens (input): 40,329
+2026-05-15 01:11:50,370 - INFO  - Total completion tokens (output): 5,849
+2026-05-15 01:11:50,370 - INFO  - Total tokens: 46,178
+2026-05-15 01:11:50,370 - INFO  - Average prompt tokens per call: 4481.0
+2026-05-15 01:11:50,370 - INFO  - Average completion tokens per call: 649.9
+2026-05-15 01:11:50,370 - INFO  - Average total tokens per call: 5130.9
+2026-05-15 01:11:50,370 - INFO  - ==================================================

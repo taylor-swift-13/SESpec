@@ -1,0 +1,10 @@
+int foo30_c109(int n);
+
+
+int foo30_c109(int n) {
+
+        int res = 0;
+        res += ((n % 3 == 0) ? 3 : 0);
+        res += ((n % 5 == 0) ? 5 : 0);
+        return res;
+}

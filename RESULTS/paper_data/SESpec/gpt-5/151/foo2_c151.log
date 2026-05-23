@@ -1,0 +1,3498 @@
+2026-05-17 11:28:02,437 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo2_c151/20260517_112802_488494_f67dc761
+2026-05-17 11:28:02,437 - INFO  - 
+🚀 Starting generation of function: foo2_c151
+2026-05-17 11:28:02,437 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 11:28:02,437 - INFO  - TRY TIME: 0
+2026-05-17 11:28:02,437 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 11:28:02,437 - INFO  - ==================================================
+
+2026-05-17 11:28:02,574 - INFO  - [auto only_loop] False — foo2_c151 returns 'int'
+2026-05-17 11:28:02,575 - INFO  - Initial pending functions: ['foo2_c151', 'malloc']
+2026-05-17 11:28:02,575 - INFO  - Now processing function malloc
+
+2026-05-17 11:28:02,575 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-17 11:28:02,575 - INFO  - 
+GENERATE ANNOTATION FOR foo2_c151
+2026-05-17 11:28:02,575 - INFO  - ==================================================
+
+2026-05-17 11:28:02,575 - INFO  - Function foo2_c151 has been initialized
+2026-05-17 11:28:02,575 - INFO  - Starting to generate annotation code for foo2_c151
+2026-05-17 11:28:02,670 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo2_c151
+2026-05-17 11:28:02,670 - INFO  - ==================================================
+
+2026-05-17 11:28:02,745 - INFO  - Variable Maps:[{}]
+2026-05-17 11:28:02,746 - INFO  - Path conditions: [None]
+2026-05-17 11:28:02,746 - INFO  - Pre condition: 
+2026-05-17 11:28:02,746 - INFO  - Loop Condition: c < number
+2026-05-17 11:28:02,747 - INFO  - Array Names: ['result']
+2026-05-17 11:28:02,747 - INFO  - Updated Loop Conditions: ['c < number']
+2026-05-17 11:28:02,747 - INFO  - Global Unchanged Variables: []
+2026-05-17 11:28:02,747 - INFO  - Non Inductive Variables: []
+2026-05-17 11:28:02,748 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 11:28:02,749 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 11:28:02,752 - INFO  - examples category: array
+2026-05-17 11:28:02,752 - INFO  - examples:
+2026-05-17 11:28:02,752 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 11:28:21,919 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 11:28:21,922 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 11:28:51,857 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.40, satisfy=0.00) clauses=5
+2026-05-17 11:29:20,917 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-17 11:29:30,872 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=3
+2026-05-17 11:29:30,872 - INFO  - [inv-gen] converged at refine 4
+2026-05-17 11:29:33,377 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 11:29:35,829 - INFO  - ACSL format loop invariant
+2026-05-17 11:29:35,830 - INFO  - /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+2026-05-17 11:29:35,832 - INFO  - QCP format loop invariant
+2026-05-17 11:29:35,832 - INFO  - /*@ Inv
+    (0 <= c) &&
+(forall (k:Z), 0 <= k && k < c => result_l[k] == k + 1) &&
+((!(c < number)) => (forall (k:Z), 0 <= k && k < number => result_l[k] == k + 1)
+          loop assigns c, result_l[0..number-1])
+    */
+    
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+2026-05-17 11:29:35,845 - INFO  - Variable Maps:[{}]
+2026-05-17 11:29:35,850 - INFO  - Path conditions: [None]
+2026-05-17 11:29:35,850 - INFO  - Pre condition: 
+2026-05-17 11:29:35,851 - INFO  - Loop Condition: c < number
+2026-05-17 11:29:35,851 - INFO  - Array Names: ['b', 'result']
+2026-05-17 11:29:35,851 - INFO  - Updated Loop Conditions: ['c < number']
+2026-05-17 11:29:35,851 - INFO  - Global Unchanged Variables: []
+2026-05-17 11:29:35,851 - INFO  - Non Inductive Variables: []
+2026-05-17 11:29:35,852 - INFO  - Unchanged Arrays (Read-only): ['result']
+2026-05-17 11:29:35,853 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 11:29:35,857 - INFO  - examples category: array
+2026-05-17 11:29:35,857 - INFO  - examples:
+2026-05-17 11:29:35,857 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 11:30:02,470 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 11:30:02,472 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 11:30:36,110 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=6
+2026-05-17 11:31:11,582 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 11:31:45,361 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 11:32:22,452 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 11:32:22,452 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=23)
+2026-05-17 11:32:45,196 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 11:33:17,599 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 11:33:17,599 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=23)
+2026-05-17 11:33:43,903 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 11:34:14,644 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 11:34:14,644 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=23)
+2026-05-17 11:34:39,725 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 11:34:47,538 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6666666666666666, 0.0), clauses=6)
+2026-05-17 11:35:24,247 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 11:35:30,347 - INFO  - ACSL format loop invariant
+2026-05-17 11:35:30,348 - INFO  - /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-17 11:35:30,351 - INFO  - QCP format loop invariant
+2026-05-17 11:35:30,351 - INFO  - /*@ Inv
+    (0 <= c
+          loop assigns c, b_l[0..number-1], ii)
+    */
+    
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-17 11:35:30,424 - INFO  - Variable Maps:[{}]
+2026-05-17 11:35:30,424 - INFO  - Path conditions: [None]
+2026-05-17 11:35:30,424 - INFO  - Pre condition: 
+2026-05-17 11:35:30,425 - INFO  - Loop Condition: c < number
+2026-05-17 11:35:30,426 - INFO  - Array Names: ['b', 'result']
+2026-05-17 11:35:30,427 - INFO  - Updated Loop Conditions: ['c < number']
+2026-05-17 11:35:30,430 - INFO  - Global Unchanged Variables: []
+2026-05-17 11:35:30,431 - INFO  - Non Inductive Variables: []
+2026-05-17 11:35:30,438 - INFO  - Unchanged Arrays (Read-only): ['result']
+2026-05-17 11:35:30,442 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 11:35:30,477 - INFO  - examples category: array
+2026-05-17 11:35:30,478 - INFO  - examples:
+2026-05-17 11:35:30,478 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 11:35:48,467 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=11
+2026-05-17 11:35:48,469 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 11:36:44,176 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.56, satisfy=0.00) clauses=9
+2026-05-17 11:37:54,754 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.56, satisfy=0.00) clauses=9
+2026-05-17 11:38:54,223 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.56, satisfy=0.00) clauses=9
+2026-05-17 11:38:54,224 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=33)
+2026-05-17 11:39:44,022 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.56, satisfy=0.00) clauses=9
+2026-05-17 11:40:01,464 - INFO  - [inv-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-17 11:40:01,464 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=33)
+2026-05-17 11:40:53,135 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.56, satisfy=0.00) clauses=9
+2026-05-17 11:42:18,942 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.56, satisfy=0.00) clauses=9
+2026-05-17 11:42:18,948 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=33)
+2026-05-17 11:43:36,919 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.56, satisfy=0.00) clauses=9
+2026-05-17 11:44:49,859 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.56, satisfy=0.00) clauses=9
+2026-05-17 11:44:49,875 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=33)
+2026-05-17 11:44:49,878 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.5555555555555556, 0.0), clauses=9)
+2026-05-17 11:46:24,476 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 11:47:09,354 - INFO  - ACSL format loop invariant
+2026-05-17 11:47:09,360 - INFO  - /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-17 11:47:09,382 - INFO  - QCP format loop invariant
+2026-05-17 11:47:09,382 - INFO  - /*@ Inv
+    (0 <= c
+          loop assigns c, b_l[0..number-1], ii)
+    */
+    
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-17 11:47:28,771 - INFO  - CORRECT INVARIANT
+2026-05-17 11:47:28,783 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo2_c151
+2026-05-17 11:47:28,784 - INFO  - ==================================================
+
+2026-05-17 11:47:28,827 - INFO  - Starting to generate ACSL specification for foo2_c151
+2026-05-17 11:48:53,325 - INFO  - syntax Correct
+2026-05-17 11:50:03,314 - INFO  - Loop Invariant:
+2026-05-17 11:50:03,325 - INFO  - [True, True, True, True, True]
+2026-05-17 11:50:03,326 - INFO  - 
+2026-05-17 11:50:03,328 - INFO  - Assertion:
+2026-05-17 11:50:03,328 - INFO  - []
+2026-05-17 11:50:03,328 - INFO  - 
+2026-05-17 11:50:03,337 - INFO  - Assigns:
+2026-05-17 11:50:03,338 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 11:50:03,342 - INFO  - 
+2026-05-17 11:50:03,350 - INFO  - Post Condition:
+2026-05-17 11:50:03,351 - INFO  - [False, False, False, False]
+2026-05-17 11:50:03,351 - INFO  - 
+2026-05-17 11:50:03,364 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=5
+2026-05-17 11:50:03,367 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  assigns \nothing;
+  ensures (p <= 0 || p > number) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p > (number + 1) / 2) ==> \result == 2 * (p - ((number + 1) / 2)) [POSTCONDITION FAILED];
+  ensures 0 <= \result <= number [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 11:50:18,773 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0;
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1;
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures \result >= 0;
+  ensures \result <= number;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 11:51:06,291 - INFO  - syntax Correct
+2026-05-17 11:52:06,446 - INFO  - Loop Invariant:
+2026-05-17 11:52:06,448 - INFO  - [True, True, True, True, True]
+2026-05-17 11:52:06,448 - INFO  - 
+2026-05-17 11:52:06,449 - INFO  - Assertion:
+2026-05-17 11:52:06,449 - INFO  - []
+2026-05-17 11:52:06,449 - INFO  - 
+2026-05-17 11:52:06,455 - INFO  - Assigns:
+2026-05-17 11:52:06,456 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 11:52:06,456 - INFO  - 
+2026-05-17 11:52:06,459 - INFO  - Post Condition:
+2026-05-17 11:52:06,459 - INFO  - [False, False, True, False, False]
+2026-05-17 11:52:06,459 - INFO  - 
+2026-05-17 11:52:06,465 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.68, satisfy=0.00) clauses=6
+2026-05-17 11:52:06,474 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures \result >= 0 [POSTCONDITION FAILED];
+  ensures \result <= number [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 11:52:20,814 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0 || p > number) ==> \result == 0;
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1;
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures 0 <= \result;
+  ensures \result <= number;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 11:53:24,904 - INFO  - syntax Correct
+2026-05-17 11:54:26,917 - INFO  - Loop Invariant:
+2026-05-17 11:54:26,947 - INFO  - [True, True, True, True, True]
+2026-05-17 11:54:26,949 - INFO  - 
+2026-05-17 11:54:26,949 - INFO  - Assertion:
+2026-05-17 11:54:26,949 - INFO  - []
+2026-05-17 11:54:26,951 - INFO  - 
+2026-05-17 11:54:26,959 - INFO  - Assigns:
+2026-05-17 11:54:26,959 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 11:54:26,959 - INFO  - 
+2026-05-17 11:54:26,964 - INFO  - Post Condition:
+2026-05-17 11:54:26,964 - INFO  - [False, False, True, False, False]
+2026-05-17 11:54:26,964 - INFO  - 
+2026-05-17 11:54:27,036 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.68, satisfy=0.00) clauses=7
+2026-05-17 11:54:27,055 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0 || p > number) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures 0 <= \result [POSTCONDITION FAILED];
+  ensures \result <= number [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 11:54:40,776 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0;
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1;
+  ensures (1 <= p && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures 0 <= \result;
+  ensures \result <= number;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 11:55:38,731 - INFO  - syntax Correct
+2026-05-17 11:56:27,935 - INFO  - Loop Invariant:
+2026-05-17 11:56:27,937 - INFO  - [True, True, True, True, True]
+2026-05-17 11:56:27,937 - INFO  - 
+2026-05-17 11:56:27,938 - INFO  - Assertion:
+2026-05-17 11:56:27,938 - INFO  - []
+2026-05-17 11:56:27,938 - INFO  - 
+2026-05-17 11:56:27,938 - INFO  - Assigns:
+2026-05-17 11:56:27,938 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 11:56:27,938 - INFO  - 
+2026-05-17 11:56:27,946 - INFO  - Post Condition:
+2026-05-17 11:56:27,947 - INFO  - [False, False, True, False, False]
+2026-05-17 11:56:27,948 - INFO  - 
+2026-05-17 11:56:27,950 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.68, satisfy=0.00) clauses=7
+2026-05-17 11:56:27,964 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1 [POSTCONDITION FAILED];
+  ensures (1 <= p && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures 0 <= \result [POSTCONDITION FAILED];
+  ensures \result <= number [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 11:56:42,419 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0;
+  ensures (1 <= p && p <= (number + 1) / 2) ==> \result == 2 * p - 1;
+  ensures (1 <= p && p <= (number / 2)) ==> \result == 2 * p;
+  ensures 0 <= \result;
+  ensures \result <= number;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 11:57:40,734 - INFO  - syntax Correct
+2026-05-17 11:58:26,541 - INFO  - Loop Invariant:
+2026-05-17 11:58:26,557 - INFO  - [True, True, True, True, True]
+2026-05-17 11:58:26,558 - INFO  - 
+2026-05-17 11:58:26,559 - INFO  - Assertion:
+2026-05-17 11:58:26,559 - INFO  - []
+2026-05-17 11:58:26,559 - INFO  - 
+2026-05-17 11:58:26,570 - INFO  - Assigns:
+2026-05-17 11:58:26,570 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 11:58:26,570 - INFO  - 
+2026-05-17 11:58:26,578 - INFO  - Post Condition:
+2026-05-17 11:58:26,586 - INFO  - [False, False, False, False, False]
+2026-05-17 11:58:26,586 - INFO  - 
+2026-05-17 11:58:26,590 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.64, satisfy=0.00) clauses=7
+2026-05-17 11:58:26,590 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 11:59:21,445 - INFO  - syntax Correct
+2026-05-17 12:00:05,200 - INFO  - Loop Invariant:
+2026-05-17 12:00:05,218 - INFO  - [True, True, True, True, True]
+2026-05-17 12:00:05,218 - INFO  - 
+2026-05-17 12:00:05,218 - INFO  - Assertion:
+2026-05-17 12:00:05,218 - INFO  - []
+2026-05-17 12:00:05,218 - INFO  - 
+2026-05-17 12:00:05,222 - INFO  - Assigns:
+2026-05-17 12:00:05,222 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:00:05,222 - INFO  - 
+2026-05-17 12:00:05,229 - INFO  - Post Condition:
+2026-05-17 12:00:05,230 - INFO  - [False, False, True, False, False]
+2026-05-17 12:00:05,230 - INFO  - 
+2026-05-17 12:00:05,240 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.68, satisfy=0.00) clauses=7
+2026-05-17 12:00:05,246 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0 || p > number) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures 0 <= \result [POSTCONDITION FAILED];
+  ensures \result <= number [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:00:14,970 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0;
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1;
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures 0 <= \result;
+  ensures \result <= number;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:01:02,470 - INFO  - syntax Correct
+2026-05-17 12:01:39,705 - INFO  - Loop Invariant:
+2026-05-17 12:01:39,715 - INFO  - [True, True, True, True, True]
+2026-05-17 12:01:39,715 - INFO  - 
+2026-05-17 12:01:39,715 - INFO  - Assertion:
+2026-05-17 12:01:39,715 - INFO  - []
+2026-05-17 12:01:39,715 - INFO  - 
+2026-05-17 12:01:39,716 - INFO  - Assigns:
+2026-05-17 12:01:39,716 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:01:39,716 - INFO  - 
+2026-05-17 12:01:39,724 - INFO  - Post Condition:
+2026-05-17 12:01:39,724 - INFO  - [False, False, True, False, False]
+2026-05-17 12:01:39,724 - INFO  - 
+2026-05-17 12:01:39,730 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.68, satisfy=0.00) clauses=7
+2026-05-17 12:01:39,731 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 12:02:24,080 - INFO  - syntax Correct
+2026-05-17 12:03:09,369 - INFO  - Loop Invariant:
+2026-05-17 12:03:09,374 - INFO  - [True, True, True, True, True]
+2026-05-17 12:03:09,375 - INFO  - 
+2026-05-17 12:03:09,376 - INFO  - Assertion:
+2026-05-17 12:03:09,378 - INFO  - []
+2026-05-17 12:03:09,378 - INFO  - 
+2026-05-17 12:03:09,393 - INFO  - Assigns:
+2026-05-17 12:03:09,393 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:03:09,394 - INFO  - 
+2026-05-17 12:03:09,401 - INFO  - Post Condition:
+2026-05-17 12:03:09,402 - INFO  - [False, False, True, False, False]
+2026-05-17 12:03:09,402 - INFO  - 
+2026-05-17 12:03:09,416 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.68, satisfy=0.00) clauses=7
+2026-05-17 12:03:09,427 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0 || p > number) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures 0 <= \result [POSTCONDITION FAILED];
+  ensures \result <= number [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:03:23,056 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0;
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1;
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures (\result == 0) || (1 <= \result && \result <= number);
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:04:01,308 - INFO  - syntax Correct
+2026-05-17 12:04:34,181 - INFO  - Loop Invariant:
+2026-05-17 12:04:34,185 - INFO  - [True, True, True, True, True]
+2026-05-17 12:04:34,186 - INFO  - 
+2026-05-17 12:04:34,189 - INFO  - Assertion:
+2026-05-17 12:04:34,189 - INFO  - []
+2026-05-17 12:04:34,189 - INFO  - 
+2026-05-17 12:04:34,197 - INFO  - Assigns:
+2026-05-17 12:04:34,198 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:04:34,198 - INFO  - 
+2026-05-17 12:04:34,205 - INFO  - Post Condition:
+2026-05-17 12:04:34,207 - INFO  - [False, False, True, False]
+2026-05-17 12:04:34,208 - INFO  - 
+2026-05-17 12:04:34,221 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=6
+2026-05-17 12:04:34,247 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures (\result == 0) || (1 <= \result && \result <= number) [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:04:45,647 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0;
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1;
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures (\result == 0) || (1 <= \result && \result <= number);
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:05:18,679 - INFO  - syntax Correct
+2026-05-17 12:05:46,587 - INFO  - Loop Invariant:
+2026-05-17 12:05:46,588 - INFO  - [True, True, True, True, True]
+2026-05-17 12:05:46,588 - INFO  - 
+2026-05-17 12:05:46,588 - INFO  - Assertion:
+2026-05-17 12:05:46,588 - INFO  - []
+2026-05-17 12:05:46,588 - INFO  - 
+2026-05-17 12:05:46,588 - INFO  - Assigns:
+2026-05-17 12:05:46,588 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:05:46,588 - INFO  - 
+2026-05-17 12:05:46,589 - INFO  - Post Condition:
+2026-05-17 12:05:46,589 - INFO  - [False, False, True, False]
+2026-05-17 12:05:46,589 - INFO  - 
+2026-05-17 12:05:46,590 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.70, satisfy=0.00) clauses=6
+2026-05-17 12:05:46,590 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1 [POSTCONDITION FAILED];
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+  ensures (\result == 0) || (1 <= \result && \result <= number) [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:05:58,945 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (p <= 0) ==> \result == 0;
+  ensures (p > number) ==> \result == 0;
+  ensures (1 <= p && p <= number && p <= (number + 1) / 2) ==> \result == 2 * p - 1;
+  ensures (1 <= p && p <= number && p > (number + 1) / 2 && p <= number - ((number + 1) / 2)) ==> \result == 2 * p;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:05:58,948 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.7037037037037037, 0.0), clauses=6)
+2026-05-17 12:06:33,298 - INFO  - syntax Correct
+2026-05-17 12:07:04,148 - INFO  - Loop Invariant:
+2026-05-17 12:07:04,148 - INFO  - [True, True, True, True, True]
+2026-05-17 12:07:04,148 - INFO  - 
+2026-05-17 12:07:04,148 - INFO  - Assertion:
+2026-05-17 12:07:04,148 - INFO  - []
+2026-05-17 12:07:04,148 - INFO  - 
+2026-05-17 12:07:04,149 - INFO  - Assigns:
+2026-05-17 12:07:04,149 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:07:04,149 - INFO  - 
+2026-05-17 12:07:04,149 - INFO  - Post Condition:
+2026-05-17 12:07:04,149 - INFO  - [False, False, True, False]
+2026-05-17 12:07:04,149 - INFO  - 
+2026-05-17 12:07:30,643 - INFO  - syntax Correct
+2026-05-17 12:07:53,403 - INFO  - Loop Invariant:
+2026-05-17 12:07:53,404 - INFO  - [True, True, True, True, True]
+2026-05-17 12:07:53,404 - INFO  - 
+2026-05-17 12:07:53,404 - INFO  - Assertion:
+2026-05-17 12:07:53,404 - INFO  - []
+2026-05-17 12:07:53,404 - INFO  - 
+2026-05-17 12:07:53,404 - INFO  - Assigns:
+2026-05-17 12:07:53,404 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:07:53,404 - INFO  - 
+2026-05-17 12:07:53,404 - INFO  - Post Condition:
+2026-05-17 12:07:53,404 - INFO  - [True]
+2026-05-17 12:07:53,405 - INFO  - 
+2026-05-17 12:07:53,419 - INFO  - 
+SPECIFICATION FOR foo2_c151
+2026-05-17 12:07:53,419 - INFO  - ==================================================
+
+2026-05-17 12:07:53,419 - INFO  - 
+QCP Specification for function foo2_c151:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 12:07:56,719 - INFO  - 
+VERIFICATION FOR foo2_c151
+2026-05-17 12:07:56,720 - INFO  - ==================================================
+
+2026-05-17 12:08:19,632 - INFO  - syntax Correct
+2026-05-17 12:08:41,975 - INFO  - Loop Invariant:
+2026-05-17 12:08:41,975 - INFO  - [True, True, True, True, True]
+2026-05-17 12:08:41,975 - INFO  - 
+2026-05-17 12:08:41,975 - INFO  - Assertion:
+2026-05-17 12:08:41,975 - INFO  - []
+2026-05-17 12:08:41,975 - INFO  - 
+2026-05-17 12:08:41,975 - INFO  - Assigns:
+2026-05-17 12:08:41,975 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:08:41,975 - INFO  - 
+2026-05-17 12:08:41,975 - INFO  - Post Condition:
+2026-05-17 12:08:41,976 - INFO  - [True]
+2026-05-17 12:08:41,976 - INFO  - 
+2026-05-17 12:09:27,782 - INFO  - syntax Correct
+2026-05-17 12:09:51,744 - INFO  - Loop Invariant:
+2026-05-17 12:09:51,744 - INFO  - [True, True, True, True, True]
+2026-05-17 12:09:51,744 - INFO  - 
+2026-05-17 12:09:51,744 - INFO  - Assertion:
+2026-05-17 12:09:51,744 - INFO  - []
+2026-05-17 12:09:51,744 - INFO  - 
+2026-05-17 12:09:51,745 - INFO  - Assigns:
+2026-05-17 12:09:51,745 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:09:51,745 - INFO  - 
+2026-05-17 12:09:51,745 - INFO  - Post Condition:
+2026-05-17 12:09:51,745 - INFO  - [False, False, False]
+2026-05-17 12:09:51,745 - INFO  - 
+2026-05-17 12:09:51,746 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=4
+2026-05-17 12:09:51,746 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1 [POSTCONDITION FAILED];
+  ensures !(1 <= p && p <= num_odds_upto(number)) ==>
+            (1 <= p - num_odds_upto(number) && p - num_odds_upto(number) <= num_evens_upto(number) ?
+               \result == 2*(p - num_odds_upto(number)) : \result == 0) [POSTCONDITION FAILED];
+  ensures (p <= 0 || (p > num_odds_upto(number) + num_evens_upto(number))) ==> \result == 0 [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:09:58,393 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1;
+  ensures (p > num_odds_upto(number)) ==>
+            (1 <= p - num_odds_upto(number) && p - num_odds_upto(number) <= num_evens_upto(number) ?
+               \result == 2*(p - num_odds_upto(number)) : \result == 0);
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:10:22,705 - INFO  - syntax Correct
+2026-05-17 12:10:46,651 - INFO  - Loop Invariant:
+2026-05-17 12:10:46,651 - INFO  - [True, True, True, True, True]
+2026-05-17 12:10:46,651 - INFO  - 
+2026-05-17 12:10:46,651 - INFO  - Assertion:
+2026-05-17 12:10:46,651 - INFO  - []
+2026-05-17 12:10:46,651 - INFO  - 
+2026-05-17 12:10:46,651 - INFO  - Assigns:
+2026-05-17 12:10:46,651 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:10:46,652 - INFO  - 
+2026-05-17 12:10:46,652 - INFO  - Post Condition:
+2026-05-17 12:10:46,652 - INFO  - [False, False, False]
+2026-05-17 12:10:46,652 - INFO  - 
+2026-05-17 12:10:46,652 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=4
+2026-05-17 12:10:46,653 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1 [POSTCONDITION FAILED];
+  ensures (p > num_odds_upto(number)) ==>
+            (1 <= p - num_odds_upto(number) && p - num_odds_upto(number) <= num_evens_upto(number) ?
+               \result == 2*(p - num_odds_upto(number)) : \result == 0) [POSTCONDITION FAILED];
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0 [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:10:54,386 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1;
+  ensures (p > num_odds_upto(number)) ==>
+            (1 <= p - num_odds_upto(number) && p - num_odds_upto(number) <= num_evens_upto(number) ?
+               \result == 2*(p - num_odds_upto(number)) : \result == 0);
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:11:18,797 - INFO  - syntax Correct
+2026-05-17 12:11:42,577 - INFO  - Loop Invariant:
+2026-05-17 12:11:42,577 - INFO  - [True, True, True, True, True]
+2026-05-17 12:11:42,577 - INFO  - 
+2026-05-17 12:11:42,578 - INFO  - Assertion:
+2026-05-17 12:11:42,578 - INFO  - []
+2026-05-17 12:11:42,578 - INFO  - 
+2026-05-17 12:11:42,578 - INFO  - Assigns:
+2026-05-17 12:11:42,578 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:11:42,578 - INFO  - 
+2026-05-17 12:11:42,578 - INFO  - Post Condition:
+2026-05-17 12:11:42,578 - INFO  - [False, False, False]
+2026-05-17 12:11:42,578 - INFO  - 
+2026-05-17 12:11:42,579 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=5
+2026-05-17 12:11:42,579 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1 [POSTCONDITION FAILED];
+  ensures (p > num_odds_upto(number)) ==>
+            (1 <= p - num_odds_upto(number) && p - num_odds_upto(number) <= num_evens_upto(number) ?
+               \result == 2*(p - num_odds_upto(number)) : \result == 0) [POSTCONDITION FAILED];
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0 [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:11:49,831 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1;
+  ensures (num_odds_upto(number) < p && p <= num_odds_upto(number) + num_evens_upto(number)) ==> 
+            \result == 2*(p - num_odds_upto(number));
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:12:13,724 - INFO  - syntax Correct
+2026-05-17 12:12:37,324 - INFO  - Loop Invariant:
+2026-05-17 12:12:37,324 - INFO  - [True, True, True, True, True]
+2026-05-17 12:12:37,324 - INFO  - 
+2026-05-17 12:12:37,324 - INFO  - Assertion:
+2026-05-17 12:12:37,324 - INFO  - []
+2026-05-17 12:12:37,324 - INFO  - 
+2026-05-17 12:12:37,324 - INFO  - Assigns:
+2026-05-17 12:12:37,325 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:12:37,325 - INFO  - 
+2026-05-17 12:12:37,325 - INFO  - Post Condition:
+2026-05-17 12:12:37,325 - INFO  - [False, False, False]
+2026-05-17 12:12:37,325 - INFO  - 
+2026-05-17 12:12:37,325 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=5
+2026-05-17 12:12:37,326 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1 [POSTCONDITION FAILED];
+  ensures (num_odds_upto(number) < p && p <= num_odds_upto(number) + num_evens_upto(number)) ==> 
+            \result == 2*(p - num_odds_upto(number)) [POSTCONDITION FAILED];
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0 [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:12:44,643 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1;
+  ensures (num_odds_upto(number) < p && p <= num_odds_upto(number) + num_evens_upto(number)) ==> 
+            \result == 2*(p - num_odds_upto(number));
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:13:08,286 - INFO  - syntax Correct
+2026-05-17 12:13:31,677 - INFO  - Loop Invariant:
+2026-05-17 12:13:31,677 - INFO  - [True, True, True, True, True]
+2026-05-17 12:13:31,677 - INFO  - 
+2026-05-17 12:13:31,677 - INFO  - Assertion:
+2026-05-17 12:13:31,677 - INFO  - []
+2026-05-17 12:13:31,677 - INFO  - 
+2026-05-17 12:13:31,677 - INFO  - Assigns:
+2026-05-17 12:13:31,677 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:13:31,677 - INFO  - 
+2026-05-17 12:13:31,677 - INFO  - Post Condition:
+2026-05-17 12:13:31,678 - INFO  - [False, False, False]
+2026-05-17 12:13:31,678 - INFO  - 
+2026-05-17 12:13:31,678 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=5
+2026-05-17 12:13:31,678 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 12:13:55,202 - INFO  - syntax Correct
+2026-05-17 12:14:18,494 - INFO  - Loop Invariant:
+2026-05-17 12:14:18,494 - INFO  - [True, True, True, True, True]
+2026-05-17 12:14:18,494 - INFO  - 
+2026-05-17 12:14:18,494 - INFO  - Assertion:
+2026-05-17 12:14:18,494 - INFO  - []
+2026-05-17 12:14:18,494 - INFO  - 
+2026-05-17 12:14:18,494 - INFO  - Assigns:
+2026-05-17 12:14:18,495 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:14:18,495 - INFO  - 
+2026-05-17 12:14:18,495 - INFO  - Post Condition:
+2026-05-17 12:14:18,495 - INFO  - [False, False, False]
+2026-05-17 12:14:18,495 - INFO  - 
+2026-05-17 12:14:18,495 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=5
+2026-05-17 12:14:18,496 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1 [POSTCONDITION FAILED];
+  ensures (p > num_odds_upto(number)) ==>
+            (1 <= p - num_odds_upto(number) && p - num_odds_upto(number) <= num_evens_upto(number) ?
+               \result == 2*(p - num_odds_upto(number)) : \result == 0) [POSTCONDITION FAILED];
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0 [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:14:31,469 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1;
+  ensures (p > num_odds_upto(number) &&
+           p <= num_odds_upto(number) + num_evens_upto(number)) ==>
+            \result == 2*(p - num_odds_upto(number));
+  ensures (p <= 0 ||
+           p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:14:54,867 - INFO  - syntax Correct
+2026-05-17 12:15:18,163 - INFO  - Loop Invariant:
+2026-05-17 12:15:18,163 - INFO  - [True, True, True, True, True]
+2026-05-17 12:15:18,163 - INFO  - 
+2026-05-17 12:15:18,163 - INFO  - Assertion:
+2026-05-17 12:15:18,163 - INFO  - []
+2026-05-17 12:15:18,163 - INFO  - 
+2026-05-17 12:15:18,163 - INFO  - Assigns:
+2026-05-17 12:15:18,163 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:15:18,163 - INFO  - 
+2026-05-17 12:15:18,163 - INFO  - Post Condition:
+2026-05-17 12:15:18,163 - INFO  - [False, False, False]
+2026-05-17 12:15:18,164 - INFO  - 
+2026-05-17 12:15:18,164 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=5
+2026-05-17 12:15:18,164 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 12:15:41,710 - INFO  - syntax Correct
+2026-05-17 12:16:04,983 - INFO  - Loop Invariant:
+2026-05-17 12:16:04,983 - INFO  - [True, True, True, True, True]
+2026-05-17 12:16:04,983 - INFO  - 
+2026-05-17 12:16:04,983 - INFO  - Assertion:
+2026-05-17 12:16:04,983 - INFO  - []
+2026-05-17 12:16:04,983 - INFO  - 
+2026-05-17 12:16:04,983 - INFO  - Assigns:
+2026-05-17 12:16:04,983 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:16:04,984 - INFO  - 
+2026-05-17 12:16:04,984 - INFO  - Post Condition:
+2026-05-17 12:16:04,984 - INFO  - [False, False, False]
+2026-05-17 12:16:04,984 - INFO  - 
+2026-05-17 12:16:04,984 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=5
+2026-05-17 12:16:04,984 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1 [POSTCONDITION FAILED];
+  ensures (p > num_odds_upto(number)) ==>
+            (1 <= p - num_odds_upto(number) && p - num_odds_upto(number) <= num_evens_upto(number) ?
+               \result == 2*(p - num_odds_upto(number)) : \result == 0) [POSTCONDITION FAILED];
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0 [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:16:14,504 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1;
+  ensures (p > num_odds_upto(number)) ==>
+            (1 <= p - num_odds_upto(number) && p - num_odds_upto(number) <= num_evens_upto(number) ?
+               \result == 2*(p - num_odds_upto(number)) : \result == 0);
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:16:37,880 - INFO  - syntax Correct
+2026-05-17 12:17:01,210 - INFO  - Loop Invariant:
+2026-05-17 12:17:01,210 - INFO  - [True, True, True, True, True]
+2026-05-17 12:17:01,210 - INFO  - 
+2026-05-17 12:17:01,211 - INFO  - Assertion:
+2026-05-17 12:17:01,211 - INFO  - []
+2026-05-17 12:17:01,211 - INFO  - 
+2026-05-17 12:17:01,211 - INFO  - Assigns:
+2026-05-17 12:17:01,211 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:17:01,211 - INFO  - 
+2026-05-17 12:17:01,211 - INFO  - Post Condition:
+2026-05-17 12:17:01,211 - INFO  - [False, False, False]
+2026-05-17 12:17:01,211 - INFO  - 
+2026-05-17 12:17:01,212 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=5
+2026-05-17 12:17:01,212 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 12:17:24,663 - INFO  - syntax Correct
+2026-05-17 12:17:47,958 - INFO  - Loop Invariant:
+2026-05-17 12:17:47,958 - INFO  - [True, True, True, True, True]
+2026-05-17 12:17:47,958 - INFO  - 
+2026-05-17 12:17:47,958 - INFO  - Assertion:
+2026-05-17 12:17:47,958 - INFO  - []
+2026-05-17 12:17:47,958 - INFO  - 
+2026-05-17 12:17:47,959 - INFO  - Assigns:
+2026-05-17 12:17:47,959 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:17:47,959 - INFO  - 
+2026-05-17 12:17:47,959 - INFO  - Post Condition:
+2026-05-17 12:17:47,959 - INFO  - [False, False, False]
+2026-05-17 12:17:47,959 - INFO  - 
+2026-05-17 12:17:47,960 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.69, satisfy=0.00) clauses=5
+2026-05-17 12:17:47,960 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1 [POSTCONDITION FAILED];
+  ensures (p > num_odds_upto(number)) ==>
+            (1 <= p - num_odds_upto(number) && p - num_odds_upto(number) <= num_evens_upto(number) ?
+               \result == 2*(p - num_odds_upto(number)) : \result == 0) [POSTCONDITION FAILED];
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0 [POSTCONDITION FAILED];
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:17:53,612 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer count_eq_int{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0 : count_eq_int(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+/*@
+  logic integer cnt_odd(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_odd(a, lo, hi - 1) + (a[hi - 1] % 2 != 0 ? 1 : 0);
+*/
+
+/*@
+  logic integer cnt_even(int* a, integer lo, integer hi) =
+    lo >= hi ? 0 : cnt_even(a, lo, hi - 1) + (a[hi - 1] % 2 == 0 ? 1 : 0);
+*/
+        
+
+/*@ logic integer num_odds_upto(integer n) = n <= 0 ? 0 : (n + 1) / 2; */
+/*@ logic integer num_evens_upto(integer n) = n <= 0 ? 0 : n / 2; */
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (1 <= p && p <= num_odds_upto(number)) ==> \result == 2*p - 1;
+  ensures (p > num_odds_upto(number)) ==>
+            (1 <= p - num_odds_upto(number) && p - num_odds_upto(number) <= num_evens_upto(number) ?
+               \result == 2*(p - num_odds_upto(number)) : \result == 0);
+  ensures (p <= 0 || p > num_odds_upto(number) + num_evens_upto(number)) ==> \result == 0;
+*/
+int foo2_c151(int number, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (number));
+int result_len = number;
+		int *b = (int *)malloc(sizeof(int) * (number));
+int b_len = number;
+		int c, ii = 0;
+		
+            /*@
+          loop invariant 0 <= c;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == k + 1;
+          loop invariant (!(c < number)) ==> (\forall integer k; 0 <= k < number ==> result[k] == k + 1);
+          loop assigns c, result[0..number-1];
+            */
+            for (c = 0; c < number; c++) {
+			result[c] = c + 1;
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+            /*@
+          loop invariant 0 <= c;
+          loop assigns c, b[0..number-1], ii;
+            */
+            for (c = 0; c < number; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				ii++;
+				if (ii == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-17 12:17:53,613 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.6923076923076923, 0.0), clauses=5)
+2026-05-17 12:18:16,981 - INFO  - syntax Correct
+2026-05-17 12:18:40,232 - INFO  - Loop Invariant:
+2026-05-17 12:18:40,233 - INFO  - [True, True, True, True, True]
+2026-05-17 12:18:40,233 - INFO  - 
+2026-05-17 12:18:40,233 - INFO  - Assertion:
+2026-05-17 12:18:40,233 - INFO  - []
+2026-05-17 12:18:40,233 - INFO  - 
+2026-05-17 12:18:40,233 - INFO  - Assigns:
+2026-05-17 12:18:40,233 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:18:40,233 - INFO  - 
+2026-05-17 12:18:40,234 - INFO  - Post Condition:
+2026-05-17 12:18:40,234 - INFO  - [False, False, False]
+2026-05-17 12:18:40,234 - INFO  - 
+2026-05-17 12:19:01,776 - INFO  - syntax Correct
+2026-05-17 12:19:23,136 - INFO  - Loop Invariant:
+2026-05-17 12:19:23,136 - INFO  - [True, True, True, True, True]
+2026-05-17 12:19:23,136 - INFO  - 
+2026-05-17 12:19:23,136 - INFO  - Assertion:
+2026-05-17 12:19:23,136 - INFO  - []
+2026-05-17 12:19:23,136 - INFO  - 
+2026-05-17 12:19:23,137 - INFO  - Assigns:
+2026-05-17 12:19:23,137 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:19:23,137 - INFO  - 
+2026-05-17 12:19:23,137 - INFO  - Post Condition:
+2026-05-17 12:19:23,137 - INFO  - []
+2026-05-17 12:19:23,137 - INFO  - 
+2026-05-17 12:19:44,668 - INFO  - syntax Correct
+2026-05-17 12:20:06,051 - INFO  - Loop Invariant:
+2026-05-17 12:20:06,051 - INFO  - [True, True, True, True, True]
+2026-05-17 12:20:06,051 - INFO  - 
+2026-05-17 12:20:06,051 - INFO  - Assertion:
+2026-05-17 12:20:06,051 - INFO  - []
+2026-05-17 12:20:06,051 - INFO  - 
+2026-05-17 12:20:06,051 - INFO  - Assigns:
+2026-05-17 12:20:06,052 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-17 12:20:06,052 - INFO  - 
+2026-05-17 12:20:06,052 - INFO  - Post Condition:
+2026-05-17 12:20:06,052 - INFO  - []
+2026-05-17 12:20:06,052 - INFO  - 
+2026-05-17 12:20:06,052 - INFO  - first_pass:
+2026-05-17 12:20:06,052 - INFO  - syntax=1, valid=None,satisfy=None
+2026-05-17 12:20:06,052 - INFO  - ==================================================
+2026-05-17 12:20:06,052 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 12:20:06,052 - INFO  - Total execution time: 3123.62 seconds (52.06 minutes)
+2026-05-17 12:20:06,052 - INFO  - ==================================================
+2026-05-17 12:20:06,052 - INFO  - ==================================================
+2026-05-17 12:20:06,053 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 12:20:06,053 - INFO  - Total API calls: 42
+2026-05-17 12:20:06,053 - INFO  - Total prompt tokens (input): 976,492
+2026-05-17 12:20:06,053 - INFO  - Total completion tokens (output): 34,332
+2026-05-17 12:20:06,053 - INFO  - Total tokens: 1,010,824
+2026-05-17 12:20:06,053 - INFO  - Average prompt tokens per call: 23249.8
+2026-05-17 12:20:06,053 - INFO  - Average completion tokens per call: 817.4
+2026-05-17 12:20:06,053 - INFO  - Average total tokens per call: 24067.2
+2026-05-17 12:20:06,053 - INFO  - ==================================================

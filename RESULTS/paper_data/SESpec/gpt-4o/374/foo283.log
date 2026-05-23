@@ -1,0 +1,408 @@
+2026-05-15 02:31:54,794 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo283/20260515_023154_885859_1f3c8cd3
+2026-05-15 02:31:54,794 - INFO  - 
+🚀 Starting generation of function: foo283
+2026-05-15 02:31:54,794 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 02:31:54,794 - INFO  - ==================================================
+
+2026-05-15 02:31:54,902 - INFO  - [auto only_loop] False — foo283 returns 'int'
+2026-05-15 02:31:54,903 - INFO  - Initial pending functions: ['foo283']
+2026-05-15 02:31:54,903 - INFO  - 
+GENERATE ANNOTATION FOR foo283
+2026-05-15 02:31:54,903 - INFO  - ==================================================
+
+2026-05-15 02:31:54,903 - INFO  - Function foo283 has been initialized
+2026-05-15 02:31:54,903 - INFO  - Starting to generate annotation code for foo283
+2026-05-15 02:31:54,958 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo283
+2026-05-15 02:31:54,958 - INFO  - ==================================================
+
+2026-05-15 02:31:55,014 - INFO  - Variable Maps:[{'div': '0', 'number': 'number@pre'}]
+2026-05-15 02:31:55,014 - INFO  - Path conditions: [None]
+2026-05-15 02:31:55,014 - INFO  - Pre condition: (div == 0) * (number == number@pre)
+2026-05-15 02:31:55,015 - INFO  - Loop Condition: c <= number
+2026-05-15 02:31:55,015 - INFO  - Array Names: []
+2026-05-15 02:31:55,016 - INFO  - Updated Loop Conditions: ['c <= number@pre']
+2026-05-15 02:31:55,016 - INFO  - Global Unchanged Variables: ['number']
+2026-05-15 02:31:55,016 - INFO  - Non Inductive Variables: []
+2026-05-15 02:31:55,016 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 02:31:55,018 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 02:31:55,019 - INFO  - examples category: numeric
+2026-05-15 02:31:55,019 - INFO  - examples:
+2026-05-15 02:31:55,019 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 02:32:03,037 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 02:32:32,425 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-15 02:33:21,855 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-15 02:33:54,672 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-15 02:34:29,998 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-15 02:35:04,665 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-15 02:35:04,666 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-15 02:35:26,618 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-15 02:36:01,597 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-15 02:36:01,598 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-15 02:36:23,479 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-15 02:37:01,356 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-15 02:37:01,356 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-15 02:37:01,357 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.75, 0.0), clauses=4)
+2026-05-15 02:37:51,753 - INFO  - ACSL format loop invariant
+2026-05-15 02:37:51,755 - INFO  - /*@
+      loop invariant number == \at(number,Pre);
+      loop invariant div >= 0;
+      loop assigns c, div;
+    */
+    for (int c = 1; c <= number; c++) {
+        if (number % c == 0) {
+            div++;
+        }
+    }
+2026-05-15 02:37:51,757 - INFO  - QCP format loop invariant
+2026-05-15 02:37:51,757 - INFO  - /*@ Inv
+    (number == number@pre) &&
+(div >= 0
+      loop assigns c, div)
+    */
+    
+    for (int c = 1; c <= number; c++) {
+        if (number % c == 0) {
+            div++;
+        }
+    }
+2026-05-15 02:37:53,697 - INFO  - CORRECT INVARIANT
+2026-05-15 02:37:53,697 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo283
+2026-05-15 02:37:53,698 - INFO  - ==================================================
+
+2026-05-15 02:37:53,711 - INFO  - Starting to generate ACSL specification for foo283
+2026-05-15 02:38:11,522 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-4o/foo283/20260515_023154_885859_1f3c8cd3/output/foo283.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-4o/foo283/20260515_023154_885859_1f3c8cd3/output/foo283.c:5: Warning: 
+  unbound logic function count_divisors. Ignoring logic specification of function foo283
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-4o/foo283/20260515_023154_885859_1f3c8cd3/output/foo283.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:38:11,523 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-15 02:38:46,096 - INFO  - syntax Correct
+2026-05-15 02:38:46,893 - INFO  - Loop Invariant:
+2026-05-15 02:38:46,893 - INFO  - [True, True, True]
+2026-05-15 02:38:46,893 - INFO  - 
+2026-05-15 02:38:46,893 - INFO  - Assertion:
+2026-05-15 02:38:46,893 - INFO  - []
+2026-05-15 02:38:46,893 - INFO  - 
+2026-05-15 02:38:46,893 - INFO  - Assigns:
+2026-05-15 02:38:46,893 - INFO  - [True]
+2026-05-15 02:38:46,894 - INFO  - 
+2026-05-15 02:38:46,894 - INFO  - Post Condition:
+2026-05-15 02:38:46,894 - INFO  - [True]
+2026-05-15 02:38:46,894 - INFO  - 
+2026-05-15 02:38:46,894 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=3
+2026-05-15 02:38:46,894 - INFO  - [spec-gen] converged at refine 2
+2026-05-15 02:38:46,894 - INFO  - 
+SPECIFICATION FOR foo283
+2026-05-15 02:38:46,894 - INFO  - ==================================================
+
+2026-05-15 02:38:46,894 - INFO  - 
+QCP Specification for function foo283:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-15 02:38:46,966 - INFO  - 
+VERIFICATION FOR foo283
+2026-05-15 02:38:46,971 - INFO  - ==================================================
+
+2026-05-15 02:38:46,971 - INFO  - TRY TIME: 0
+2026-05-15 02:38:47,683 - INFO  - syntax Correct
+2026-05-15 02:38:48,541 - INFO  - Loop Invariant:
+2026-05-15 02:38:48,542 - INFO  - [True, True, True]
+2026-05-15 02:38:48,542 - INFO  - 
+2026-05-15 02:38:48,542 - INFO  - Assertion:
+2026-05-15 02:38:48,542 - INFO  - []
+2026-05-15 02:38:48,542 - INFO  - 
+2026-05-15 02:38:48,542 - INFO  - Assigns:
+2026-05-15 02:38:48,542 - INFO  - [True]
+2026-05-15 02:38:48,542 - INFO  - 
+2026-05-15 02:38:48,542 - INFO  - Post Condition:
+2026-05-15 02:38:48,542 - INFO  - [True]
+2026-05-15 02:38:48,542 - INFO  - 
+2026-05-15 02:38:48,542 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo283
+2026-05-15 02:38:48,542 - INFO  - ==================================================
+2026-05-15 02:38:48,542 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo283/20260515_023154_885859_1f3c8cd3/output/foo283.c
+2026-05-15 02:38:48,542 - INFO  - Output file content:
+
+/*@ 
+  logic integer count_divisors(integer n, integer limit) = 
+    (limit <= 0) ? 0 : (n % limit == 0 ? 1 : 0) + count_divisors(n, limit - 1);
+*/
+
+/*@
+  requires number > 0;
+  assigns \nothing;
+  ensures \result == count_divisors(number, number);
+*/
+int foo283(int number) {
+
+    int div = 0;
+
+    /*@
+      loop invariant number == \at(number, Pre);
+      loop invariant div == count_divisors(number, c - 1);
+      loop invariant 1 <= c <= number + 1;
+      loop assigns c, div;
+      loop variant number - c;
+    */
+    for (int c = 1; c <= number; c++) {
+        if (number % c == 0) {
+            div++;
+        }
+    }
+
+    return div;
+}
+
+2026-05-15 02:38:48,542 - INFO  - ==================================================
+2026-05-15 02:38:48,543 - INFO  - first_pass:
+2026-05-15 02:38:48,543 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 02:38:48,543 - INFO  - ==================================================
+2026-05-15 02:38:48,543 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 02:38:48,543 - INFO  - Total execution time: 413.75 seconds (6.90 minutes)
+2026-05-15 02:38:48,543 - INFO  - ==================================================
+2026-05-15 02:38:48,543 - INFO  - ==================================================
+2026-05-15 02:38:48,543 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 02:38:48,543 - INFO  - Total API calls: 10
+2026-05-15 02:38:48,543 - INFO  - Total prompt tokens (input): 73,760
+2026-05-15 02:38:48,543 - INFO  - Total completion tokens (output): 5,082
+2026-05-15 02:38:48,543 - INFO  - Total tokens: 78,842
+2026-05-15 02:38:48,543 - INFO  - Average prompt tokens per call: 7376.0
+2026-05-15 02:38:48,543 - INFO  - Average completion tokens per call: 508.2
+2026-05-15 02:38:48,543 - INFO  - Average total tokens per call: 7884.2
+2026-05-15 02:38:48,543 - INFO  - ==================================================

@@ -15,6 +15,22 @@ from pathlib import Path
 INDEX = cindex.Index.create()
 
 
+def source_has_acsl_assert(text: str) -> bool:
+    """True iff the C source contains an ACSL `assert` annotation.
+
+    Matches `/*@ ... assert ... */` (including labeled `for L: assert ...`)
+    and `//@ ... assert ...`. Does NOT match C's `assert(...)` macro from
+    `<assert.h>` — that is a library call, not a proof obligation we author.
+    """
+    if not text:
+        return False
+    if re.search(r'/\*@(?:(?!\*/).)*?\bassert\b', text, re.DOTALL):
+        return True
+    if re.search(r'//@.*?\bassert\b', text):
+        return True
+    return False
+
+
 def run_clang_mm(source_file, include_args):
     """
     使用 clang -MM 分析源文件的依赖关系。
@@ -286,6 +302,288 @@ def process_parameter(cursor, parameter_list, function_code):
     return parameter
 
 
+# ----------------------------------------------------------------------
+# Array-length resolution: replace the legacy "next-parameter-is-length"
+# positional heuristic with name-convention + body-scan + LLM fallback.
+# ----------------------------------------------------------------------
+
+# 1D length-naming suffixes / prefixes (priority order, first match wins).
+# Each candidate is paired with the pointer name `p` by string substitution.
+_ARRAY_LEN_1D_SUFFIXES = ('_len', '_length', '_size', '_count', '_n', '_l')
+_ARRAY_LEN_1D_PREFIXES = ('n_', 'num_', 'len_')
+
+# 2D row/col pairs.
+_ARRAY_LEN_2D_PAIRS = (
+    ('_rows', '_cols'),
+    ('_n_rows', '_n_cols'),
+    ('_nr', '_nc'),
+    ('_h', '_w'),
+    ('_rows', '_cols'),
+)
+
+
+def _strip_comments_and_strings(code: str) -> str:
+    """Best-effort strip of C/C++ comments and string/char literals so
+    body-scan regexes don't trip on text inside them."""
+    if not code:
+        return ''
+    code = re.sub(r'/\*[\s\S]*?\*/', ' ', code)
+    code = re.sub(r'//[^\n]*', ' ', code)
+    code = re.sub(r'"(?:\\.|[^"\\])*"', '""', code)
+    code = re.sub(r"'(?:\\.|[^'\\])*'", "''", code)
+    return code
+
+
+def _scalar_param_names(parameter_list) -> set:
+    """Names of params that look like usable length scalars: non-pointer,
+    non-struct, non-array."""
+    out = set()
+    for p in parameter_list:
+        if p.is_ptr:
+            continue
+        if p.is_struct:
+            continue
+        if p.array_length not in (-1, None):
+            continue
+        out.add(p.name)
+    return out
+
+
+def _match_name_convention(param, scalar_names):
+    """Layer (a): name-based length resolution. Returns one of:
+      ('1d', length_var)
+      ('2d', [rows_name, cols_name])
+      None
+    """
+    pname = param.name
+    # 2D pairs first (more specific).
+    for sx, sy in _ARRAY_LEN_2D_PAIRS:
+        r, c = pname + sx, pname + sy
+        if r in scalar_names and c in scalar_names:
+            return ('2d', [r, c])
+    # 1D suffixes.
+    for suf in _ARRAY_LEN_1D_SUFFIXES:
+        cand = pname + suf
+        if cand in scalar_names:
+            return ('1d', cand)
+    # 1D prefixes.
+    for pre in _ARRAY_LEN_1D_PREFIXES:
+        cand = pre + pname
+        if cand in scalar_names:
+            return ('1d', cand)
+    return None
+
+
+# Match `for (... i = 0; i < BOUND ...)` to recover the loop's bound name.
+def _loop_upper_bounds(code: str) -> dict:
+    """Map loop-variable name → set of upper-bound identifiers found in
+    `for (... <i> = 0; <i> < <BOUND> ...)`. Multiple loops over the same
+    variable accumulate."""
+    out: dict = {}
+    pat = re.compile(
+        r'for\s*\(\s*(?:int\s+|unsigned\s+int\s+|long\s+|size_t\s+)?'
+        r'([A-Za-z_]\w*)\s*=\s*0\s*;\s*'
+        r'\1\s*<\s*([A-Za-z_]\w*)'
+    )
+    for m in pat.finditer(code):
+        out.setdefault(m.group(1), set()).add(m.group(2))
+    return out
+
+
+def _scan_body_for_bound(pname: str, code: str, scalar_names: set,
+                        loop_bounds: dict):
+    """Layer (b): scan `code` for `<pname>[<expr>]` indexing forms and
+    derive the most precise length expression.
+
+    Returns one of:
+      ('1d', 'N')
+      ('2d', [N, K])
+      None
+    where N/K are scalar parameter names.
+    """
+    # Find every `<pname>[<expr>]` index.
+    pat = re.compile(r'\b' + re.escape(pname) + r'\s*\[([^\[\]]+)\]')
+    exprs = [m.group(1).strip() for m in pat.finditer(code)]
+    if not exprs:
+        return None
+
+    best = None  # ('2d', [N, K]) wins over ('1d', N)
+    for expr in exprs:
+        # Form 1: single loop variable.
+        m1 = re.fullmatch(r'([A-Za-z_]\w*)', expr)
+        if m1:
+            iv = m1.group(1)
+            bounds = loop_bounds.get(iv, set()) & scalar_names
+            if bounds and best is None:
+                best = ('1d', next(iter(bounds)))
+            continue
+
+        # Form 2: row-major flat <i>*<K>+<j> (or symmetric ordering).
+        m2 = re.fullmatch(
+            r'([A-Za-z_]\w*)\s*\*\s*([A-Za-z_]\w*)\s*\+\s*([A-Za-z_]\w*)',
+            expr,
+        )
+        if m2:
+            outer_iv, multiplier, inner_iv = m2.group(1), m2.group(2), m2.group(3)
+            outer_bounds = loop_bounds.get(outer_iv, set()) & scalar_names
+            inner_bounds = loop_bounds.get(inner_iv, set()) & scalar_names
+            # The multiplier must match the inner loop's bound (row-major).
+            if multiplier in scalar_names and multiplier in inner_bounds:
+                # outer_iv runs over N, inner_iv runs over multiplier (=K)
+                if outer_bounds:
+                    N = next(iter(outer_bounds))
+                    best = ('2d', [N, multiplier])
+                    continue
+            # Try symmetric: multiplier is outer's bound, inner unbounded.
+            if multiplier in scalar_names and multiplier in outer_bounds:
+                K = next(iter(inner_bounds)) if inner_bounds else multiplier
+                best = ('2d', [multiplier, K])
+                continue
+
+    return best
+
+
+# Validates an LLM-returned length expression: must only reference scalar
+# param names plus simple arithmetic / integer literals.
+_LEN_EXPR_TOKEN = re.compile(r'[A-Za-z_]\w*|\d+|[\s+\-*/()]')
+
+
+def _is_safe_length_expr(expr: str, scalar_names: set) -> bool:
+    if not expr or not expr.strip():
+        return False
+    s = expr.strip()
+    # Remaining text after tokenising should be empty.
+    pos = 0
+    while pos < len(s):
+        m = _LEN_EXPR_TOKEN.match(s, pos)
+        if not m:
+            return False
+        pos = m.end()
+    # All identifiers must be scalar params.
+    for ident in re.findall(r'[A-Za-z_]\w*', s):
+        if ident not in scalar_names:
+            return False
+    return True
+
+
+def _llm_resolve_length(pname: str, ptype: str, function_name: str,
+                       function_code: str, scalar_names: set, llm) -> 'Optional[str]':
+    """Layer (c): ask the LLM for an ACSL-valid length expression.
+    Returns the parsed length_expr or None.
+    """
+    if llm is None:
+        return None
+    try:
+        prompt = (
+            "You are an expert in C and Frama-C/ACSL.\n\n"
+            f"Function `{function_name}`:\n```c\n{function_code}\n```\n\n"
+            f"For the pointer parameter `{pname}` (type `{ptype}`), infer "
+            "the maximum array length implied by how it is indexed. The "
+            "length MUST be expressible in ACSL using only this function's "
+            "other parameter names: "
+            + ", ".join(sorted(scalar_names))
+            + " — no `sizeof`, no globals, no locals.\n\n"
+            "Respond with a single JSON object on one line:\n"
+            '{"length_expr": "<expression or null>", "reason": "<short>"}\n'
+            "If you cannot determine the length, return null."
+        )
+        resp = llm.chat([{"role": "user", "content": prompt}])
+    except Exception:
+        return None
+    if not resp:
+        return None
+    # Find the JSON object.
+    m = re.search(r'\{[^{}]*"length_expr"\s*:\s*("[^"]*"|null)', resp, re.DOTALL)
+    if not m:
+        return None
+    raw = m.group(1)
+    if raw == 'null' or raw == '"null"':
+        return None
+    expr = raw.strip('"').strip()
+    if not _is_safe_length_expr(expr, scalar_names):
+        return None
+    return expr
+
+
+def resolve_array_lengths(parameter_list, function_code: str,
+                          function_name: str = '',
+                          llm=None, llm_cache: 'Optional[dict]' = None) -> None:
+    """Populate `length_expr` / `length_dims` / `length_source` on every
+    pointer parameter in `parameter_list`, in place.
+
+    Pipeline (per pointer):
+      (a) name convention against scalar params
+      (b) body scan of indexing expressions
+      (c) LLM fallback (only if `llm` is provided)
+
+    `llm_cache` is keyed by `(function_name, ptr_name)` to avoid repeated
+    LLM calls across refinement rounds.
+    """
+    if not parameter_list:
+        return
+    scalar_names = _scalar_param_names(parameter_list)
+    if not scalar_names and llm is None:
+        # Nothing we can match against; skip.
+        return
+    code = _strip_comments_and_strings(function_code or '')
+    loop_bounds = _loop_upper_bounds(code)
+
+    for param in parameter_list:
+        if not param.is_ptr:
+            continue
+        # Don't overwrite a length that's already been set (e.g. callers
+        # already filled it from a sibling translation).
+        if param.length_expr:
+            continue
+
+        # Layer (a): name convention.
+        hit = _match_name_convention(param, scalar_names)
+        if hit is not None:
+            kind, payload = hit
+            if kind == '1d':
+                param.length_expr = payload
+                param.length_dims = None
+            else:
+                param.length_dims = payload
+                param.length_expr = f'{payload[0]} * {payload[1]}'
+            param.length_source = 'name'
+            continue
+
+        # Layer (b): body scan.
+        hit = _scan_body_for_bound(param.name, code, scalar_names, loop_bounds)
+        if hit is not None:
+            kind, payload = hit
+            if kind == '1d':
+                param.length_expr = payload
+                param.length_dims = None
+            else:
+                param.length_dims = payload
+                param.length_expr = f'{payload[0]} * {payload[1]}'
+            param.length_source = 'body'
+            continue
+
+        # Layer (c): LLM fallback.
+        if llm is None:
+            continue
+        cache_key = (function_name, param.name)
+        if llm_cache is not None and cache_key in llm_cache:
+            cached = llm_cache[cache_key]
+            param.length_expr = cached
+            param.length_source = 'llm' if cached else 'none'
+            continue
+        expr = _llm_resolve_length(
+            pname=param.name,
+            ptype=str(param.type) + ('*' * max(param.ptr_depth, 1)),
+            function_name=function_name,
+            function_code=function_code or '',
+            scalar_names=scalar_names,
+            llm=llm,
+        )
+        if llm_cache is not None:
+            llm_cache[cache_key] = expr
+        if expr:
+            param.length_expr = expr
+            param.length_source = 'llm'
 
 
 

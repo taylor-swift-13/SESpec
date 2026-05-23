@@ -1,0 +1,357 @@
+2026-05-15 00:37:41,079 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo94/20260515_003741_603717_29a91641
+2026-05-15 00:37:41,079 - INFO  - 
+🚀 Starting generation of function: foo94
+2026-05-15 00:37:41,079 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 00:37:41,079 - INFO  - ==================================================
+
+2026-05-15 00:37:42,404 - INFO  - [auto only_loop] False — foo94 returns 'int'
+2026-05-15 00:37:42,404 - INFO  - Initial pending functions: ['foo94']
+2026-05-15 00:37:42,405 - INFO  - 
+GENERATE ANNOTATION FOR foo94
+2026-05-15 00:37:42,405 - INFO  - ==================================================
+
+2026-05-15 00:37:42,405 - INFO  - Function foo94 has been initialized
+2026-05-15 00:37:42,405 - INFO  - Starting to generate annotation code for foo94
+2026-05-15 00:37:42,438 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo94
+2026-05-15 00:37:42,438 - INFO  - ==================================================
+
+2026-05-15 00:37:42,496 - INFO  - Variable Maps:[{'sum': 'arr[0]', 'result': 'arr[0]', 'arr_len': 'arr_len@pre', 'arr': 'arr@pre'}]
+2026-05-15 00:37:42,496 - INFO  - Path conditions: ['arr_len@pre > 0 && arr_len@pre < 100']
+2026-05-15 00:37:42,497 - INFO  - Pre condition: arr_len@pre > 0 && arr_len@pre < 100 && store_int_array(arr@pre, arr_len@pre, arr_l) * (sum == arr_l[0]) * (result == arr_l[0]) * (arr_len == arr_len@pre) * (arr == arr@pre)
+2026-05-15 00:37:42,497 - INFO  - Loop Condition: n < arr_len
+2026-05-15 00:37:42,498 - INFO  - Array Names: ['arr']
+2026-05-15 00:37:42,498 - INFO  - Updated Loop Conditions: ['n < arr_len@pre']
+2026-05-15 00:37:42,498 - INFO  - Global Unchanged Variables: ['arr_len', 'arr']
+2026-05-15 00:37:42,499 - INFO  - Non Inductive Variables: ['result', 'sum']
+2026-05-15 00:37:42,499 - INFO  - Unchanged Arrays (Read-only): ['arr']
+2026-05-15 00:37:42,500 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 00:37:42,501 - INFO  - examples category: array
+2026-05-15 00:37:42,501 - INFO  - examples:
+2026-05-15 00:37:42,501 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-15 00:37:51,644 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 00:38:24,771 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=7
+2026-05-15 00:38:40,002 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-15 00:38:55,613 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=6
+2026-05-15 00:38:55,613 - INFO  - [inv-gen] converged at refine 4
+2026-05-15 00:38:57,706 - INFO  - ACSL format loop invariant
+2026-05-15 00:38:57,706 - INFO  - /*@
+          loop invariant 1 <= n <= arr_len;
+          loop invariant result == max_prefix(arr, 0, n);
+          loop invariant sum == min_prefix(arr, 0, n);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant unchanged_array(arr, \at(arr,Pre), \at(arr_len,Pre));
+          loop assigns n, result, sum;
+            */
+            for (int n = 1; n < arr_len; n++) {
+			if (arr[n] > result) {
+				result = arr[n];
+			}
+			if (arr[n] < sum) {
+				sum = arr[n];
+			}
+		}
+2026-05-15 00:38:57,707 - INFO  - QCP format loop invariant
+2026-05-15 00:38:57,707 - INFO  - /*@ Inv
+    exists  arr_l,    
+    store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100 &&
+    (1 <= n && n <= arr_len) &&
+(result == max_prefix(arr, 0, n)) &&
+(sum == min_prefix(arr, 0, n)) &&
+(arr_len == arr_len@pre) &&
+(arr == arr@pre) &&
+(unchanged_array(arr, arr@pre, arr_len@pre)
+          loop assigns n, result, sum)
+    */
+    
+            for (int n = 1; n < arr_len; n++) {
+			if (arr[n] > result) {
+				result = arr[n];
+			}
+			if (arr[n] < sum) {
+				sum = arr[n];
+			}
+		}
+2026-05-15 00:38:59,765 - INFO  - CORRECT INVARIANT
+2026-05-15 00:38:59,765 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo94
+2026-05-15 00:38:59,766 - INFO  - ==================================================
+
+2026-05-15 00:38:59,784 - INFO  - Starting to generate ACSL specification for foo94
+2026-05-15 00:39:14,210 - INFO  - syntax Correct
+2026-05-15 00:39:15,286 - INFO  - Loop Invariant:
+2026-05-15 00:39:15,286 - INFO  - [True, True, True, True, True, True]
+2026-05-15 00:39:15,286 - INFO  - 
+2026-05-15 00:39:15,286 - INFO  - Assertion:
+2026-05-15 00:39:15,286 - INFO  - []
+2026-05-15 00:39:15,286 - INFO  - 
+2026-05-15 00:39:15,286 - INFO  - Assigns:
+2026-05-15 00:39:15,287 - INFO  - [True, True]
+2026-05-15 00:39:15,287 - INFO  - 
+2026-05-15 00:39:15,287 - INFO  - Post Condition:
+2026-05-15 00:39:15,287 - INFO  - [True, True]
+2026-05-15 00:39:15,287 - INFO  - 
+2026-05-15 00:39:15,287 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=5
+2026-05-15 00:39:15,287 - INFO  - [spec-gen] converged at refine 1
+2026-05-15 00:39:15,291 - INFO  - 
+SPECIFICATION FOR foo94
+2026-05-15 00:39:15,292 - INFO  - ==================================================
+
+2026-05-15 00:39:15,293 - INFO  - 
+QCP Specification for function foo94:
+/*@
+With arr_l
+Require store_int_array(arr, arr_len, arr_l) && arr_len > 0 && arr_len < 100
+Ensure Results(__return)
+*/
+2026-05-15 00:39:15,410 - INFO  - 
+VERIFICATION FOR foo94
+2026-05-15 00:39:15,411 - INFO  - ==================================================
+
+2026-05-15 00:39:15,411 - INFO  - TRY TIME: 0
+2026-05-15 00:39:16,371 - INFO  - syntax Correct
+2026-05-15 00:39:17,424 - INFO  - Loop Invariant:
+2026-05-15 00:39:17,424 - INFO  - [True, True, True, True, True, True]
+2026-05-15 00:39:17,424 - INFO  - 
+2026-05-15 00:39:17,424 - INFO  - Assertion:
+2026-05-15 00:39:17,424 - INFO  - []
+2026-05-15 00:39:17,424 - INFO  - 
+2026-05-15 00:39:17,424 - INFO  - Assigns:
+2026-05-15 00:39:17,424 - INFO  - [True, True]
+2026-05-15 00:39:17,424 - INFO  - 
+2026-05-15 00:39:17,424 - INFO  - Post Condition:
+2026-05-15 00:39:17,424 - INFO  - [True, True]
+2026-05-15 00:39:17,424 - INFO  - 
+2026-05-15 00:39:17,425 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo94
+2026-05-15 00:39:17,425 - INFO  - ==================================================
+2026-05-15 00:39:17,425 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo94/20260515_003741_603717_29a91641/output/foo94.c
+2026-05-15 00:39:17,425 - INFO  - Output file content:
+
+/*@ 
+  predicate unchanged_array(int *a, int *init_a, integer len) =
+    \forall integer k; 0 <= k < len ==> a[k] == init_a[k];
+*/
+
+/*@
+  logic integer max_prefix(int *a, integer lo, integer hi) =
+    lo >= hi ? 0
+    : (hi == lo + 1 ? a[lo]
+       : (max_prefix(a, lo, hi - 1) >= a[hi - 1] ? max_prefix(a, lo, hi - 1) : a[hi - 1]));
+*/
+
+/*@
+  logic integer min_prefix(int *a, integer lo, integer hi) =
+    lo >= hi ? 0
+    : (hi == lo + 1 ? a[lo]
+       : (min_prefix(a, lo, hi - 1) <= a[hi - 1] ? min_prefix(a, lo, hi - 1) : a[hi - 1]));
+*/
+
+/*@
+  requires \at(arr_len,Pre) > 0 && \at(arr_len,Pre) < 100;
+  requires \valid(arr + (0 .. \at(arr_len,Pre) - 1));
+  assigns \nothing;   
+  ensures arr == \at(arr,Pre) && arr_len == \at(arr_len,Pre) && 
+          unchanged_array(arr, \at(arr,Pre), \at(arr_len,Pre));
+  ensures \result == max_prefix(arr, 0, arr_len) - min_prefix(arr, 0, arr_len);
+*/
+int foo94(int * arr, int arr_len) {
+
+		int result = arr[0];
+		int sum = arr[0];
+		
+            
+        /*@
+          loop invariant 1 <= n <= arr_len;
+          loop invariant result == max_prefix(arr, 0, n);
+          loop invariant sum == min_prefix(arr, 0, n);
+          loop invariant arr_len == \at(arr_len,Pre);
+          loop invariant arr == \at(arr,Pre);
+          loop invariant unchanged_array(arr, \at(arr,Pre), \at(arr_len,Pre));
+          loop assigns n, result, sum;
+        */
+        for (int n = 1; n < arr_len; n++) {
+			if (arr[n] > result) {
+				result = arr[n];
+			}
+			if (arr[n] < sum) {
+				sum = arr[n];
+			}
+		}
+            
+		return result - sum;
+}
+
+2026-05-15 00:39:17,425 - INFO  - ==================================================
+2026-05-15 00:39:17,425 - INFO  - first_pass:
+2026-05-15 00:39:17,425 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 00:39:17,425 - INFO  - ==================================================
+2026-05-15 00:39:17,425 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 00:39:17,425 - INFO  - Total execution time: 96.35 seconds (1.61 minutes)
+2026-05-15 00:39:17,425 - INFO  - ==================================================
+2026-05-15 00:39:17,425 - INFO  - ==================================================
+2026-05-15 00:39:17,425 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 00:39:17,425 - INFO  - Total API calls: 5
+2026-05-15 00:39:17,426 - INFO  - Total prompt tokens (input): 35,960
+2026-05-15 00:39:17,426 - INFO  - Total completion tokens (output): 4,581
+2026-05-15 00:39:17,426 - INFO  - Total tokens: 40,541
+2026-05-15 00:39:17,426 - INFO  - Average prompt tokens per call: 7192.0
+2026-05-15 00:39:17,426 - INFO  - Average completion tokens per call: 916.2
+2026-05-15 00:39:17,426 - INFO  - Average total tokens per call: 8108.2
+2026-05-15 00:39:17,426 - INFO  - ==================================================

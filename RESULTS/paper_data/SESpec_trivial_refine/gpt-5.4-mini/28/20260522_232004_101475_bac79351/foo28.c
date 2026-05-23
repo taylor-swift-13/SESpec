@@ -1,0 +1,25 @@
+
+/*@
+  assigns \nothing;
+  ensures \result == (args != \null);
+*/
+int foo54_helper1_c28(const char **args, int args_len);
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \true;
+*/
+void foo28(const char **args, int args_len);
+
+/*@
+  assigns \nothing;
+  ensures \result == (args != \null);
+*/
+int foo54_helper1_c28(const char **args, int args_len) {
+    return args != 0;
+}
+
+void foo28(const char **args, int args_len) {
+    foo54_helper1_c28(args, args_len);
+}

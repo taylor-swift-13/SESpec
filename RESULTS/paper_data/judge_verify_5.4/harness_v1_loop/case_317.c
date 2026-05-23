@@ -1,0 +1,19 @@
+#include <limits.h>
+
+/*@logic integer count_divs(integer num, integer size) =
+      size < 2 ? 0 :
+      count_divs(num, size - 1) + (num % size == 0 ? 1 : 0);*/
+
+/*@ requires (2 <= size) && (result >= 0) && (result == count_divs(num, size - 1)) && (result <= size - 2) && (\forall integer d) && ((size > 2) ==> result <= size - 2) && ((size <= num / size) ==> (result == count_divs(num, size - 1))) && ((!(size <= num / size)) ==> (result == count_divs(num, size - 1)));
+    assigns \nothing;
+*/
+void check_A_implies_B(int d, int k, int num, int size) {
+    /*@ assert (size >= 2 ==> result < size) && (size >= 2 ==> result >= 0) && (size >= 2 ==> result <= size) && (size >= 2 ==> result <= size - 1) && (size > 2 ==> result >= 0) && (size > 2 ==> result <= num) && (size <= num / size || size > num / size) && (result >= 0 ==> size >= 2) && (result == 0 || size >= 2) && (result == 0 || size > 2) && (result == 0 || result >= 1) && (result == 0 || result > 0) && (result == 0 || result <= size - 1) && (result == 0 || num >= 2) && (result <= size) && (result <= size - 2) && (result <= size - 1) && (num == num) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\exists integer d) && (2 <= size) && (2 <= size ==> result >= 0) && (1 <= size) && (1 <= size - result) && (1 < size) && (0 <= size - result) && (0 <= result) && (0 < size); */
+}
+
+/*@ requires (size >= 2 ==> result < size) && (size >= 2 ==> result >= 0) && (size >= 2 ==> result <= size) && (size >= 2 ==> result <= size - 1) && (size > 2 ==> result >= 0) && (size > 2 ==> result <= num) && (size <= num / size || size > num / size) && (result >= 0 ==> size >= 2) && (result == 0 || size >= 2) && (result == 0 || size > 2) && (result == 0 || result >= 1) && (result == 0 || result > 0) && (result == 0 || result <= size - 1) && (result == 0 || num >= 2) && (result <= size) && (result <= size - 2) && (result <= size - 1) && (num == num) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\forall integer d) && (\exists integer d) && (2 <= size) && (2 <= size ==> result >= 0) && (1 <= size) && (1 <= size - result) && (1 < size) && (0 <= size - result) && (0 <= result) && (0 < size);
+    assigns \nothing;
+*/
+void check_B_implies_A(int d, int k, int num, int size) {
+    /*@ assert (2 <= size) && (result >= 0) && (result == count_divs(num, size - 1)) && (result <= size - 2) && (\forall integer d) && ((size > 2) ==> result <= size - 2) && ((size <= num / size) ==> (result == count_divs(num, size - 1))) && ((!(size <= num / size)) ==> (result == count_divs(num, size - 1))); */
+}

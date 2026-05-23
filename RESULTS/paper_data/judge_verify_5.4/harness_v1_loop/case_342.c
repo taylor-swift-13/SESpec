@@ -1,0 +1,19 @@
+#include <limits.h>
+
+/*@logic integer count_nondiv(integer code, integer l, integer u) =
+    u < l ? 0 :
+    count_nondiv(code, l, u - 1) + ((u % code != 0) ? 1 : 0);*/
+
+/*@ requires (c >= l) && (0 <= result) && (result == count_nondiv(code, l, c - 1)) && (0 <= result <= c - l) && (result == 0 || (\exists integer i) && (m == \at(m,Pre)) && (l == \at(l,Pre)) && (b == \at(b,Pre)) && (code == \at(code,Pre)) && ((c > m) ==> (result == count_nondiv(code, l, m)));
+    assigns \nothing;
+*/
+void check_A_implies_B(int b, int c, int code, int i, int k, int l, int m, int t) {
+    /*@ assert (result > 0 ==> l <= c) && (result > 0 ==> l < c) && (result > 0 ==> c > l) && (result > 0 ==> \exists integer k) && (result > 0 ==> \exists integer i) && (result == c - l ==> \forall integer k) && (result == c - l ==> \forall integer i) && (result == 0 || result >= 0) && (result == 0 || result > 0) && (result == 0 ==> \forall integer k) && (result == 0 ==> \forall integer i) && (result <= c - l) && (result <= c - l + 1) && (result < b ==> result <= c - l) && (result < b ==> result <= c - l + 1) && (result < b ==> result <= b) && (result < b ==> result < c - l + 1) && (result < b ==> result < b) && (result < b ==> \forall integer k) && (result < b ==> \forall integer i) && (result < b ==> \forall integer i) && (result < b ==> \forall integer i) && (result < b ==> \forall integer i) && (result < b ==> \forall integer i) && (result < b ==> \forall integer i) && (result < b ==> \exists integer t) && (l <= c) && (\forall integer t) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\exists integer t) && (\exists integer t) && (\exists integer t) && (\exists integer t) && (\exists integer t) && (0 <= result) && (0 <= c - l - result); */
+}
+
+/*@ requires (result > 0 ==> l <= c) && (result > 0 ==> l < c) && (result > 0 ==> c > l) && (result > 0 ==> \exists integer k) && (result > 0 ==> \exists integer i) && (result == c - l ==> \forall integer k) && (result == c - l ==> \forall integer i) && (result == 0 || result >= 0) && (result == 0 || result > 0) && (result == 0 ==> \forall integer k) && (result == 0 ==> \forall integer i) && (result <= c - l) && (result <= c - l + 1) && (result < b ==> result <= c - l) && (result < b ==> result <= c - l + 1) && (result < b ==> result <= b) && (result < b ==> result < c - l + 1) && (result < b ==> result < b) && (result < b ==> \forall integer k) && (result < b ==> \forall integer i) && (result < b ==> \forall integer i) && (result < b ==> \forall integer i) && (result < b ==> \forall integer i) && (result < b ==> \forall integer i) && (result < b ==> \forall integer i) && (result < b ==> \exists integer t) && (l <= c) && (\forall integer t) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer k) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\forall integer i) && (\exists integer t) && (\exists integer t) && (\exists integer t) && (\exists integer t) && (\exists integer t) && (0 <= result) && (0 <= c - l - result);
+    assigns \nothing;
+*/
+void check_B_implies_A(int b, int c, int code, int i, int k, int l, int m, int t) {
+    /*@ assert (c >= l) && (0 <= result) && (result == count_nondiv(code, l, c - 1)) && (0 <= result <= c - l) && (result == 0 || (\exists integer i) && (m == \at(m,Pre)) && (l == \at(l,Pre)) && (b == \at(b,Pre)) && (code == \at(code,Pre)) && ((c > m) ==> (result == count_nondiv(code, l, m))); */
+}

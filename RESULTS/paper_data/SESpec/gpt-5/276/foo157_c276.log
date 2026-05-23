@@ -1,0 +1,804 @@
+2026-05-17 11:39:28,481 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0
+2026-05-17 11:39:28,481 - INFO  - 
+🚀 Starting generation of function: foo157_c276
+2026-05-17 11:39:28,482 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 11:39:28,482 - INFO  - TRY TIME: 0
+2026-05-17 11:39:28,483 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 11:39:28,483 - INFO  - ==================================================
+
+2026-05-17 11:39:34,372 - INFO  - [auto only_loop] False — foo157_c276 returns 'int'
+2026-05-17 11:39:34,379 - INFO  - Initial pending functions: ['foo157_c276', 'malloc']
+2026-05-17 11:39:34,379 - INFO  - Now processing function malloc
+
+2026-05-17 11:39:34,379 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-17 11:39:34,379 - INFO  - 
+GENERATE ANNOTATION FOR foo157_c276
+2026-05-17 11:39:34,379 - INFO  - ==================================================
+
+2026-05-17 11:39:34,379 - INFO  - Function foo157_c276 has been initialized
+2026-05-17 11:39:34,379 - INFO  - Starting to generate annotation code for foo157_c276
+2026-05-17 11:39:34,567 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo157_c276
+2026-05-17 11:39:34,567 - INFO  - ==================================================
+
+2026-05-17 11:39:34,895 - INFO  - Variable Maps:[{}]
+2026-05-17 11:39:34,902 - INFO  - Path conditions: [None]
+2026-05-17 11:39:34,904 - INFO  - Pre condition: 
+2026-05-17 11:39:34,904 - INFO  - Loop Condition: i<=n
+2026-05-17 11:39:34,910 - INFO  - Array Names: ['dp']
+2026-05-17 11:39:34,910 - INFO  - Updated Loop Conditions: ['i<=n']
+2026-05-17 11:39:34,911 - INFO  - Global Unchanged Variables: []
+2026-05-17 11:39:34,911 - INFO  - Non Inductive Variables: []
+2026-05-17 11:39:34,911 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 11:39:34,914 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 11:39:34,921 - INFO  - examples category: array
+2026-05-17 11:39:34,926 - INFO  - examples:
+2026-05-17 11:39:34,926 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-17 11:41:07,561 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.62, satisfy=0.00) clauses=8
+2026-05-17 11:42:53,816 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:44:23,561 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 11:45:58,489 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:47:51,652 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:47:51,659 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 11:49:22,018 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 11:50:47,461 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 11:50:47,462 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 11:52:06,409 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 11:53:50,206 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=6
+2026-05-17 11:53:50,225 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=11)
+2026-05-17 11:55:24,692 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=7
+2026-05-17 11:55:38,672 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8571428571428571, 0.0), clauses=7)
+2026-05-17 11:58:12,727 - INFO  - [inv-gen] multi-slot: candidate failed (syntax_ok:False | valid_ok:False | satisfy_ok:True); trying next slot
+2026-05-17 11:58:14,786 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=9
+2026-05-17 11:58:15,000 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 11:59:37,325 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.44, satisfy=0.00) clauses=9
+2026-05-17 12:00:38,862 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 12:00:55,571 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-17 12:00:55,575 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-17 12:01:05,713 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.00, satisfy=1.00) clauses=0
+2026-05-17 12:01:05,713 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=17)
+2026-05-17 12:01:48,849 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 12:02:21,423 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-17 12:03:01,218 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-17 12:03:48,588 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 12:04:41,435 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 12:04:50,575 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8333333333333334, 0.0), clauses=6)
+2026-05-17 12:06:04,635 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 12:06:24,279 - INFO  - ACSL format loop invariant
+2026-05-17 12:06:24,280 - INFO  - /*@
+          loop invariant 3 <= i;
+          loop invariant dp_len == n+1;
+          loop invariant dp[0] == 1;
+          loop invariant dp[1] == k;
+          loop invariant dp[2] == k*k;
+          loop assigns i, dp[3..n];
+            */
+            for(int i=3;i<=n;i++){
+            dp[i] = ((k-1) * (dp[i-1] + dp[i-2])) % mod;
+        }
+2026-05-17 12:06:24,310 - INFO  - QCP format loop invariant
+2026-05-17 12:06:24,314 - INFO  - /*@ Inv
+    (3 <= i) &&
+(dp_len == n+1) &&
+(dp_l[0] == 1) &&
+(dp_l[1] == k) &&
+(dp_l[2] == k*k
+          loop assigns i, dp_l[3..n])
+    */
+    
+            for(int i=3;i<=n;i++){
+            dp[i] = ((k-1) * (dp[i-1] + dp[i-2])) % mod;
+        }
+2026-05-17 12:06:43,631 - INFO  - CORRECT INVARIANT
+2026-05-17 12:06:43,635 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo157_c276
+2026-05-17 12:06:43,635 - INFO  - ==================================================
+
+2026-05-17 12:06:43,715 - INFO  - Starting to generate ACSL specification for foo157_c276
+2026-05-17 12:07:04,459 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:9: Warning: 
+  unbound logic function dp_spec. Ignoring logic specification of function foo157_c276
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:07:04,466 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 12:07:13,431 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     Frama-C reports “unbound logic function dp_spec. Ignoring logic specification of function foo157_c276”. This happens because the function contract’s ensures clause references dp_spec(k, n, 1000000007), but there is no prior ACSL logic function definition named dp_spec in the file. Per pitfalls A9 and A9a, any logic function used in contracts must be defined at file scope before the function. We have two options: define dp_spec appropriately, or remove the clauses that reference it. Since dp_spec is intended to capture the recurrence for the dynamic programming sequence computed by the loop, we can define a recursive logic function that matches:
+  3     - dp(0) = 1
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:07:13,432 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 12:07:20,192 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     Frama-C’s syntax error indicates that non-C text (“Error Analysis: …”) was included directly in the source file, causing a parse failure at line 1. Additionally, the earlier annot-error warned about an unbound logic function dp_spec used in an ensures clause without a prior definition. To fix both issues:
+  3     - Remove all free-form prose from the C source; only valid C and ACSL comments may appear.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:07:20,193 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 12:07:20,193 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 12:07:20,823 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:9: Warning: 
+  unbound logic function dp_spec. Ignoring logic specification of function foo157_c276
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:07:20,824 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 12:07:29,159 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     Frama-C reports “unbound logic function dp_spec. Ignoring logic specification of function foo157_c276”. This means the function contract refers to a logic function dp_spec(k, n, 1000000007) that is neither declared nor defined anywhere at file scope before its use. Per ACSL rules (Universal A9/A9a), any logic function or predicate referenced in a contract must be defined (or at least declared) in a separate top-level /*@ logic ... */ block prior to the function that uses it. Otherwise, the name is unbound and Frama-C drops the entire specification and treats the warning as fatal.
+  3
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:07:29,160 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 12:07:29,161 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 12:07:29,572 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:9: Warning: 
+  unbound logic function dp_spec. Ignoring logic specification of function foo157_c276
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:07:29,572 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 12:07:39,344 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     Frama-C reports “unbound logic function dp_spec. Ignoring logic specification of function foo157_c276”. This means the function contract mentions a logic function dp_spec(k, n, 1000000007) that is not defined anywhere at file scope. Per ACSL rules (Universal A9 and A9a), any logic function referenced in a contract must be defined beforehand in a separate top-level /*@ logic ... */ block. Because the code computes a sequence dp with base cases for n=0..2 and a recurrence for n>=3 using modulus 1e9+7, we must provide a logic definition dp_spec that matches these cases. Additionally, function-level clauses must not reference locals; the existing ensures only use parameters and \result, and assigns \nothing is correct since only locals are modified and memory allocated is not visible through parameters. Loop invariants are fine syntactically; they don’t use \old and only mention locals, which is allowed in loop invariants.
+  3
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:07:39,345 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 12:07:39,345 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 12:07:39,763 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:9: Warning: 
+  unbound logic function dp_spec. Ignoring logic specification of function foo157_c276
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:07:39,764 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 12:07:51,967 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:1: 
+  syntax error:
+  Location: line 1, between columns 0 and 1, before or at token: 1
+  1     1) Error Analysis:
+        ^^^^^^^^^^^^^^^^^^
+  2     Frama-C reports “unbound logic function dp_spec. Ignoring logic specification of function foo157_c276”. This means the ensures clause references a logic function dp_spec(k, n, 1000000007) that is not defined anywhere in the file. According to ACSL rules (Universal A9/A9a), any logic function or predicate used in a contract must be declared at file scope before the function that uses it. Without such a definition, Frama-C drops the entire function specification and stops with an error (treated as fatal here).
+  3
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:07:51,968 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 12:07:51,968 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 12:07:52,323 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:9: Warning: 
+  unbound logic function dp_spec. Ignoring logic specification of function foo157_c276
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:07:52,324 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=6
+2026-05-17 12:08:02,646 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=6)
+2026-05-17 12:08:03,195 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:9: Warning: 
+  unbound logic function dp_spec. Ignoring logic specification of function foo157_c276
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:08:03,200 - INFO  - 
+SPECIFICATION FOR foo157_c276
+2026-05-17 12:08:03,200 - INFO  - ==================================================
+
+2026-05-17 12:08:03,201 - INFO  - 
+QCP Specification for function foo157_c276:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 12:08:16,046 - INFO  - 
+VERIFICATION FOR foo157_c276
+2026-05-17 12:08:16,047 - INFO  - ==================================================
+
+2026-05-17 12:08:16,422 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:9: Warning: 
+  unbound logic function dp_spec. Ignoring logic specification of function foo157_c276
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:08:25,820 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:5: Warning: 
+  unbound logic function dp_spec. Ignoring logic specification of function foo157_c276
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:08:25,820 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 12:08:34,225 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     - Frama-C reports “unbound logic function dp_spec. Ignoring logic specification of function foo157_c276”. This happens because the function contract uses dp_spec in the ensures clause, but there is no logic function or predicate named dp_spec defined at file scope before the function. Per pitfall A9/A9a, any logic function referenced in a contract must be defined beforehand in a top-level /*@ logic ... */ block. Since we do not have a clear mathematical specification for dp_spec from the code and cannot reference locals in ensures (A6), the safest correction is to remove the unbound reference and keep a valid contract.
+  3     - The loop invariant block is syntactically a single block, which is good, but it refers to i while the invariant is placed before the for statement. That is valid in ACSL: loop invariants can mention the loop variable name introduced by the for. However, the invariant “3 <= i;” is fine. More importantly, there is no need to reference dp_spec anywhere else.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:08:34,226 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=1
+2026-05-17 12:08:41,178 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     - The Frama-C syntax error shows that the C file begins with plain text “Error Analysis:” and bullet points. This is not valid C/ACSL and causes a parser error at line 1 before token “Analysis”. The file must start with valid C preprocessor directives, declarations, or comments. Any human-readable analysis must not be present in the C source intended for Frama-C.
+  3     - In addition, the original function contract referenced an undefined logic function dp_spec, which triggers “unbound logic function dp_spec. Ignoring logic specification...”. Per pitfalls A9/A9a, any logic function used in ensures must be defined beforehand at file scope or removed. Since there is no definition, we should remove the ensures referencing dp_spec.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:08:41,179 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=1
+2026-05-17 12:08:41,179 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 12:08:41,409 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:5: Warning: 
+  unbound logic function dp_spec. Ignoring logic specification of function foo157_c276
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:08:41,409 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 12:08:47,461 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     Frama-C reports “unbound logic function dp_spec” and then ignores the function’s specification, ultimately aborting. This happens because the function contract’s ensures clause references dp_spec(k, n, 1000000007), but there is no preceding logic function definition for dp_spec anywhere in the file (Universal pitfall A9/A9a). When a logic function or predicate is referenced in a contract, it must be defined at file scope before the function that uses it. Additionally, loop annotations should be contained in a single block per loop (A2), and the loop invariants must reference variables in scope; here they do (i is declared in the for header, but loop invariants are attached to the loop and can reference i). The top-level function contract uses only parameters and \result, which is fine. The assigns \nothing; clause is correct, since the function only modifies locals and returns a value (A6).
+  3
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:08:47,462 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=1
+2026-05-17 12:08:47,462 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 12:08:47,753 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c:5: Warning: 
+  unbound logic function dp_spec. Ignoring logic specification of function foo157_c276
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 12:08:47,754 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-17 12:09:24,661 - INFO  - syntax Correct
+2026-05-17 12:09:46,181 - INFO  - Loop Invariant:
+2026-05-17 12:09:46,181 - INFO  - [True, True, True, True, True]
+2026-05-17 12:09:46,182 - INFO  - 
+2026-05-17 12:09:46,182 - INFO  - Assertion:
+2026-05-17 12:09:46,182 - INFO  - []
+2026-05-17 12:09:46,182 - INFO  - 
+2026-05-17 12:09:46,182 - INFO  - Assigns:
+2026-05-17 12:09:46,182 - INFO  - [False, False, True, False, False, False, False, True]
+2026-05-17 12:09:46,183 - INFO  - 
+2026-05-17 12:09:46,183 - INFO  - Post Condition:
+2026-05-17 12:09:46,183 - INFO  - []
+2026-05-17 12:09:46,183 - INFO  - 
+2026-05-17 12:09:46,184 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.54, satisfy=0.00) clauses=1
+2026-05-17 12:09:46,185 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  assigns \nothing;
+*/
+int foo157_c276(int n, int k) {
+
+        int mod = 1000000007;
+        int *dp = (int *)malloc(sizeof(int) * (n+1));
+        int dp_len = n+1;
+        dp[0] = 1;
+        dp[1] = k;
+        dp[2] = k*k;
+        
+        /*@
+          loop invariant 3 <= i;
+          loop invariant dp_len == n+1;
+          loop invariant dp[0] == 1;
+          loop invariant dp[1] == k;
+          loop invariant dp[2] == k*k;
+          loop assigns i, dp[3..n];
+        */
+        for(int i=3;i<=n;i++){
+            dp[i] = ((k-1) * (dp[i-1] + dp[i-2])) % mod;
+        }
+            
+        return dp[n];
+}
+
+2026-05-17 12:10:01,439 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires n >= 0;
+  // No assigns clause to avoid mismatch with heap allocation effects of malloc.
+*/
+int foo157_c276(int n, int k) {
+
+        int mod = 1000000007;
+        int *dp = (int *)malloc(sizeof(int) * (n+1));
+        int dp_len = n+1;
+        dp[0] = 1;
+        dp[1] = k;
+        dp[2] = k*k;
+        
+        /*@
+          loop invariant 3 <= i;
+          loop invariant dp_len == n+1;
+          loop invariant dp[0] == 1;
+          loop invariant dp[1] == k;
+          loop invariant dp[2] == k*k;
+          loop assigns i, dp[3..n];
+        */
+        for(int i=3;i<=n;i++){
+            dp[i] = ((k-1) * (dp[i-1] + dp[i-2])) % mod;
+        }
+            
+        return dp[n];
+}
+
+2026-05-17 12:10:13,083 - INFO  - syntax Correct
+2026-05-17 12:10:14,298 - INFO  - Loop Invariant:
+2026-05-17 12:10:14,299 - INFO  - [True, True, True, True, True]
+2026-05-17 12:10:14,299 - INFO  - 
+2026-05-17 12:10:14,299 - INFO  - Assertion:
+2026-05-17 12:10:14,299 - INFO  - []
+2026-05-17 12:10:14,299 - INFO  - 
+2026-05-17 12:10:14,299 - INFO  - Assigns:
+2026-05-17 12:10:14,299 - INFO  - []
+2026-05-17 12:10:14,299 - INFO  - 
+2026-05-17 12:10:14,299 - INFO  - Post Condition:
+2026-05-17 12:10:14,299 - INFO  - []
+2026-05-17 12:10:14,299 - INFO  - 
+2026-05-17 12:10:14,299 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=2
+2026-05-17 12:10:14,299 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires n >= 0;
+  // No assigns clause to avoid mismatch with heap allocation effects of malloc.
+*/
+int foo157_c276(int n, int k) {
+
+        int mod = 1000000007;
+        int *dp = (int *)malloc(sizeof(int) * (n+1));
+        int dp_len = n+1;
+        dp[0] = 1;
+        dp[1] = k;
+        dp[2] = k*k;
+        
+        /*@
+          loop invariant 3 <= i;
+          loop invariant dp_len == n+1;
+          loop invariant dp[0] == 1;
+          loop invariant dp[1] == k;
+          loop invariant dp[2] == k*k;
+          loop assigns i, dp[3..n];
+        */
+        for(int i=3;i<=n;i++){
+            dp[i] = ((k-1) * (dp[i-1] + dp[i-2])) % mod;
+        }
+            
+        return dp[n];
+}
+
+2026-05-17 12:10:20,478 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires n >= 0;
+*/
+int foo157_c276(int n, int k) {
+
+        int mod = 1000000007;
+        int *dp = (int *)malloc(sizeof(int) * (n+1));
+        int dp_len = n+1;
+        dp[0] = 1;
+        dp[1] = k;
+        dp[2] = k*k;
+        
+        /*@
+          loop invariant 3 <= i;
+          loop invariant dp_len == n+1;
+          loop invariant dp[0] == 1;
+          loop invariant dp[1] == k;
+          loop invariant dp[2] == k*k;
+          loop assigns i, dp[3..n];
+        */
+        for(int i=3;i<=n;i++){
+            dp[i] = ((k-1) * (dp[i-1] + dp[i-2])) % mod;
+        }
+            
+        return dp[n];
+}
+
+2026-05-17 12:10:31,660 - INFO  - syntax Correct
+2026-05-17 12:10:32,903 - INFO  - Loop Invariant:
+2026-05-17 12:10:32,903 - INFO  - [True, True, True, True, True]
+2026-05-17 12:10:32,903 - INFO  - 
+2026-05-17 12:10:32,903 - INFO  - Assertion:
+2026-05-17 12:10:32,904 - INFO  - []
+2026-05-17 12:10:32,904 - INFO  - 
+2026-05-17 12:10:32,904 - INFO  - Assigns:
+2026-05-17 12:10:32,904 - INFO  - []
+2026-05-17 12:10:32,904 - INFO  - 
+2026-05-17 12:10:32,904 - INFO  - Post Condition:
+2026-05-17 12:10:32,904 - INFO  - []
+2026-05-17 12:10:32,904 - INFO  - 
+2026-05-17 12:10:32,904 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-17 12:10:32,904 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires n >= 0;
+*/
+int foo157_c276(int n, int k) {
+
+        int mod = 1000000007;
+        int *dp = (int *)malloc(sizeof(int) * (n+1));
+        int dp_len = n+1;
+        dp[0] = 1;
+        dp[1] = k;
+        dp[2] = k*k;
+        
+        /*@
+          loop invariant 3 <= i;
+          loop invariant dp_len == n+1;
+          loop invariant dp[0] == 1;
+          loop invariant dp[1] == k;
+          loop invariant dp[2] == k*k;
+          loop assigns i, dp[3..n];
+        */
+        for(int i=3;i<=n;i++){
+            dp[i] = ((k-1) * (dp[i-1] + dp[i-2])) % mod;
+        }
+            
+        return dp[n];
+}
+
+2026-05-17 12:10:38,685 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  requires n >= 0;
+*/
+int foo157_c276(int n, int k) {
+
+        int mod = 1000000007;
+        int *dp = (int *)malloc(sizeof(int) * (n+1));
+        int dp_len = n+1;
+        dp[0] = 1;
+        dp[1] = k;
+        dp[2] = k*k;
+        
+        /*@
+          loop invariant 3 <= i;
+          loop invariant dp_len == n+1;
+          loop invariant dp[0] == 1;
+          loop invariant dp[1] == k;
+          loop invariant dp[2] == k*k;
+          loop assigns i, dp[3..n];
+        */
+        for(int i=3;i<=n;i++){
+            dp[i] = ((k-1) * (dp[i-1] + dp[i-2])) % mod;
+        }
+            
+        return dp[n];
+}
+
+2026-05-17 12:10:49,861 - INFO  - syntax Correct
+2026-05-17 12:10:51,053 - INFO  - Loop Invariant:
+2026-05-17 12:10:51,053 - INFO  - [True, True, True, True, True]
+2026-05-17 12:10:51,053 - INFO  - 
+2026-05-17 12:10:51,053 - INFO  - Assertion:
+2026-05-17 12:10:51,053 - INFO  - []
+2026-05-17 12:10:51,053 - INFO  - 
+2026-05-17 12:10:51,053 - INFO  - Assigns:
+2026-05-17 12:10:51,053 - INFO  - []
+2026-05-17 12:10:51,053 - INFO  - 
+2026-05-17 12:10:51,053 - INFO  - Post Condition:
+2026-05-17 12:10:51,053 - INFO  - []
+2026-05-17 12:10:51,054 - INFO  - 
+2026-05-17 12:10:51,054 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-17 12:10:51,054 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-17 12:10:51,056 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 1.0, 0.0), clauses=2)
+2026-05-17 12:11:02,288 - INFO  - syntax Correct
+2026-05-17 12:11:03,534 - INFO  - Loop Invariant:
+2026-05-17 12:11:03,535 - INFO  - [True, True, True, True, True]
+2026-05-17 12:11:03,535 - INFO  - 
+2026-05-17 12:11:03,535 - INFO  - Assertion:
+2026-05-17 12:11:03,535 - INFO  - []
+2026-05-17 12:11:03,535 - INFO  - 
+2026-05-17 12:11:03,535 - INFO  - Assigns:
+2026-05-17 12:11:03,535 - INFO  - []
+2026-05-17 12:11:03,535 - INFO  - 
+2026-05-17 12:11:03,535 - INFO  - Post Condition:
+2026-05-17 12:11:03,535 - INFO  - []
+2026-05-17 12:11:03,535 - INFO  - 
+2026-05-17 12:11:14,813 - INFO  - syntax Correct
+2026-05-17 12:11:16,298 - INFO  - Loop Invariant:
+2026-05-17 12:11:16,298 - INFO  - [True, True, True, True, True]
+2026-05-17 12:11:16,298 - INFO  - 
+2026-05-17 12:11:16,299 - INFO  - Assertion:
+2026-05-17 12:11:16,299 - INFO  - []
+2026-05-17 12:11:16,299 - INFO  - 
+2026-05-17 12:11:16,299 - INFO  - Assigns:
+2026-05-17 12:11:16,299 - INFO  - []
+2026-05-17 12:11:16,299 - INFO  - 
+2026-05-17 12:11:16,299 - INFO  - Post Condition:
+2026-05-17 12:11:16,299 - INFO  - []
+2026-05-17 12:11:16,300 - INFO  - 
+2026-05-17 12:11:16,300 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo157_c276
+2026-05-17 12:11:16,300 - INFO  - ==================================================
+2026-05-17 12:11:16,300 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo157_c276/20260517_113928_533343_0723afb0/output/foo157_c276.c
+2026-05-17 12:11:16,300 - INFO  - Output file content:
+
+#include <stdlib.h>
+
+/*@
+  requires n >= 0;
+  // No assigns clause to avoid mismatch with heap allocation effects of malloc.
+*/
+int foo157_c276(int n, int k) {
+
+        int mod = 1000000007;
+        int *dp = (int *)malloc(sizeof(int) * (n+1));
+        int dp_len = n+1;
+        dp[0] = 1;
+        dp[1] = k;
+        dp[2] = k*k;
+        
+        /*@
+          loop invariant 3 <= i;
+          loop invariant dp_len == n+1;
+          loop invariant dp[0] == 1;
+          loop invariant dp[1] == k;
+          loop invariant dp[2] == k*k;
+          loop assigns i, dp[3..n];
+        */
+        for(int i=3;i<=n;i++){
+            dp[i] = ((k-1) * (dp[i-1] + dp[i-2])) % mod;
+        }
+            
+        return dp[n];
+}
+
+2026-05-17 12:11:16,300 - INFO  - ==================================================
+2026-05-17 12:11:16,301 - INFO  - first_pass:
+2026-05-17 12:11:16,301 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 12:11:16,301 - INFO  - ==================================================
+2026-05-17 12:11:16,301 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 12:11:16,301 - INFO  - Total execution time: 1907.82 seconds (31.80 minutes)
+2026-05-17 12:11:16,301 - INFO  - ==================================================
+2026-05-17 12:11:16,302 - INFO  - ==================================================
+2026-05-17 12:11:16,302 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 12:11:16,302 - INFO  - Total API calls: 33
+2026-05-17 12:11:16,302 - INFO  - Total prompt tokens (input): 361,670
+2026-05-17 12:11:16,302 - INFO  - Total completion tokens (output): 20,323
+2026-05-17 12:11:16,302 - INFO  - Total tokens: 381,993
+2026-05-17 12:11:16,302 - INFO  - Average prompt tokens per call: 10959.7
+2026-05-17 12:11:16,303 - INFO  - Average completion tokens per call: 615.8
+2026-05-17 12:11:16,303 - INFO  - Average total tokens per call: 11575.5
+2026-05-17 12:11:16,303 - INFO  - ==================================================

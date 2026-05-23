@@ -1,0 +1,1518 @@
+2026-05-15 00:58:25,237 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-4o/foo119/20260515_005825_647339_62f5c435
+2026-05-15 00:58:25,237 - INFO  - 
+🚀 Starting generation of function: foo119
+2026-05-15 00:58:25,237 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 00:58:25,238 - INFO  - ==================================================
+
+2026-05-15 00:58:26,084 - INFO  - [auto only_loop] False — foo119 returns 'int'
+2026-05-15 00:58:26,085 - INFO  - Initial pending functions: ['foo119']
+2026-05-15 00:58:26,085 - INFO  - 
+GENERATE ANNOTATION FOR foo119
+2026-05-15 00:58:26,085 - INFO  - ==================================================
+
+2026-05-15 00:58:26,085 - INFO  - Function foo119 has been initialized
+2026-05-15 00:58:26,085 - INFO  - Starting to generate annotation code for foo119
+2026-05-15 00:58:26,140 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo119
+2026-05-15 00:58:26,140 - INFO  - ==================================================
+
+2026-05-15 00:58:26,210 - INFO  - Variable Maps:[{'top': 'args_len@pre - 1', 'ret': '0', 'Array': 'Array@pre', 'args_len': 'args_len@pre', 'args': 'args@pre'}]
+2026-05-15 00:58:26,210 - INFO  - Path conditions: ['args_len@pre > 0 && args_len@pre < 100']
+2026-05-15 00:58:26,210 - INFO  - Pre condition: args_len@pre > 0 && args_len@pre < 100 && (top == args_len@pre - 1) * (ret == 0) * (Array == Array@pre) * (args_len == args_len@pre) * (args == args@pre) * store_int_array(args@pre, args_len@pre, args_l)
+2026-05-15 00:58:26,210 - INFO  - Loop Condition: ret <= top
+2026-05-15 00:58:26,211 - INFO  - Array Names: ['args']
+2026-05-15 00:58:26,211 - INFO  - Updated Loop Conditions: ['0 <= args_len@pre - 1']
+2026-05-15 00:58:26,212 - INFO  - Global Unchanged Variables: ['Array', 'args_len', 'args']
+2026-05-15 00:58:26,212 - INFO  - Non Inductive Variables: ['ret', 'top']
+2026-05-15 00:58:26,212 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 00:58:26,214 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 00:58:26,216 - INFO  - examples category: array
+2026-05-15 00:58:26,216 - INFO  - examples:
+2026-05-15 00:58:26,216 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-15 00:58:39,343 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-15 00:59:12,580 - INFO  - [inv-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-15 00:59:57,407 - INFO  - [inv-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-15 00:59:57,407 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 00:59:57,757 - INFO  - [inv-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-15 01:05:18,255 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.43, satisfy=0.00) clauses=7
+2026-05-15 01:06:11,588 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-15 01:07:08,634 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-15 01:07:53,672 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-15 01:07:53,673 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-15 01:08:16,677 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-15 01:09:07,692 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-15 01:09:07,693 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-15 01:09:07,694 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6666666666666666, 0.0), clauses=6)
+2026-05-15 01:09:55,928 - INFO  - ACSL format loop invariant
+2026-05-15 01:09:55,930 - INFO  - /*@
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant Array == \at(Array, Pre);
+          loop invariant args_len == \at(args_len, Pre);
+          loop assigns ret, top;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+2026-05-15 01:09:55,932 - INFO  - QCP format loop invariant
+2026-05-15 01:09:55,932 - INFO  - /*@ Inv
+    exists  args_l,    
+    store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100 &&
+    (forall (i:Z), 0 <= i && i < args_len => args_l[i] == args_l[i]@pre) &&
+(Array == Array@pre) &&
+(args_len == args_len@pre
+          loop assigns ret, top)
+    */
+    
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+2026-05-15 01:09:56,944 - INFO  - CORRECT INVARIANT
+2026-05-15 01:09:56,944 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo119
+2026-05-15 01:09:56,944 - INFO  - ==================================================
+
+2026-05-15 01:09:56,968 - INFO  - Starting to generate ACSL specification for foo119
+2026-05-15 01:10:22,763 - INFO  - syntax Correct
+2026-05-15 01:10:34,085 - INFO  - Loop Invariant:
+2026-05-15 01:10:34,085 - INFO  - [True, True, True, True, True]
+2026-05-15 01:10:34,085 - INFO  - 
+2026-05-15 01:10:34,085 - INFO  - Assertion:
+2026-05-15 01:10:34,085 - INFO  - []
+2026-05-15 01:10:34,085 - INFO  - 
+2026-05-15 01:10:34,086 - INFO  - Assigns:
+2026-05-15 01:10:34,086 - INFO  - [True, True, True]
+2026-05-15 01:10:34,086 - INFO  - 
+2026-05-15 01:10:34,086 - INFO  - Post Condition:
+2026-05-15 01:10:34,086 - INFO  - [True, False, False, False]
+2026-05-15 01:10:34,086 - INFO  - 
+2026-05-15 01:10:34,088 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=10
+2026-05-15 01:10:34,088 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> args[\result] == Array [POSTCONDITION FAILED];
+  ensures \result == args_len || args[\result] >= Array [POSTCONDITION FAILED];
+  ensures \result == 0 || args[\result - 1] < Array [POSTCONDITION FAILED];
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:12:07,059 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> (args[\result] == Array || \forall integer k; 0 <= k < args_len ==> args[k] != Array); // Adjusted
+  ensures \result == args_len || args[\result] >= Array;
+  ensures \result == 0 || args[\result - 1] < Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:12:18,217 - INFO  - syntax Correct
+2026-05-15 01:12:29,620 - INFO  - Loop Invariant:
+2026-05-15 01:12:29,621 - INFO  - [True, True, True, True, True]
+2026-05-15 01:12:29,621 - INFO  - 
+2026-05-15 01:12:29,622 - INFO  - Assertion:
+2026-05-15 01:12:29,622 - INFO  - []
+2026-05-15 01:12:29,622 - INFO  - 
+2026-05-15 01:12:29,622 - INFO  - Assigns:
+2026-05-15 01:12:29,622 - INFO  - [True, True, True]
+2026-05-15 01:12:29,622 - INFO  - 
+2026-05-15 01:12:29,623 - INFO  - Post Condition:
+2026-05-15 01:12:29,623 - INFO  - [True, False, False, False]
+2026-05-15 01:12:29,623 - INFO  - 
+2026-05-15 01:12:29,624 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=10
+2026-05-15 01:12:29,624 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> (args[\result] == Array || \forall integer k [POSTCONDITION FAILED]; 0 <= k < args_len ==> args[k] != Array); // Adjusted
+  ensures \result == args_len || args[\result] >= Array [POSTCONDITION FAILED];
+  ensures \result == 0 || args[\result - 1] < Array [POSTCONDITION FAILED];
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:13:04,270 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j]; // Array must be sorted
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> (args[\result] == Array || \forall integer k; 0 <= k < args_len ==> args[k] != Array); // Adjusted
+  ensures \result == args_len || args[\result] >= Array;
+  ensures \result == 0 || args[\result - 1] < Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:13:15,421 - INFO  - syntax Correct
+2026-05-15 01:13:26,664 - INFO  - Loop Invariant:
+2026-05-15 01:13:26,665 - INFO  - [True, True, True, True, True]
+2026-05-15 01:13:26,665 - INFO  - 
+2026-05-15 01:13:26,665 - INFO  - Assertion:
+2026-05-15 01:13:26,665 - INFO  - []
+2026-05-15 01:13:26,665 - INFO  - 
+2026-05-15 01:13:26,666 - INFO  - Assigns:
+2026-05-15 01:13:26,666 - INFO  - [True, True, True]
+2026-05-15 01:13:26,666 - INFO  - 
+2026-05-15 01:13:26,666 - INFO  - Post Condition:
+2026-05-15 01:13:26,666 - INFO  - [True, False, False, False]
+2026-05-15 01:13:26,667 - INFO  - 
+2026-05-15 01:13:26,667 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=10
+2026-05-15 01:13:26,667 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:13:37,947 - INFO  - syntax Correct
+2026-05-15 01:13:49,221 - INFO  - Loop Invariant:
+2026-05-15 01:13:49,223 - INFO  - [True, True, True, True, True]
+2026-05-15 01:13:49,224 - INFO  - 
+2026-05-15 01:13:49,224 - INFO  - Assertion:
+2026-05-15 01:13:49,224 - INFO  - []
+2026-05-15 01:13:49,224 - INFO  - 
+2026-05-15 01:13:49,224 - INFO  - Assigns:
+2026-05-15 01:13:49,224 - INFO  - [True, True, True]
+2026-05-15 01:13:49,224 - INFO  - 
+2026-05-15 01:13:49,225 - INFO  - Post Condition:
+2026-05-15 01:13:49,225 - INFO  - [True, False, False, False]
+2026-05-15 01:13:49,225 - INFO  - 
+2026-05-15 01:13:49,226 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=10
+2026-05-15 01:13:49,226 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> args[\result] == Array [POSTCONDITION FAILED];
+  ensures \result == args_len || args[\result] >= Array [POSTCONDITION FAILED];
+  ensures \result == 0 || args[\result - 1] < Array [POSTCONDITION FAILED];
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:14:25,857 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> args[\result] >= Array; // Weakened postcondition
+  ensures \result == args_len || args[\result] >= Array;
+  ensures \result == 0 || args[\result - 1] < Array;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:14:37,035 - INFO  - syntax Correct
+2026-05-15 01:14:48,041 - INFO  - Loop Invariant:
+2026-05-15 01:14:48,041 - INFO  - [True, True, True, True, True]
+2026-05-15 01:14:48,041 - INFO  - 
+2026-05-15 01:14:48,041 - INFO  - Assertion:
+2026-05-15 01:14:48,041 - INFO  - []
+2026-05-15 01:14:48,041 - INFO  - 
+2026-05-15 01:14:48,041 - INFO  - Assigns:
+2026-05-15 01:14:48,041 - INFO  - [True, True, True]
+2026-05-15 01:14:48,041 - INFO  - 
+2026-05-15 01:14:48,042 - INFO  - Post Condition:
+2026-05-15 01:14:48,042 - INFO  - [True, False, False, False]
+2026-05-15 01:14:48,042 - INFO  - 
+2026-05-15 01:14:48,042 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=10
+2026-05-15 01:14:48,042 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 01:14:59,158 - INFO  - syntax Correct
+2026-05-15 01:15:10,087 - INFO  - Loop Invariant:
+2026-05-15 01:15:10,088 - INFO  - [True, True, True, True, True]
+2026-05-15 01:15:10,088 - INFO  - 
+2026-05-15 01:15:10,088 - INFO  - Assertion:
+2026-05-15 01:15:10,088 - INFO  - []
+2026-05-15 01:15:10,088 - INFO  - 
+2026-05-15 01:15:10,088 - INFO  - Assigns:
+2026-05-15 01:15:10,088 - INFO  - [True, True, True]
+2026-05-15 01:15:10,088 - INFO  - 
+2026-05-15 01:15:10,089 - INFO  - Post Condition:
+2026-05-15 01:15:10,089 - INFO  - [True, False, False, False]
+2026-05-15 01:15:10,089 - INFO  - 
+2026-05-15 01:15:10,089 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=10
+2026-05-15 01:15:10,089 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> args[\result] == Array [POSTCONDITION FAILED];
+  ensures \result == args_len || args[\result] >= Array [POSTCONDITION FAILED];
+  ensures \result == 0 || args[\result - 1] < Array [POSTCONDITION FAILED];
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:16:02,249 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> args[\result] >= Array; // Weakened: ensures the value at the result index is >= Array if within bounds.
+  ensures \result == args_len || (args[\result] >= Array && (\result == 0 || args[\result - 1] < Array)); // Weakened: ensures the result is consistent with the insertion point.
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:16:13,220 - INFO  - syntax Correct
+2026-05-15 01:16:24,302 - INFO  - Loop Invariant:
+2026-05-15 01:16:24,302 - INFO  - [True, True, True, True, True]
+2026-05-15 01:16:24,302 - INFO  - 
+2026-05-15 01:16:24,302 - INFO  - Assertion:
+2026-05-15 01:16:24,302 - INFO  - []
+2026-05-15 01:16:24,302 - INFO  - 
+2026-05-15 01:16:24,303 - INFO  - Assigns:
+2026-05-15 01:16:24,303 - INFO  - [True, True, True]
+2026-05-15 01:16:24,303 - INFO  - 
+2026-05-15 01:16:24,303 - INFO  - Post Condition:
+2026-05-15 01:16:24,303 - INFO  - [True, False, False]
+2026-05-15 01:16:24,303 - INFO  - 
+2026-05-15 01:16:24,304 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=11
+2026-05-15 01:16:24,304 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> args[\result] >= Array [POSTCONDITION FAILED]; // Weakened: ensures the value at the result index is >= Array if within bounds.
+  ensures \result == args_len || (args[\result] >= Array && (\result == 0 || args[\result - 1] < Array)) [POSTCONDITION FAILED]; // Weakened: ensures the result is consistent with the insertion point.
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:17:17,201 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> (args[\result] >= Array && (\exists integer k; 0 <= k < args_len && args[k] == Array)); // Further weakened: ensures the value at the result index is >= Array only if Array exists in the array.
+  ensures \result == args_len || (\result < args_len && (\result == 0 || args[\result - 1] < Array)); // Further weakened: ensures the result is consistent with the insertion point semantics.
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:17:28,163 - INFO  - syntax Correct
+2026-05-15 01:17:39,255 - INFO  - Loop Invariant:
+2026-05-15 01:17:39,255 - INFO  - [True, True, True, True, True]
+2026-05-15 01:17:39,256 - INFO  - 
+2026-05-15 01:17:39,256 - INFO  - Assertion:
+2026-05-15 01:17:39,256 - INFO  - []
+2026-05-15 01:17:39,256 - INFO  - 
+2026-05-15 01:17:39,256 - INFO  - Assigns:
+2026-05-15 01:17:39,256 - INFO  - [True, True, True]
+2026-05-15 01:17:39,256 - INFO  - 
+2026-05-15 01:17:39,256 - INFO  - Post Condition:
+2026-05-15 01:17:39,256 - INFO  - [True, False, False]
+2026-05-15 01:17:39,256 - INFO  - 
+2026-05-15 01:17:39,257 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=11
+2026-05-15 01:17:39,257 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> (args[\result] >= Array && (\exists integer k [POSTCONDITION FAILED]; 0 <= k < args_len && args[k] == Array)); // Further weakened: ensures the value at the result index is >= Array only if Array exists in the array.
+  ensures \result == args_len || (\result < args_len && (\result == 0 || args[\result - 1] < Array)) [POSTCONDITION FAILED]; // Further weakened: ensures the result is consistent with the insertion point semantics.
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:17:46,642 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> args[\result] >= Array; // Further weakened: ensures the value at the result index is >= Array if within bounds.
+  ensures \result == args_len || (\result == 0 || args[\result - 1] < Array); // Further weakened: ensures the result is consistent with the insertion point semantics.
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:17:57,928 - INFO  - syntax Correct
+2026-05-15 01:18:09,535 - INFO  - Loop Invariant:
+2026-05-15 01:18:09,535 - INFO  - [True, True, True, True, True]
+2026-05-15 01:18:09,535 - INFO  - 
+2026-05-15 01:18:09,535 - INFO  - Assertion:
+2026-05-15 01:18:09,536 - INFO  - []
+2026-05-15 01:18:09,536 - INFO  - 
+2026-05-15 01:18:09,536 - INFO  - Assigns:
+2026-05-15 01:18:09,536 - INFO  - [True, True, True]
+2026-05-15 01:18:09,536 - INFO  - 
+2026-05-15 01:18:09,536 - INFO  - Post Condition:
+2026-05-15 01:18:09,536 - INFO  - [True, False, False]
+2026-05-15 01:18:09,536 - INFO  - 
+2026-05-15 01:18:09,537 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=11
+2026-05-15 01:18:09,537 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 01:18:21,297 - INFO  - syntax Correct
+2026-05-15 01:18:32,392 - INFO  - Loop Invariant:
+2026-05-15 01:18:32,393 - INFO  - [True, True, True, True, True]
+2026-05-15 01:18:32,393 - INFO  - 
+2026-05-15 01:18:32,393 - INFO  - Assertion:
+2026-05-15 01:18:32,393 - INFO  - []
+2026-05-15 01:18:32,393 - INFO  - 
+2026-05-15 01:18:32,393 - INFO  - Assigns:
+2026-05-15 01:18:32,393 - INFO  - [True, True, True]
+2026-05-15 01:18:32,393 - INFO  - 
+2026-05-15 01:18:32,393 - INFO  - Post Condition:
+2026-05-15 01:18:32,393 - INFO  - [True, False, False]
+2026-05-15 01:18:32,393 - INFO  - 
+2026-05-15 01:18:32,394 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=11
+2026-05-15 01:18:32,394 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> args[\result] >= Array [POSTCONDITION FAILED]; // Weakened: ensures the value at the result index is >= Array if within bounds.
+  ensures \result == args_len || (args[\result] >= Array && (\result == 0 || args[\result - 1] < Array)) [POSTCONDITION FAILED]; // Weakened: ensures the result is consistent with the insertion point.
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:18:40,539 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+  ensures \result < args_len ==> args[\result] >= Array; // Ensures the value at the result index is >= Array if within bounds.
+  ensures \result == args_len || (args[\result] >= Array && (\result == 0 || args[\result - 1] < Array)); // Ensures the result is consistent with the insertion point.
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:18:40,541 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8181818181818182, 0.0), clauses=11)
+2026-05-15 01:18:51,709 - INFO  - syntax Correct
+2026-05-15 01:19:02,755 - INFO  - Loop Invariant:
+2026-05-15 01:19:02,755 - INFO  - [True, True, True, True, True]
+2026-05-15 01:19:02,755 - INFO  - 
+2026-05-15 01:19:02,755 - INFO  - Assertion:
+2026-05-15 01:19:02,755 - INFO  - []
+2026-05-15 01:19:02,755 - INFO  - 
+2026-05-15 01:19:02,755 - INFO  - Assigns:
+2026-05-15 01:19:02,755 - INFO  - [True, True, True]
+2026-05-15 01:19:02,755 - INFO  - 
+2026-05-15 01:19:02,756 - INFO  - Post Condition:
+2026-05-15 01:19:02,756 - INFO  - [True, False, False]
+2026-05-15 01:19:02,756 - INFO  - 
+2026-05-15 01:19:04,140 - INFO  - syntax Correct
+2026-05-15 01:19:05,589 - INFO  - Loop Invariant:
+2026-05-15 01:19:05,589 - INFO  - [True, True, True, True, True]
+2026-05-15 01:19:05,590 - INFO  - 
+2026-05-15 01:19:05,590 - INFO  - Assertion:
+2026-05-15 01:19:05,590 - INFO  - []
+2026-05-15 01:19:05,590 - INFO  - 
+2026-05-15 01:19:05,590 - INFO  - Assigns:
+2026-05-15 01:19:05,590 - INFO  - [True, True, True]
+2026-05-15 01:19:05,590 - INFO  - 
+2026-05-15 01:19:05,590 - INFO  - Post Condition:
+2026-05-15 01:19:05,590 - INFO  - [True]
+2026-05-15 01:19:05,590 - INFO  - 
+2026-05-15 01:19:05,592 - INFO  - 
+SPECIFICATION FOR foo119
+2026-05-15 01:19:05,592 - INFO  - ==================================================
+
+2026-05-15 01:19:05,592 - INFO  - 
+QCP Specification for function foo119:
+/*@
+With args_l
+Require store_int_array(args, args_len, args_l) && args_len > 0 && args_len < 100
+Ensure Results(__return)
+*/
+2026-05-15 01:19:05,702 - INFO  - 
+VERIFICATION FOR foo119
+2026-05-15 01:19:05,703 - INFO  - ==================================================
+
+2026-05-15 01:19:05,703 - INFO  - TRY TIME: 0
+2026-05-15 01:19:06,974 - INFO  - syntax Correct
+2026-05-15 01:19:08,323 - INFO  - Loop Invariant:
+2026-05-15 01:19:08,323 - INFO  - [True, True, True, True, True]
+2026-05-15 01:19:08,323 - INFO  - 
+2026-05-15 01:19:08,323 - INFO  - Assertion:
+2026-05-15 01:19:08,323 - INFO  - []
+2026-05-15 01:19:08,323 - INFO  - 
+2026-05-15 01:19:08,323 - INFO  - Assigns:
+2026-05-15 01:19:08,323 - INFO  - [True, True, True]
+2026-05-15 01:19:08,323 - INFO  - 
+2026-05-15 01:19:08,323 - INFO  - Post Condition:
+2026-05-15 01:19:08,324 - INFO  - [True]
+2026-05-15 01:19:08,324 - INFO  - 
+2026-05-15 01:19:08,324 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo119
+2026-05-15 01:19:08,324 - INFO  - ==================================================
+2026-05-15 01:19:08,324 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-4o/foo119/20260515_005825_647339_62f5c435/output/foo119.c
+2026-05-15 01:19:08,324 - INFO  - Output file content:
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  logic integer sum{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : sum(a, lo, hi - 1) + a[hi - 1];
+*/
+
+/*@
+  logic integer max{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] > max(a, lo, hi - 1) ? a[hi - 1] : max(a, lo, hi - 1));
+*/
+
+/*@
+  logic integer min{L}(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : (a[hi - 1] < min(a, lo, hi - 1) ? a[hi - 1] : min(a, lo, hi - 1));
+*/
+
+/*@
+  predicate array_unchanged{L1,L2}(int* a, integer n) =
+    \forall integer i; 0 <= i < n ==> \at(a[i],L1) == \at(a[i],L2);
+*/
+
+/*@
+  requires \valid(&args[0] + (0..args_len-1));
+  requires \forall integer i; 0 <= i < args_len ==> 0 <= args[i] <= 100;
+  requires args_len > 0;
+  requires args_len < 100;
+  requires \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+  assigns \nothing;
+  ensures \result >= 0 && \result <= args_len;
+*/
+int foo119(int * args, int args_len, int Array) {
+
+		int ret = 0;
+		int top = args_len - 1;
+		
+        /*@
+          loop invariant 0 <= ret && ret <= args_len;
+          loop invariant -1 <= top && top < args_len;
+          loop invariant ret <= top + 1;
+          loop invariant \forall integer i; 0 <= i < args_len ==> args[i] == \at(args[i], Pre);
+          loop invariant \forall integer i, j; 0 <= i < j < args_len ==> args[i] <= args[j];
+          loop assigns ret, top;
+          loop variant top - ret;
+        */
+        while (ret <= top) {
+			int i = (ret + top) / 2;
+			if (args[i] == Array) {
+				return i;
+			} else if (args[i] < Array) {
+				ret = i + 1;
+			} else {
+				top = i - 1;
+			}
+		}
+            
+		return ret;
+}
+
+2026-05-15 01:19:08,324 - INFO  - ==================================================
+2026-05-15 01:19:08,324 - INFO  - first_pass:
+2026-05-15 01:19:08,325 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 01:19:08,325 - INFO  - ==================================================
+2026-05-15 01:19:08,325 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 01:19:08,325 - INFO  - Total execution time: 1243.09 seconds (20.72 minutes)
+2026-05-15 01:19:08,325 - INFO  - ==================================================
+2026-05-15 01:19:08,325 - INFO  - ==================================================
+2026-05-15 01:19:08,325 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 01:19:08,325 - INFO  - Total API calls: 16
+2026-05-15 01:19:08,325 - INFO  - Total prompt tokens (input): 136,356
+2026-05-15 01:19:08,325 - INFO  - Total completion tokens (output): 13,811
+2026-05-15 01:19:08,325 - INFO  - Total tokens: 150,167
+2026-05-15 01:19:08,325 - INFO  - Average prompt tokens per call: 8522.2
+2026-05-15 01:19:08,325 - INFO  - Average completion tokens per call: 863.2
+2026-05-15 01:19:08,326 - INFO  - Average total tokens per call: 9385.4
+2026-05-15 01:19:08,326 - INFO  - ==================================================

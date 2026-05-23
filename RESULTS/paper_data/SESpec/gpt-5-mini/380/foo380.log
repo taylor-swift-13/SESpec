@@ -1,0 +1,568 @@
+2026-05-17 16:53:42,534 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo380/20260517_165342_954604_fbb3901a
+2026-05-17 16:53:42,535 - INFO  - 
+🚀 Starting generation of function: foo380
+2026-05-17 16:53:42,535 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 16:53:42,535 - INFO  - TRY TIME: 0
+2026-05-17 16:53:42,535 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 16:53:42,535 - INFO  - ==================================================
+
+2026-05-17 16:53:43,519 - INFO  - [auto only_loop] False — foo380 returns 'int'
+2026-05-17 16:53:43,519 - INFO  - Initial pending functions: ['foo380']
+2026-05-17 16:53:43,519 - INFO  - 
+GENERATE ANNOTATION FOR foo380
+2026-05-17 16:53:43,519 - INFO  - ==================================================
+
+2026-05-17 16:53:43,519 - INFO  - Function foo380 has been initialized
+2026-05-17 16:53:43,519 - INFO  - Starting to generate annotation code for foo380
+2026-05-17 16:53:43,577 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo380
+2026-05-17 16:53:43,578 - INFO  - ==================================================
+
+2026-05-17 16:53:43,663 - INFO  - Variable Maps:[{'sum': '0', 'number': 'number@pre'}]
+2026-05-17 16:53:43,663 - INFO  - Path conditions: [None]
+2026-05-17 16:53:43,663 - INFO  - Pre condition: (sum == 0) * (number == number@pre)
+2026-05-17 16:53:43,664 - INFO  - Loop Condition: i <= number / 2
+2026-05-17 16:53:43,665 - INFO  - Array Names: []
+2026-05-17 16:53:43,665 - INFO  - Updated Loop Conditions: ['i <= number@pre / 2']
+2026-05-17 16:53:43,665 - INFO  - Global Unchanged Variables: ['number']
+2026-05-17 16:53:43,665 - INFO  - Non Inductive Variables: []
+2026-05-17 16:53:43,666 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 16:53:43,667 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 16:53:43,669 - INFO  - examples category: numeric
+2026-05-17 16:53:43,669 - INFO  - examples:
+2026-05-17 16:53:43,669 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-17 16:53:59,857 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=5
+2026-05-17 16:53:59,860 - INFO  - [acsl-fixer] placeholder: dropped PLACE_HOLDER_VERFICATION_GOAL clause (loop invariant) on line 19
+2026-05-17 16:54:00,118 - INFO  - [acsl-fixer] residual syntax error remains; falling through to LLM repair
+2026-05-17 16:54:27,897 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-17 16:55:01,784 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=2
+2026-05-17 16:55:44,813 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-17 16:56:16,039 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.75, satisfy=0.00) clauses=4
+2026-05-17 16:56:26,676 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+2026-05-17 16:56:26,676 - INFO  - [inv-gen] converged at refine 6
+2026-05-17 16:56:31,057 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 16:56:33,363 - INFO  - ACSL format loop invariant
+2026-05-17 16:56:33,364 - INFO  - /*@
+      loop invariant 1 <= i;
+      loop invariant (\at(number,Pre) >= 0) ==> (i <= \at(number,Pre) / 2 + 1);
+      loop invariant sum == partial_sum(\at(number,Pre), i-1);
+      loop invariant number == \at(number,Pre);
+      loop assigns i, sum;
+    */
+    for (int i = 1; i <= number / 2; i++) {
+        if (number % i == 0) {
+            sum += i;
+        }
+    }
+2026-05-17 16:56:33,365 - INFO  - QCP format loop invariant
+2026-05-17 16:56:33,365 - INFO  - /*@ Inv
+    (1 <= i) &&
+((number@pre >= 0) => (i <= number@pre / 2 + 1)) &&
+(sum == partial_sum(number@pre, i-1)) &&
+(number == number@pre
+      loop assigns i, sum)
+    */
+    
+    for (int i = 1; i <= number / 2; i++) {
+        if (number % i == 0) {
+            sum += i;
+        }
+    }
+2026-05-17 16:56:35,399 - INFO  - CORRECT INVARIANT
+2026-05-17 16:56:35,400 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo380
+2026-05-17 16:56:35,400 - INFO  - ==================================================
+
+2026-05-17 16:56:35,419 - INFO  - Starting to generate ACSL specification for foo380
+2026-05-17 16:56:54,256 - INFO  - syntax Correct
+2026-05-17 16:57:04,935 - INFO  - Loop Invariant:
+2026-05-17 16:57:04,935 - INFO  - [True, True, True, True]
+2026-05-17 16:57:04,935 - INFO  - 
+2026-05-17 16:57:04,935 - INFO  - Assertion:
+2026-05-17 16:57:04,935 - INFO  - []
+2026-05-17 16:57:04,935 - INFO  - 
+2026-05-17 16:57:04,935 - INFO  - Assigns:
+2026-05-17 16:57:04,935 - INFO  - [True]
+2026-05-17 16:57:04,935 - INFO  - 
+2026-05-17 16:57:04,936 - INFO  - Post Condition:
+2026-05-17 16:57:04,936 - INFO  - [False]
+2026-05-17 16:57:04,936 - INFO  - 
+2026-05-17 16:57:04,936 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=3
+2026-05-17 16:57:04,937 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer partial_sum(integer n, integer k) =
+    k <= 0 ? 0 :
+    partial_sum(n, k-1) + ((n % k) == 0 ? k : 0);
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;   
+  ensures \result == partial_sum(\at(number,Pre), \at(number,Pre) / 2) [POSTCONDITION FAILED];
+*/
+int foo380(int number) {
+
+    int sum = 0;
+    
+    /*@
+      loop invariant 1 <= i;
+      loop invariant (\at(number,Pre) >= 0) ==> (i <= \at(number,Pre) / 2 + 1);
+      loop invariant sum == partial_sum(\at(number,Pre), i-1);
+      loop invariant number == \at(number,Pre);
+      loop assigns i, sum;
+    */
+    for (int i = 1; i <= number / 2; i++) {
+        if (number % i == 0) {
+            sum += i;
+        }
+    }
+        
+    return sum;
+}
+
+2026-05-17 16:57:10,137 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer partial_sum(integer n, integer k) =
+    k <= 0 ? 0 :
+    partial_sum(n, k-1) + ((n % k) == 0 ? k : 0);
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\at(number,Pre) >= 1)
+            ==> \result == partial_sum(\at(number,Pre), \at(number,Pre) / 2);
+  ensures (\at(number,Pre) <= 0) ==> \result == 0;
+*/
+int foo380(int number) {
+
+    int sum = 0;
+    
+    /*@
+      loop invariant 1 <= i;
+      loop invariant (\at(number,Pre) >= 0) ==> (i <= \at(number,Pre) / 2 + 1);
+      loop invariant sum == partial_sum(\at(number,Pre), i-1);
+      loop invariant number == \at(number,Pre);
+      loop assigns i, sum;
+    */
+    for (int i = 1; i <= number / 2; i++) {
+        if (number % i == 0) {
+            sum += i;
+        }
+    }
+        
+    return sum;
+}
+
+2026-05-17 16:57:21,078 - INFO  - syntax Correct
+2026-05-17 16:57:31,890 - INFO  - Loop Invariant:
+2026-05-17 16:57:31,891 - INFO  - [True, True, True, True]
+2026-05-17 16:57:31,891 - INFO  - 
+2026-05-17 16:57:31,891 - INFO  - Assertion:
+2026-05-17 16:57:31,891 - INFO  - []
+2026-05-17 16:57:31,891 - INFO  - 
+2026-05-17 16:57:31,891 - INFO  - Assigns:
+2026-05-17 16:57:31,891 - INFO  - [True]
+2026-05-17 16:57:31,891 - INFO  - 
+2026-05-17 16:57:31,891 - INFO  - Post Condition:
+2026-05-17 16:57:31,891 - INFO  - [True, False]
+2026-05-17 16:57:31,891 - INFO  - 
+2026-05-17 16:57:31,891 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=4
+2026-05-17 16:57:31,892 - INFO  - postconditon before refine: 
+
+/*@ 
+  logic integer partial_sum(integer n, integer k) =
+    k <= 0 ? 0 :
+    partial_sum(n, k-1) + ((n % k) == 0 ? k : 0);
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (\at(number,Pre) >= 1)
+            ==> \result == partial_sum(\at(number,Pre), \at(number,Pre) / 2);
+  ensures (\at(number,Pre) <= 0) ==> \result == 0 [POSTCONDITION FAILED];
+*/
+int foo380(int number) {
+
+    int sum = 0;
+    
+    /*@
+      loop invariant 1 <= i;
+      loop invariant (\at(number,Pre) >= 0) ==> (i <= \at(number,Pre) / 2 + 1);
+      loop invariant sum == partial_sum(\at(number,Pre), i-1);
+      loop invariant number == \at(number,Pre);
+      loop assigns i, sum;
+    */
+    for (int i = 1; i <= number / 2; i++) {
+        if (number % i == 0) {
+            sum += i;
+        }
+    }
+        
+    return sum;
+}
+
+2026-05-17 16:57:37,132 - INFO  - postconditon after refine: 
+
+/*@ 
+  logic integer partial_sum(integer n, integer k) =
+    k <= 0 ? 0 :
+    partial_sum(n, k-1) + ((n % k) == 0 ? k : 0);
+*/
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (\at(number,Pre) >= 1)
+            ==> \result == partial_sum(\at(number,Pre), \at(number,Pre) / 2);
+  ensures \at(number,Pre) == 0 ==> \result == 0;
+*/
+int foo380(int number) {
+
+    int sum = 0;
+    
+    /*@
+      loop invariant 1 <= i;
+      loop invariant (\at(number,Pre) >= 0) ==> (i <= \at(number,Pre) / 2 + 1);
+      loop invariant sum == partial_sum(\at(number,Pre), i-1);
+      loop invariant number == \at(number,Pre);
+      loop assigns i, sum;
+    */
+    for (int i = 1; i <= number / 2; i++) {
+        if (number % i == 0) {
+            sum += i;
+        }
+    }
+        
+    return sum;
+}
+
+2026-05-17 16:57:38,132 - INFO  - syntax Correct
+2026-05-17 16:57:39,227 - INFO  - Loop Invariant:
+2026-05-17 16:57:39,227 - INFO  - [True, True, True, True]
+2026-05-17 16:57:39,227 - INFO  - 
+2026-05-17 16:57:39,227 - INFO  - Assertion:
+2026-05-17 16:57:39,227 - INFO  - []
+2026-05-17 16:57:39,227 - INFO  - 
+2026-05-17 16:57:39,227 - INFO  - Assigns:
+2026-05-17 16:57:39,227 - INFO  - [True]
+2026-05-17 16:57:39,227 - INFO  - 
+2026-05-17 16:57:39,227 - INFO  - Post Condition:
+2026-05-17 16:57:39,228 - INFO  - [True, True]
+2026-05-17 16:57:39,228 - INFO  - 
+2026-05-17 16:57:39,228 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=4
+2026-05-17 16:57:39,228 - INFO  - [spec-gen] converged at refine 3
+2026-05-17 16:57:39,228 - INFO  - 
+SPECIFICATION FOR foo380
+2026-05-17 16:57:39,228 - INFO  - ==================================================
+
+2026-05-17 16:57:39,228 - INFO  - 
+QCP Specification for function foo380:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 16:57:39,427 - INFO  - 
+VERIFICATION FOR foo380
+2026-05-17 16:57:39,427 - INFO  - ==================================================
+
+2026-05-17 16:57:40,437 - INFO  - syntax Correct
+2026-05-17 16:57:41,466 - INFO  - Loop Invariant:
+2026-05-17 16:57:41,466 - INFO  - [True, True, True, True]
+2026-05-17 16:57:41,466 - INFO  - 
+2026-05-17 16:57:41,466 - INFO  - Assertion:
+2026-05-17 16:57:41,466 - INFO  - []
+2026-05-17 16:57:41,466 - INFO  - 
+2026-05-17 16:57:41,466 - INFO  - Assigns:
+2026-05-17 16:57:41,466 - INFO  - [True]
+2026-05-17 16:57:41,467 - INFO  - 
+2026-05-17 16:57:41,467 - INFO  - Post Condition:
+2026-05-17 16:57:41,467 - INFO  - [True, True]
+2026-05-17 16:57:41,467 - INFO  - 
+2026-05-17 16:57:41,467 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo380
+2026-05-17 16:57:41,467 - INFO  - ==================================================
+2026-05-17 16:57:41,467 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo380/20260517_165342_954604_fbb3901a/output/foo380.c
+2026-05-17 16:57:41,467 - INFO  - Output file content:
+
+/*@ 
+  logic integer partial_sum(integer n, integer k) =
+    k <= 0 ? 0 :
+    partial_sum(n, k-1) + ((n % k) == 0 ? k : 0);
+*/
+
+/*@
+  requires number >= 0;
+  assigns \nothing;
+  ensures (\at(number,Pre) >= 1)
+            ==> \result == partial_sum(\at(number,Pre), \at(number,Pre) / 2);
+  ensures \at(number,Pre) == 0 ==> \result == 0;
+*/
+int foo380(int number) {
+
+    int sum = 0;
+    
+    /*@
+      loop invariant 1 <= i;
+      loop invariant (\at(number,Pre) >= 0) ==> (i <= \at(number,Pre) / 2 + 1);
+      loop invariant sum == partial_sum(\at(number,Pre), i-1);
+      loop invariant number == \at(number,Pre);
+      loop assigns i, sum;
+    */
+    for (int i = 1; i <= number / 2; i++) {
+        if (number % i == 0) {
+            sum += i;
+        }
+    }
+        
+    return sum;
+}
+
+2026-05-17 16:57:41,467 - INFO  - ==================================================
+2026-05-17 16:57:41,467 - INFO  - first_pass:
+2026-05-17 16:57:41,467 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 16:57:41,467 - INFO  - ==================================================
+2026-05-17 16:57:41,467 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 16:57:41,468 - INFO  - Total execution time: 238.93 seconds (3.98 minutes)
+2026-05-17 16:57:41,468 - INFO  - ==================================================
+2026-05-17 16:57:41,468 - INFO  - ==================================================
+2026-05-17 16:57:41,468 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 16:57:41,468 - INFO  - Total API calls: 11
+2026-05-17 16:57:41,468 - INFO  - Total prompt tokens (input): 96,469
+2026-05-17 16:57:41,468 - INFO  - Total completion tokens (output): 5,554
+2026-05-17 16:57:41,468 - INFO  - Total tokens: 102,023
+2026-05-17 16:57:41,468 - INFO  - Average prompt tokens per call: 8769.9
+2026-05-17 16:57:41,468 - INFO  - Average completion tokens per call: 504.9
+2026-05-17 16:57:41,468 - INFO  - Average total tokens per call: 9274.8
+2026-05-17 16:57:41,468 - INFO  - ==================================================

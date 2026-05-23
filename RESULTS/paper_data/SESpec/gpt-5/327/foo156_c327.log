@@ -1,0 +1,1229 @@
+2026-05-17 04:49:54,231 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1
+2026-05-17 04:49:54,232 - INFO  - 
+🚀 Starting generation of function: foo156_c327
+2026-05-17 04:49:54,232 - INFO  - 
+OUTER PASS: 1/1
+2026-05-17 04:49:54,232 - INFO  - TRY TIME: 0
+2026-05-17 04:49:54,232 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-17 04:49:54,232 - INFO  - ==================================================
+
+2026-05-17 04:49:57,416 - INFO  - [auto only_loop] False — foo156_c327 returns 'int'
+2026-05-17 04:49:57,417 - INFO  - Initial pending functions: ['foo156_c327']
+2026-05-17 04:49:57,417 - INFO  - 
+GENERATE ANNOTATION FOR foo156_c327
+2026-05-17 04:49:57,417 - INFO  - ==================================================
+
+2026-05-17 04:49:57,417 - INFO  - Function foo156_c327 has been initialized
+2026-05-17 04:49:57,417 - INFO  - Starting to generate annotation code for foo156_c327
+2026-05-17 04:49:57,513 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo156_c327
+2026-05-17 04:49:57,514 - INFO  - ==================================================
+
+2026-05-17 04:49:57,648 - INFO  - Variable Maps:[{'fact': '1', 'n': 'n@pre'}]
+2026-05-17 04:49:57,649 - INFO  - Path conditions: [None]
+2026-05-17 04:49:57,649 - INFO  - Pre condition: (fact == 1) * (n == n@pre)
+2026-05-17 04:49:57,649 - INFO  - Loop Condition: i <= n
+2026-05-17 04:49:57,650 - INFO  - Array Names: []
+2026-05-17 04:49:57,651 - INFO  - Updated Loop Conditions: ['i <= n@pre']
+2026-05-17 04:49:57,651 - INFO  - Global Unchanged Variables: ['n']
+2026-05-17 04:49:57,652 - INFO  - Non Inductive Variables: []
+2026-05-17 04:49:57,652 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 04:49:57,654 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 04:49:57,657 - INFO  - examples category: numeric
+2026-05-17 04:49:57,657 - INFO  - examples:
+2026-05-17 04:49:57,657 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-17 04:50:12,745 - INFO  - [inv-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=7
+2026-05-17 04:50:42,438 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-17 04:51:13,449 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-17 04:51:43,675 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-17 04:51:43,676 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 04:52:05,835 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-17 04:52:36,765 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-17 04:52:36,770 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 04:52:59,768 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-17 04:53:29,259 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-17 04:53:29,259 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 04:53:51,814 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=3
+2026-05-17 04:54:21,163 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=3
+2026-05-17 04:54:21,163 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-17 04:54:21,164 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.6666666666666666, 0.0), clauses=3)
+2026-05-17 04:54:46,369 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 04:54:47,877 - INFO  - ACSL format loop invariant
+2026-05-17 04:54:47,878 - INFO  - /*@
+          loop invariant n == \at(n,Pre);
+          loop invariant 2 <= i ==> 1 <= i - 1;
+          loop assigns i, fact;
+            */
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+2026-05-17 04:54:47,879 - INFO  - QCP format loop invariant
+2026-05-17 04:54:47,880 - INFO  - /*@ Inv
+    (n == n@pre) &&
+(2 <= i => 1 <= i - 1
+          loop assigns i, fact)
+    */
+    
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+2026-05-17 04:54:47,943 - INFO  - Variable Maps:[{}]
+2026-05-17 04:54:47,946 - INFO  - Path conditions: [None]
+2026-05-17 04:54:47,950 - INFO  - Pre condition: 
+2026-05-17 04:54:47,951 - INFO  - Loop Condition: fact > 0
+2026-05-17 04:54:47,951 - INFO  - Array Names: []
+2026-05-17 04:54:47,951 - INFO  - Updated Loop Conditions: ['fact > 0']
+2026-05-17 04:54:47,954 - INFO  - Global Unchanged Variables: []
+2026-05-17 04:54:47,954 - INFO  - Non Inductive Variables: []
+2026-05-17 04:54:47,954 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-17 04:54:47,955 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-17 04:54:47,968 - INFO  - examples category: numeric
+2026-05-17 04:54:47,969 - INFO  - examples:
+2026-05-17 04:54:47,969 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-17 04:55:31,863 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.57, satisfy=0.00) clauses=7
+2026-05-17 04:56:06,474 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=6
+2026-05-17 04:56:38,090 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-17 04:56:50,295 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=7
+2026-05-17 04:56:50,296 - INFO  - [inv-gen] converged at refine 4
+2026-05-17 04:56:53,597 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-17 04:56:57,012 - INFO  - ACSL format loop invariant
+2026-05-17 04:56:57,013 - INFO  - /*@
+          loop invariant fact >= 0;
+          loop invariant foo156_c327 >= 0;
+          loop assigns foo156_c327, fact;
+            */
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+2026-05-17 04:56:57,013 - INFO  - QCP format loop invariant
+2026-05-17 04:56:57,013 - INFO  - /*@ Inv
+    (fact >= 0) &&
+(foo156_c327 >= 0
+          loop assigns foo156_c327, fact)
+    */
+    
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+2026-05-17 04:57:00,331 - INFO  - CORRECT INVARIANT
+2026-05-17 04:57:00,333 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo156_c327
+2026-05-17 04:57:00,334 - INFO  - ==================================================
+
+2026-05-17 04:57:00,365 - INFO  - Starting to generate ACSL specification for foo156_c327
+2026-05-17 04:57:18,635 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c:7: Warning: 
+  unbound logic function prod2. Ignoring logic specification of function foo156_c327
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 04:57:18,637 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 04:57:28,860 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     - Frama-C reports “unbound logic function prod2” and then ignores the function’s logic specification. This happens because the function contract and loop invariants reference prod2(2, n) and prod2(2, i - 1), but there is no prior definition of a logic function named prod2 in the file.
+  3     - Additionally, the function uses msd10 in ensures, and msd10 is defined as a logic function at the top of the file (good), but prod2 is missing. According to rule A9/A9a, any logic function used in contracts must be defined at file scope before the function.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 04:57:28,861 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 04:57:34,872 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c (with preprocessing)
+[kernel] log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c:1: 
+  syntax error:
+  Location: line 1, between columns 6 and 14, before or at token: Analysis
+  1     Error Analysis:
+        ^^^^^^^^^^^^^^^
+  2     - Frama-C’s syntax error shows that non-C/ACSL text (“Error Analysis: …”) was included at the top of the C file, causing a parse failure before any code. All narrative text must be removed from the C source; only valid C and ACSL are allowed.
+  3     - Separately, earlier runs indicated “unbound logic function prod2”, meaning the contracts referenced prod2 without a prior logic definition (A9/A9a). We must define prod2 at file scope, each logic definition in its own /*@ ... */ block (A2).
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 04:57:34,873 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 04:57:34,873 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-17 04:57:35,129 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c:7: Warning: 
+  unbound logic function prod2. Ignoring logic specification of function foo156_c327
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 04:57:35,130 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 04:57:54,485 - INFO  - syntax Correct
+2026-05-17 04:58:05,524 - INFO  - Loop Invariant:
+2026-05-17 04:58:05,524 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 04:58:05,525 - INFO  - 
+2026-05-17 04:58:05,525 - INFO  - Assertion:
+2026-05-17 04:58:05,526 - INFO  - []
+2026-05-17 04:58:05,526 - INFO  - 
+2026-05-17 04:58:05,526 - INFO  - Assigns:
+2026-05-17 04:58:05,526 - INFO  - [True, True]
+2026-05-17 04:58:05,526 - INFO  - 
+2026-05-17 04:58:05,527 - INFO  - Post Condition:
+2026-05-17 04:58:05,527 - INFO  - [False, False]
+2026-05-17 04:58:05,527 - INFO  - 
+2026-05-17 04:58:05,528 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=4
+2026-05-17 04:58:05,529 - INFO  - postconditon before refine: 
+
+/*@ logic integer msd10(integer x) =
+      x < 10 ? x : msd10(x / 10); */
+
+/*@ logic integer prod2(integer a, integer b) =
+      b < a ? 1 : a * prod2(a + 1, b); */
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \result == msd10(prod2(2, n)) [POSTCONDITION FAILED];
+  ensures 0 <= \result <= 9 [POSTCONDITION FAILED];
+*/
+int foo156_c327(int n) {
+
+        int fact = 1;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant n == \at(n,Pre);
+          loop invariant 2 <= i;
+          loop invariant fact >= 1;
+          loop invariant fact == prod2(2, i - 1);
+          loop invariant (i > n) ==> (fact == prod2(2, n));
+          loop assigns i, fact;
+            */
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+            
+        int foo156_c327 = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant fact >= 0;
+          loop invariant foo156_c327 >= 0;
+          loop assigns foo156_c327, fact;
+            */
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+            
+        return foo156_c327;
+}
+
+2026-05-17 04:58:15,332 - INFO  - postconditon after refine: 
+
+/*@ logic integer msd10(integer x) =
+      x < 10 ? x : msd10(x / 10); */
+
+/*@ logic integer prod2(integer a, integer b) =
+      b < a ? 1 : a * prod2(a + 1, b); */
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \result == (prod2(2, n) % 10);
+  ensures 0 <= \result <= 9;
+*/
+int foo156_c327(int n) {
+
+        int fact = 1;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant n == \at(n,Pre);
+          loop invariant 2 <= i;
+          loop invariant fact >= 1;
+          loop invariant fact == prod2(2, i - 1);
+          loop invariant (i > n) ==> (fact == prod2(2, n));
+          loop assigns i, fact;
+            */
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+            
+        int foo156_c327 = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant fact >= 0;
+          loop invariant foo156_c327 >= 0;
+          loop assigns foo156_c327, fact;
+            */
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+            
+        return foo156_c327;
+}
+
+2026-05-17 04:58:28,095 - INFO  - syntax Correct
+2026-05-17 04:58:40,602 - INFO  - Loop Invariant:
+2026-05-17 04:58:40,604 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 04:58:40,604 - INFO  - 
+2026-05-17 04:58:40,604 - INFO  - Assertion:
+2026-05-17 04:58:40,604 - INFO  - []
+2026-05-17 04:58:40,604 - INFO  - 
+2026-05-17 04:58:40,604 - INFO  - Assigns:
+2026-05-17 04:58:40,604 - INFO  - [True, True]
+2026-05-17 04:58:40,604 - INFO  - 
+2026-05-17 04:58:40,604 - INFO  - Post Condition:
+2026-05-17 04:58:40,604 - INFO  - [False, False]
+2026-05-17 04:58:40,605 - INFO  - 
+2026-05-17 04:58:40,605 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=4
+2026-05-17 04:58:40,605 - INFO  - postconditon before refine: 
+
+/*@ logic integer msd10(integer x) =
+      x < 10 ? x : msd10(x / 10); */
+
+/*@ logic integer prod2(integer a, integer b) =
+      b < a ? 1 : a * prod2(a + 1, b); */
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \result == (prod2(2, n) % 10) [POSTCONDITION FAILED];
+  ensures 0 <= \result <= 9 [POSTCONDITION FAILED];
+*/
+int foo156_c327(int n) {
+
+        int fact = 1;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant n == \at(n,Pre);
+          loop invariant 2 <= i;
+          loop invariant fact >= 1;
+          loop invariant fact == prod2(2, i - 1);
+          loop invariant (i > n) ==> (fact == prod2(2, n));
+          loop assigns i, fact;
+            */
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+            
+        int foo156_c327 = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant fact >= 0;
+          loop invariant foo156_c327 >= 0;
+          loop assigns foo156_c327, fact;
+            */
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+            
+        return foo156_c327;
+}
+
+2026-05-17 04:58:49,997 - INFO  - postconditon after refine: 
+
+/*@ logic integer msd10(integer x) =
+      x < 10 ? x : msd10(x / 10); */
+
+/*@ logic integer prod2(integer a, integer b) =
+      b < a ? 1 : a * prod2(a + 1, b); */
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == (prod2(2, n) % 10) [POSTCONDITION FAILED];
+  ensures 0 <= \result <= 9 [POSTCONDITION FAILED];
+*/
+int foo156_c327(int n) {
+
+        int fact = 1;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant n == \at(n,Pre);
+          loop invariant 2 <= i;
+          loop invariant fact >= 1;
+          loop invariant fact == prod2(2, i - 1);
+          loop invariant (i > n) ==> (fact == prod2(2, n));
+          loop assigns i, fact;
+            */
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+            
+        int foo156_c327 = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant fact >= 0;
+          loop invariant foo156_c327 >= 0;
+          loop assigns foo156_c327, fact;
+            */
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+            
+        return foo156_c327;
+}
+
+2026-05-17 04:58:50,419 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c:11: Warning: 
+  unexpected token 'FAILED'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-17 04:58:50,419 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-17 04:58:50,420 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 04:59:01,604 - INFO  - syntax Correct
+2026-05-17 04:59:12,682 - INFO  - Loop Invariant:
+2026-05-17 04:59:12,683 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 04:59:12,683 - INFO  - 
+2026-05-17 04:59:12,683 - INFO  - Assertion:
+2026-05-17 04:59:12,683 - INFO  - []
+2026-05-17 04:59:12,684 - INFO  - 
+2026-05-17 04:59:12,684 - INFO  - Assigns:
+2026-05-17 04:59:12,684 - INFO  - [True, True]
+2026-05-17 04:59:12,684 - INFO  - 
+2026-05-17 04:59:12,685 - INFO  - Post Condition:
+2026-05-17 04:59:12,685 - INFO  - [False, False]
+2026-05-17 04:59:12,685 - INFO  - 
+2026-05-17 04:59:12,686 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=4
+2026-05-17 04:59:12,686 - INFO  - postconditon before refine: 
+
+/*@ logic integer msd10(integer x) =
+      x < 10 ? x : msd10(x / 10); */
+
+/*@ logic integer prod2(integer a, integer b) =
+      b < a ? 1 : a * prod2(a + 1, b); */
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \result == msd10(prod2(2, n)) [POSTCONDITION FAILED];
+  ensures 0 <= \result <= 9 [POSTCONDITION FAILED];
+*/
+int foo156_c327(int n) {
+
+        int fact = 1;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant n == \at(n,Pre);
+          loop invariant 2 <= i;
+          loop invariant fact >= 1;
+          loop invariant fact == prod2(2, i - 1);
+          loop invariant (i > n) ==> (fact == prod2(2, n));
+          loop assigns i, fact;
+            */
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+            
+        int foo156_c327 = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant fact >= 0;
+          loop invariant foo156_c327 >= 0;
+          loop assigns foo156_c327, fact;
+            */
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+            
+        return foo156_c327;
+}
+
+2026-05-17 04:59:21,494 - INFO  - postconditon after refine: 
+
+/*@ logic integer msd10(integer x) =
+      x < 10 ? x : msd10(x / 10); */
+
+/*@ logic integer prod2(integer a, integer b) =
+      b < a ? 1 : a * prod2(a + 1, b); */
+
+/*@
+  requires 0 <= n <= 12;
+  assigns \nothing;
+  ensures \result == (prod2(2, n) % 10);
+  ensures 0 <= \result <= 9;
+*/
+int foo156_c327(int n) {
+
+        int fact = 1;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant n == \at(n,Pre);
+          loop invariant 2 <= i;
+          loop invariant fact >= 1;
+          loop invariant fact == prod2(2, i - 1);
+          loop invariant (i > n) ==> (fact == prod2(2, n));
+          loop assigns i, fact;
+            */
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+            
+        int foo156_c327 = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant fact >= 0;
+          loop invariant foo156_c327 >= 0;
+          loop assigns foo156_c327, fact;
+            */
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+            
+        return foo156_c327;
+}
+
+2026-05-17 04:59:32,659 - INFO  - syntax Correct
+2026-05-17 04:59:43,871 - INFO  - Loop Invariant:
+2026-05-17 04:59:43,871 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 04:59:43,872 - INFO  - 
+2026-05-17 04:59:43,872 - INFO  - Assertion:
+2026-05-17 04:59:43,872 - INFO  - []
+2026-05-17 04:59:43,872 - INFO  - 
+2026-05-17 04:59:43,872 - INFO  - Assigns:
+2026-05-17 04:59:43,872 - INFO  - [True, True]
+2026-05-17 04:59:43,872 - INFO  - 
+2026-05-17 04:59:43,873 - INFO  - Post Condition:
+2026-05-17 04:59:43,873 - INFO  - [False, False]
+2026-05-17 04:59:43,874 - INFO  - 
+2026-05-17 04:59:43,874 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=4
+2026-05-17 04:59:43,878 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-17 04:59:55,919 - INFO  - syntax Correct
+2026-05-17 05:00:07,194 - INFO  - Loop Invariant:
+2026-05-17 05:00:07,194 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 05:00:07,194 - INFO  - 
+2026-05-17 05:00:07,194 - INFO  - Assertion:
+2026-05-17 05:00:07,195 - INFO  - []
+2026-05-17 05:00:07,195 - INFO  - 
+2026-05-17 05:00:07,195 - INFO  - Assigns:
+2026-05-17 05:00:07,195 - INFO  - [True, True]
+2026-05-17 05:00:07,195 - INFO  - 
+2026-05-17 05:00:07,195 - INFO  - Post Condition:
+2026-05-17 05:00:07,195 - INFO  - [False, False]
+2026-05-17 05:00:07,195 - INFO  - 
+2026-05-17 05:00:07,196 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.82, satisfy=0.00) clauses=4
+2026-05-17 05:00:07,196 - INFO  - postconditon before refine: 
+
+/*@ logic integer msd10(integer x) =
+      x < 10 ? x : msd10(x / 10); */
+
+/*@ logic integer prod2(integer a, integer b) =
+      b < a ? 1 : a * prod2(a + 1, b); */
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \result == msd10(prod2(2, n)) [POSTCONDITION FAILED];
+  ensures 0 <= \result <= 9 [POSTCONDITION FAILED];
+*/
+int foo156_c327(int n) {
+
+        int fact = 1;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant n == \at(n,Pre);
+          loop invariant 2 <= i;
+          loop invariant fact >= 1;
+          loop invariant fact == prod2(2, i - 1);
+          loop invariant (i > n) ==> (fact == prod2(2, n));
+          loop assigns i, fact;
+            */
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+            
+        int foo156_c327 = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant fact >= 0;
+          loop invariant foo156_c327 >= 0;
+          loop assigns foo156_c327, fact;
+            */
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+            
+        return foo156_c327;
+}
+
+2026-05-17 05:00:19,494 - INFO  - postconditon after refine: 
+
+/*@ logic integer msd10(integer x) =
+      x < 10 ? x : msd10(x / 10); */
+
+/*@ logic integer prod2(integer a, integer b) =
+      b < a ? 1 : a * prod2(a + 1, b); */
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == msd10(prod2(2, n));
+  ensures 0 <= \result <= 9;
+*/
+int foo156_c327(int n) {
+
+        int fact = 1;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant n == \at(n,Pre);
+          loop invariant 2 <= i;
+          loop invariant fact >= 1;
+          loop invariant fact == prod2(2, i - 1);
+          loop invariant (i > n) ==> (fact == prod2(2, n));
+          loop assigns i, fact;
+            */
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+            
+        int foo156_c327 = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant fact >= 0;
+          loop invariant foo156_c327 >= 0;
+          loop assigns foo156_c327, fact;
+            */
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+            
+        return foo156_c327;
+}
+
+2026-05-17 05:00:19,496 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.8181818181818182, 0.0), clauses=4)
+2026-05-17 05:00:30,475 - INFO  - syntax Correct
+2026-05-17 05:00:41,372 - INFO  - Loop Invariant:
+2026-05-17 05:00:41,373 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 05:00:41,373 - INFO  - 
+2026-05-17 05:00:41,373 - INFO  - Assertion:
+2026-05-17 05:00:41,373 - INFO  - []
+2026-05-17 05:00:41,373 - INFO  - 
+2026-05-17 05:00:41,373 - INFO  - Assigns:
+2026-05-17 05:00:41,373 - INFO  - [True, True]
+2026-05-17 05:00:41,373 - INFO  - 
+2026-05-17 05:00:41,374 - INFO  - Post Condition:
+2026-05-17 05:00:41,374 - INFO  - [False, False]
+2026-05-17 05:00:41,374 - INFO  - 
+2026-05-17 05:00:43,009 - INFO  - syntax Correct
+2026-05-17 05:00:44,286 - INFO  - Loop Invariant:
+2026-05-17 05:00:44,286 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 05:00:44,286 - INFO  - 
+2026-05-17 05:00:44,286 - INFO  - Assertion:
+2026-05-17 05:00:44,286 - INFO  - []
+2026-05-17 05:00:44,287 - INFO  - 
+2026-05-17 05:00:44,287 - INFO  - Assigns:
+2026-05-17 05:00:44,287 - INFO  - [True, True]
+2026-05-17 05:00:44,287 - INFO  - 
+2026-05-17 05:00:44,287 - INFO  - Post Condition:
+2026-05-17 05:00:44,287 - INFO  - []
+2026-05-17 05:00:44,287 - INFO  - 
+2026-05-17 05:00:44,289 - INFO  - 
+SPECIFICATION FOR foo156_c327
+2026-05-17 05:00:44,289 - INFO  - ==================================================
+
+2026-05-17 05:00:44,290 - INFO  - 
+QCP Specification for function foo156_c327:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-17 05:00:49,249 - INFO  - 
+VERIFICATION FOR foo156_c327
+2026-05-17 05:00:49,249 - INFO  - ==================================================
+
+2026-05-17 05:00:50,407 - INFO  - syntax Correct
+2026-05-17 05:00:51,366 - INFO  - Loop Invariant:
+2026-05-17 05:00:51,367 - INFO  - [True, True, True, True, True, True, True]
+2026-05-17 05:00:51,367 - INFO  - 
+2026-05-17 05:00:51,367 - INFO  - Assertion:
+2026-05-17 05:00:51,367 - INFO  - []
+2026-05-17 05:00:51,367 - INFO  - 
+2026-05-17 05:00:51,367 - INFO  - Assigns:
+2026-05-17 05:00:51,367 - INFO  - [True, True]
+2026-05-17 05:00:51,367 - INFO  - 
+2026-05-17 05:00:51,367 - INFO  - Post Condition:
+2026-05-17 05:00:51,367 - INFO  - []
+2026-05-17 05:00:51,367 - INFO  - 
+2026-05-17 05:00:51,367 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo156_c327
+2026-05-17 05:00:51,367 - INFO  - ==================================================
+2026-05-17 05:00:51,367 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo156_c327/20260517_044954_274468_0635f1d1/output/foo156_c327.c
+2026-05-17 05:00:51,367 - INFO  - Output file content:
+
+/*@ logic integer msd10(integer x) =
+      x < 10 ? x : msd10(x / 10); */
+
+/*@ logic integer prod2(integer a, integer b) =
+      b < a ? 1 : a * prod2(a + 1, b); */
+
+/*@
+  requires \true;
+  assigns \nothing;
+*/
+int foo156_c327(int n) {
+
+        int fact = 1;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant n == \at(n,Pre);
+          loop invariant 2 <= i;
+          loop invariant fact >= 1;
+          loop invariant fact == prod2(2, i - 1);
+          loop invariant (i > n) ==> (fact == prod2(2, n));
+          loop assigns i, fact;
+            */
+            for (int i = 2; i <= n; i++) {
+            fact *= i;
+        }
+            
+        int foo156_c327 = 0;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant fact >= 0;
+          loop invariant foo156_c327 >= 0;
+          loop assigns foo156_c327, fact;
+            */
+            while (fact > 0) {
+            foo156_c327 = fact % 10;
+            fact /= 10;
+        }
+            
+        return foo156_c327;
+}
+
+2026-05-17 05:00:51,368 - INFO  - ==================================================
+2026-05-17 05:00:51,368 - INFO  - first_pass:
+2026-05-17 05:00:51,368 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-17 05:00:51,368 - INFO  - ==================================================
+2026-05-17 05:00:51,368 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-17 05:00:51,368 - INFO  - Total execution time: 657.14 seconds (10.95 minutes)
+2026-05-17 05:00:51,368 - INFO  - ==================================================
+2026-05-17 05:00:51,368 - INFO  - ==================================================
+2026-05-17 05:00:51,369 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-17 05:00:51,369 - INFO  - Total API calls: 23
+2026-05-17 05:00:51,369 - INFO  - Total prompt tokens (input): 239,875
+2026-05-17 05:00:51,369 - INFO  - Total completion tokens (output): 12,265
+2026-05-17 05:00:51,369 - INFO  - Total tokens: 252,140
+2026-05-17 05:00:51,369 - INFO  - Average prompt tokens per call: 10429.3
+2026-05-17 05:00:51,369 - INFO  - Average completion tokens per call: 533.3
+2026-05-17 05:00:51,369 - INFO  - Average total tokens per call: 10962.6
+2026-05-17 05:00:51,369 - INFO  - ==================================================

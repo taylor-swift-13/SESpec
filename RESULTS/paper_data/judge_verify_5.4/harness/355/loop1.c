@@ -1,0 +1,87 @@
+#include <limits.h>
+
+/*@ logic integer pow2(integer n) = n <= 0 ? 1 : 2 * pow2(n - 1); */
+
+/*@ requires ((\at(num,Pre) > 0) ==> (0 <= result && sum >= 0)) && ((!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(end == 0)&&(result == 0)&&(num == \at(num,Pre)))) && ((\at(num,Pre) > 0) ==> (num == \at(num,Pre))) && (num == \at(num,Pre));
+    assigns \nothing;
+*/
+void check_A_implies_B(int end, int num) {
+    /*@ assert (sum > 0 ==> (sum + result) >= result); */
+    /*@ assert (sum > 0 ==> (result & 1) == 0 || (result & 1) == 1); */
+    /*@ assert (sum <= result + sum); */
+    /*@ assert (end == end); */
+    /*@ assert ((sum > 0) ==> (result & 1) == 0 || (result & 1) == 1); */
+    /*@ assert ((sum == 0) ==> result <= num + 1); */
+    /*@ assert (sum >= 0 ==> result + sum <= num + 31); */
+    /*@ assert (sum > 0 ==> sum + result <= num + 32); */
+    /*@ assert (sum > 0 ==> sum + result <= num + 1); */
+    /*@ assert (sum > 0 ==> result >= 0); */
+    /*@ assert (sum > 0 ==> result <= num); */
+    /*@ assert (sum > 0 ==> result <= num + 1); */
+    /*@ assert (sum > 0 ==> result < num + 1); */
+    /*@ assert (sum > 0 ==> end == end); */
+    /*@ assert (sum > 0 ==> (result % 2 == 0 || result % 2 == 1)); */
+    /*@ assert (sum > 0 ==> (end & 1) == 0 || (end & 1) == 1); */
+    /*@ assert (sum == 0 ==> result >= 0); */
+    /*@ assert (sum == 0 ==> result == 0 || result > 0); */
+    /*@ assert (sum == 0 ==> result <= num + 1); */
+    /*@ assert (sum == 0 ==> end == end); */
+    /*@ assert (sum <= num); */
+    /*@ assert (sum <= num - result + 32); */
+    /*@ assert (sum <= num - result + 1); */
+    /*@ assert (sum <= num - result + 1 || sum + result <= num + 1); */
+    /*@ assert (sum <= num - result + 1 || result <= num); */
+    /*@ assert (sum <= num - result + 1 || result <= num + 1); */
+    /*@ assert (sum <= num - result + 1 || 0 <= sum); */
+    /*@ assert (sum < num - result + 1); */
+    /*@ assert (sum + result <= num + 32); */
+    /*@ assert (sum + result <= num + 1); */
+    /*@ assert (sum + result <= num + 1 || sum == 0); */
+    /*@ assert (sum + result <= num + 1 || result <= num + 1); */
+    /*@ assert (sum + result <= num + 1 || 0 <= sum); */
+    /*@ assert (sum + result < num + 1); */
+    /*@ assert (result >= 0 ==> sum + result <= num + 32); */
+    /*@ assert (result > 0 ==> sum < num); */
+    /*@ assert (result == 0 || result > 0); */
+    /*@ assert (result == 0 ==> end == 0); */
+    /*@ assert (result <= num || sum + result <= num + 1); */
+    /*@ assert (result <= num || 0 <= end); */
+    /*@ assert (result <= num ==> sum + result <= num + 32); */
+    /*@ assert (result <= num + 1 || 0 <= end); */
+    /*@ assert (result <= num + 1 ==> sum + result <= num + 1); */
+    /*@ assert (result + sum <= num + result); */
+    /*@ assert (result + sum <= num + 32); */
+    /*@ assert (result + sum <= num + 31); */
+    /*@ assert (result + sum <= num + 1); */
+    /*@ assert (result + sum <= num + 1 || sum == 0); */
+    /*@ assert (result % 2 == 0 || result % 2 == 1); */
+    /*@ assert (end <= (1 << 31)); */
+    /*@ assert (0 <= sum || 0 <= end); */
+    /*@ assert (0 <= result); */
+    /*@ assert (0 <= end || sum <= num - result + 1); */
+    /*@ assert (0 <= end || sum + result <= num + 1); */
+    /*@ assert (0 <= end || result <= num); */
+    /*@ assert (0 <= end || result <= num + 1); */
+    /*@ assert (0 <= end || 0 <= sum); */
+    /*@ assert ((sum > 0) ==> result <= num + 1); */
+    /*@ assert ((sum > 0) ==> result < num + 1); */
+    /*@ assert ((sum > 0) ==> (result <= num + 1)); */
+    /*@ assert ((sum == 0) ==> result >= 0); */
+    /*@ assert ((sum == 0) ==> end == end); */
+    /*@ assert ((sum == 0) ==> (result >= 0)); */
+    /*@ assert ((sum == 0) ==> (result == 0 || result > 0)); */
+    /*@ assert ((sum == 0) ==> (end == end)); */
+    /*@ assert ((result & 1) == 0 || (result & 1) == 1); */
+    /*@ assert ((result % 2 == 0) || (result % 2 == 1)); */
+    /*@ assert ((end & 1) == 0 || (end & 1) == 1); */
+}
+
+/*@ requires (sum > 0 ==> (sum + result) >= result) && (sum > 0 ==> (result & 1) == 0 || (result & 1) == 1) && (sum <= result + sum) && (end == end) && ((sum > 0) ==> (result & 1) == 0 || (result & 1) == 1) && ((sum == 0) ==> result <= num + 1) && (sum >= 0 ==> result + sum <= num + 31) && (sum > 0 ==> sum + result <= num + 32) && (sum > 0 ==> sum + result <= num + 1) && (sum > 0 ==> result >= 0) && (sum > 0 ==> result <= num) && (sum > 0 ==> result <= num + 1) && (sum > 0 ==> result < num + 1) && (sum > 0 ==> end == end) && (sum > 0 ==> (result % 2 == 0 || result % 2 == 1)) && (sum > 0 ==> (end & 1) == 0 || (end & 1) == 1) && (sum == 0 ==> result >= 0) && (sum == 0 ==> result == 0 || result > 0) && (sum == 0 ==> result <= num + 1) && (sum == 0 ==> end == end) && (sum <= num) && (sum <= num - result + 32) && (sum <= num - result + 1) && (sum <= num - result + 1 || sum + result <= num + 1) && (sum <= num - result + 1 || result <= num) && (sum <= num - result + 1 || result <= num + 1) && (sum <= num - result + 1 || 0 <= sum) && (sum < num - result + 1) && (sum + result <= num + 32) && (sum + result <= num + 1) && (sum + result <= num + 1 || sum == 0) && (sum + result <= num + 1 || result <= num + 1) && (sum + result <= num + 1 || 0 <= sum) && (sum + result < num + 1) && (result >= 0 ==> sum + result <= num + 32) && (result > 0 ==> sum < num) && (result == 0 || result > 0) && (result == 0 ==> end == 0) && (result <= num || sum + result <= num + 1) && (result <= num || 0 <= end) && (result <= num ==> sum + result <= num + 32) && (result <= num + 1 || 0 <= end) && (result <= num + 1 ==> sum + result <= num + 1) && (result + sum <= num + result) && (result + sum <= num + 32) && (result + sum <= num + 31) && (result + sum <= num + 1) && (result + sum <= num + 1 || sum == 0) && (result % 2 == 0 || result % 2 == 1) && (end <= (1 << 31)) && (0 <= sum || 0 <= end) && (0 <= result) && (0 <= end || sum <= num - result + 1) && (0 <= end || sum + result <= num + 1) && (0 <= end || result <= num) && (0 <= end || result <= num + 1) && (0 <= end || 0 <= sum) && ((sum > 0) ==> result <= num + 1) && ((sum > 0) ==> result < num + 1) && ((sum > 0) ==> (result <= num + 1)) && ((sum == 0) ==> result >= 0) && ((sum == 0) ==> end == end) && ((sum == 0) ==> (result >= 0)) && ((sum == 0) ==> (result == 0 || result > 0)) && ((sum == 0) ==> (end == end)) && ((result & 1) == 0 || (result & 1) == 1) && ((result % 2 == 0) || (result % 2 == 1)) && ((end & 1) == 0 || (end & 1) == 1);
+    assigns \nothing;
+*/
+void check_B_implies_A(int end, int num) {
+    /*@ assert ((\at(num,Pre) > 0) ==> (0 <= result && sum >= 0)); */
+    /*@ assert ((!(\at(num,Pre) > 0)) ==> ((sum == \at(num,Pre))&&(end == 0)&&(result == 0)&&(num == \at(num,Pre)))); */
+    /*@ assert ((\at(num,Pre) > 0) ==> (num == \at(num,Pre))); */
+    /*@ assert (num == \at(num,Pre)); */
+}

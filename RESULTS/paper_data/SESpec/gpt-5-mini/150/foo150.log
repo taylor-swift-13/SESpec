@@ -1,0 +1,1215 @@
+2026-05-18 21:50:46,195 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae
+2026-05-18 21:50:46,196 - INFO  - 
+🚀 Starting generation of function: foo150
+2026-05-18 21:50:46,196 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 21:50:46,196 - INFO  - TRY TIME: 0
+2026-05-18 21:50:46,196 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 21:50:46,196 - INFO  - ==================================================
+
+2026-05-18 21:50:47,061 - INFO  - [auto only_loop] False — foo150 returns 'int'
+2026-05-18 21:50:47,062 - INFO  - Initial pending functions: ['foo150', 'malloc']
+2026-05-18 21:50:47,062 - INFO  - Now processing function malloc
+
+2026-05-18 21:50:47,062 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-18 21:50:47,062 - INFO  - 
+GENERATE ANNOTATION FOR foo150
+2026-05-18 21:50:47,062 - INFO  - ==================================================
+
+2026-05-18 21:50:47,063 - INFO  - Function foo150 has been initialized
+2026-05-18 21:50:47,063 - INFO  - Starting to generate annotation code for foo150
+2026-05-18 21:50:47,144 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo150
+2026-05-18 21:50:47,144 - INFO  - ==================================================
+
+2026-05-18 21:50:47,226 - INFO  - Variable Maps:[{}]
+2026-05-18 21:50:47,226 - INFO  - Path conditions: [None]
+2026-05-18 21:50:47,227 - INFO  - Pre condition: 
+2026-05-18 21:50:47,227 - INFO  - Loop Condition: c < value
+2026-05-18 21:50:47,228 - INFO  - Array Names: ['result']
+2026-05-18 21:50:47,228 - INFO  - Updated Loop Conditions: ['c < value']
+2026-05-18 21:50:47,228 - INFO  - Global Unchanged Variables: []
+2026-05-18 21:50:47,228 - INFO  - Non Inductive Variables: []
+2026-05-18 21:50:47,228 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-18 21:50:47,230 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 21:50:47,233 - INFO  - examples category: array
+2026-05-18 21:50:47,233 - INFO  - examples:
+2026-05-18 21:50:47,233 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 21:50:55,505 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=4
+2026-05-18 21:50:55,507 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:51:29,733 - INFO  - [inv-gen] refine 2/3 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-18 21:51:45,360 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=3
+2026-05-18 21:51:45,360 - INFO  - [inv-gen] converged at refine 3
+2026-05-18 21:51:47,178 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-18 21:51:48,932 - INFO  - ACSL format loop invariant
+2026-05-18 21:51:48,932 - INFO  - /*@
+          loop invariant 0 <= c <= value;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == seq_val(k);
+          loop invariant (!(c < value)) ==> (\forall integer k; 0 <= k < value ==> result[k] == seq_val(k));
+          loop assigns c, result[0 .. value-1];
+            */
+            for (c = 0; c < value; c++) {
+			result[c] = c + 1;
+		}
+2026-05-18 21:51:48,933 - INFO  - QCP format loop invariant
+2026-05-18 21:51:48,933 - INFO  - /*@ Inv
+    (0 <= c && c <= value) &&
+(forall (k:Z), 0 <= k && k < c => result_l[k] == seq_val(k)) &&
+((!(c < value)) => (forall (k:Z), 0 <= k && k < value => result_l[k] == seq_val(k))
+          loop assigns c, result_l[0 .. value-1])
+    */
+    
+            for (c = 0; c < value; c++) {
+			result[c] = c + 1;
+		}
+2026-05-18 21:51:48,949 - INFO  - Variable Maps:[{}]
+2026-05-18 21:51:48,949 - INFO  - Path conditions: [None]
+2026-05-18 21:51:48,949 - INFO  - Pre condition: 
+2026-05-18 21:51:48,949 - INFO  - Loop Condition: c < value
+2026-05-18 21:51:48,949 - INFO  - Array Names: ['result', 'b']
+2026-05-18 21:51:48,950 - INFO  - Updated Loop Conditions: ['c < value']
+2026-05-18 21:51:48,950 - INFO  - Global Unchanged Variables: []
+2026-05-18 21:51:48,950 - INFO  - Non Inductive Variables: []
+2026-05-18 21:51:48,950 - INFO  - Unchanged Arrays (Read-only): ['result']
+2026-05-18 21:51:48,951 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 21:51:48,953 - INFO  - examples category: array
+2026-05-18 21:51:48,953 - INFO  - examples:
+2026-05-18 21:51:48,953 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 21:52:22,418 - INFO  - [inv-gen] refine 1/3 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=7
+2026-05-18 21:53:00,085 - INFO  - [inv-gen] refine 2/3 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-18 21:53:39,250 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-18 21:54:43,669 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.8333333333333334, 0.0), clauses=6)
+2026-05-18 21:55:33,287 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-18 21:55:35,538 - INFO  - ACSL format loop invariant
+2026-05-18 21:55:35,538 - INFO  - /*@
+          loop invariant 0 <= c <= value;
+          loop assigns c, b[0 .. value-1], j;
+            */
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-18 21:55:35,538 - INFO  - QCP format loop invariant
+2026-05-18 21:55:35,538 - INFO  - /*@ Inv
+    (0 <= c && c <= value
+          loop assigns c, b_l[0 .. value-1], j)
+    */
+    
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-18 21:55:35,553 - INFO  - Variable Maps:[{}]
+2026-05-18 21:55:35,553 - INFO  - Path conditions: [None]
+2026-05-18 21:55:35,553 - INFO  - Pre condition: 
+2026-05-18 21:55:35,554 - INFO  - Loop Condition: c < value
+2026-05-18 21:55:35,554 - INFO  - Array Names: ['result', 'b']
+2026-05-18 21:55:35,554 - INFO  - Updated Loop Conditions: ['c < value']
+2026-05-18 21:55:35,554 - INFO  - Global Unchanged Variables: []
+2026-05-18 21:55:35,554 - INFO  - Non Inductive Variables: []
+2026-05-18 21:55:35,554 - INFO  - Unchanged Arrays (Read-only): ['result']
+2026-05-18 21:55:35,554 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 21:55:35,556 - INFO  - examples category: array
+2026-05-18 21:55:35,557 - INFO  - examples:
+2026-05-18 21:55:35,557 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 21:58:07,468 - INFO  - [inv-gen] refine 1/3 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=9
+2026-05-18 21:58:48,028 - INFO  - [inv-gen] refine 2/3 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=9
+2026-05-18 22:00:17,268 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.78, satisfy=0.00) clauses=9
+2026-05-18 22:00:17,268 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=17)
+2026-05-18 22:00:17,269 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.7777777777777778, 0.0), clauses=9)
+2026-05-18 22:01:12,490 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-18 22:01:15,485 - INFO  - ACSL format loop invariant
+2026-05-18 22:01:15,485 - INFO  - /*@
+          loop invariant 0 <= c <= value;
+          loop assigns c, b[0 .. value-1], j;
+            */
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-18 22:01:15,485 - INFO  - QCP format loop invariant
+2026-05-18 22:01:15,485 - INFO  - /*@ Inv
+    (0 <= c && c <= value
+          loop assigns c, b_l[0 .. value-1], j)
+    */
+    
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+2026-05-18 22:01:18,223 - INFO  - CORRECT INVARIANT
+2026-05-18 22:01:18,223 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo150
+2026-05-18 22:01:18,223 - INFO  - ==================================================
+
+2026-05-18 22:01:18,237 - INFO  - Starting to generate ACSL specification for foo150
+2026-05-18 22:01:42,965 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c:20: Warning: 
+  Mixing \nothing and a real location
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:01:42,967 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=7
+2026-05-18 22:01:42,969 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:02:26,006 - INFO  - syntax Correct
+2026-05-18 22:02:48,806 - INFO  - Loop Invariant:
+2026-05-18 22:02:48,806 - INFO  - [True, True, True, True, True]
+2026-05-18 22:02:48,806 - INFO  - 
+2026-05-18 22:02:48,806 - INFO  - Assertion:
+2026-05-18 22:02:48,806 - INFO  - []
+2026-05-18 22:02:48,806 - INFO  - 
+2026-05-18 22:02:48,807 - INFO  - Assigns:
+2026-05-18 22:02:48,807 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-18 22:02:48,807 - INFO  - Assigns: failures:
+2026-05-18 22:02:48,807 - INFO  - Goal Assigns nothing in 'foo150' (5/16):
+2026-05-18 22:02:48,807 - INFO  - 
+2026-05-18 22:02:48,807 - INFO  - Goal Assigns nothing in 'foo150' (7/16):
+2026-05-18 22:02:48,807 - INFO  - 
+2026-05-18 22:02:48,807 - INFO  - Goal Assigns nothing in 'foo150' (8/16):
+2026-05-18 22:02:48,807 - INFO  - 
+2026-05-18 22:02:48,807 - INFO  - Goal Assigns nothing in 'foo150' (12/16):
+2026-05-18 22:02:48,807 - INFO  - 
+2026-05-18 22:02:48,807 - INFO  - Goal Assigns nothing in 'foo150' (13/16):
+2026-05-18 22:02:48,807 - INFO  - 
+2026-05-18 22:02:48,807 - INFO  - 
+2026-05-18 22:02:48,808 - INFO  - Post Condition:
+2026-05-18 22:02:48,808 - INFO  - [False]
+2026-05-18 22:02:48,808 - INFO  - Post Condition: failures:
+2026-05-18 22:02:48,808 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c, line 20) in 'foo150':
+2026-05-18 22:02:48,808 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c at line: 20
+2026-05-18 22:02:48,808 - INFO  - Error line content: ensures 0 <= \result <= value;
+2026-05-18 22:02:48,808 - INFO  - 
+2026-05-18 22:02:48,808 - INFO  - 
+2026-05-18 22:02:48,808 - INFO  - Instance:
+2026-05-18 22:02:48,808 - INFO  - []
+2026-05-18 22:02:48,808 - INFO  - 
+2026-05-18 22:02:48,808 - INFO  - [spec-gen] refine 2/3 score=(syntax=True, satisfy=0.00, valid=0.75) clauses=3
+2026-05-18 22:02:48,809 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer seq_val(integer i) = i + 1;
+*/
+/*@
+  predicate init_result(int* result, integer len, integer upto) =
+    0 <= upto <= len &&
+    \forall integer k; 0 <= k < upto ==> result[k] == seq_val(k) &&
+    \forall integer k; upto <= k < len ==> \true;
+*/
+/*@
+  predicate prefix_eq(int* a, int* b, integer n, integer upto) =
+    0 <= upto <= n &&
+    \forall integer k; 0 <= k < upto ==> a[k] == b[k];
+*/
+
+/*@
+  requires value >= 0;
+  assigns \nothing;
+  ensures 0 <= \result <= value [POSTCONDITION FAILED];
+*/
+int foo150(int value, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (value));
+int result_len = value;
+		int *b = (int *)malloc(sizeof(int) * (value));
+int b_len = value;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == seq_val(k);
+          loop invariant (!(c < value)) ==> (\forall integer k; 0 <= k < value ==> result[k] == seq_val(k));
+          loop assigns c, result[0 .. value-1];
+            */
+            for (c = 0; c < value; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop assigns c, b[0 .. value-1], j;
+            */
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop assigns c, b[0 .. value-1], j;
+            */
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-18 22:03:13,240 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer seq_val(integer i) = i + 1;
+*/
+/*@
+  predicate init_result(int* result, integer len, integer upto) =
+    0 <= upto <= len &&
+    \forall integer k; 0 <= k < upto ==> result[k] == seq_val(k) &&
+    \forall integer k; upto <= k < len ==> \true;
+*/
+/*@
+  predicate prefix_eq(int* a, int* b, integer n, integer upto) =
+    0 <= upto <= n &&
+    \forall integer k; 0 <= k < upto ==> a[k] == b[k];
+*/
+
+/*@
+  requires value >= 0;
+  assigns \nothing;
+  ensures 0 <= \result && (\result == 0 || (1 <= \result && \result <= value));
+*/
+int foo150(int value, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (value));
+int result_len = value;
+		int *b = (int *)malloc(sizeof(int) * (value));
+int b_len = value;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == seq_val(k);
+          loop invariant (!(c < value)) ==> (\forall integer k; 0 <= k < value ==> result[k] == seq_val(k));
+          loop assigns c, result[0 .. value-1];
+            */
+            for (c = 0; c < value; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop assigns c, b[0 .. value-1], j;
+            */
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop assigns c, b[0 .. value-1], j;
+            */
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-18 22:03:36,490 - INFO  - syntax Correct
+2026-05-18 22:03:59,193 - INFO  - Loop Invariant:
+2026-05-18 22:03:59,193 - INFO  - [True, True, True, True, True]
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,194 - INFO  - Assertion:
+2026-05-18 22:03:59,194 - INFO  - []
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,194 - INFO  - Assigns:
+2026-05-18 22:03:59,194 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-18 22:03:59,194 - INFO  - Assigns: failures:
+2026-05-18 22:03:59,194 - INFO  - Goal Assigns nothing in 'foo150' (5/16):
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,194 - INFO  - Goal Assigns nothing in 'foo150' (7/16):
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,194 - INFO  - Goal Assigns nothing in 'foo150' (8/16):
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,194 - INFO  - Goal Assigns nothing in 'foo150' (12/16):
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,194 - INFO  - Goal Assigns nothing in 'foo150' (13/16):
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,194 - INFO  - Post Condition:
+2026-05-18 22:03:59,194 - INFO  - [False]
+2026-05-18 22:03:59,194 - INFO  - Post Condition: failures:
+2026-05-18 22:03:59,194 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c, line 20) in 'foo150':
+2026-05-18 22:03:59,194 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c at line: 20
+2026-05-18 22:03:59,194 - INFO  - Error line content: ensures 0 <= \result && (\result == 0 || (1 <= \result && \result <= value));
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,194 - INFO  - Instance:
+2026-05-18 22:03:59,194 - INFO  - []
+2026-05-18 22:03:59,194 - INFO  - 
+2026-05-18 22:03:59,195 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.75) clauses=3
+2026-05-18 22:03:59,195 - INFO  - postconditon before refine: 
+
+/*@
+  logic integer seq_val(integer i) = i + 1;
+*/
+/*@
+  predicate init_result(int* result, integer len, integer upto) =
+    0 <= upto <= len &&
+    \forall integer k; 0 <= k < upto ==> result[k] == seq_val(k) &&
+    \forall integer k; upto <= k < len ==> \true;
+*/
+/*@
+  predicate prefix_eq(int* a, int* b, integer n, integer upto) =
+    0 <= upto <= n &&
+    \forall integer k; 0 <= k < upto ==> a[k] == b[k];
+*/
+
+/*@
+  requires value >= 0;
+  assigns \nothing;
+  ensures 0 <= \result && (\result == 0 || (1 <= \result && \result <= value)) [POSTCONDITION FAILED];
+*/
+int foo150(int value, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (value));
+int result_len = value;
+		int *b = (int *)malloc(sizeof(int) * (value));
+int b_len = value;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == seq_val(k);
+          loop invariant (!(c < value)) ==> (\forall integer k; 0 <= k < value ==> result[k] == seq_val(k));
+          loop assigns c, result[0 .. value-1];
+            */
+            for (c = 0; c < value; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop assigns c, b[0 .. value-1], j;
+            */
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop assigns c, b[0 .. value-1], j;
+            */
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-18 22:04:25,129 - INFO  - postconditon after refine: 
+
+/*@
+  logic integer seq_val(integer i) = i + 1;
+*/
+/*@
+  predicate init_result(int* result, integer len, integer upto) =
+    0 <= upto <= len &&
+    \forall integer k; 0 <= k < upto ==> result[k] == seq_val(k) &&
+    \forall integer k; upto <= k < len ==> \true;
+*/
+/*@
+  predicate prefix_eq(int* a, int* b, integer n, integer upto) =
+    0 <= upto <= n &&
+    \forall integer k; 0 <= k < upto ==> a[k] == b[k];
+*/
+
+/*@
+  requires value >= 0;
+  assigns \nothing;
+  ensures 0 <= \result && (\result == 0 || (1 <= \result && \result <= value));
+*/
+int foo150(int value, int p) {
+
+		int *result = (int *)malloc(sizeof(int) * (value));
+int result_len = value;
+		int *b = (int *)malloc(sizeof(int) * (value));
+int b_len = value;
+		int c, j = 0;
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop invariant \forall integer k; 0 <= k < c ==> result[k] == seq_val(k);
+          loop invariant (!(c < value)) ==> (\forall integer k; 0 <= k < value ==> result[k] == seq_val(k));
+          loop assigns c, result[0 .. value-1];
+            */
+            for (c = 0; c < value; c++) {
+			result[c] = c + 1;
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop assigns c, b[0 .. value-1], j;
+            */
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 != 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant 0 <= c <= value;
+          loop assigns c, b[0 .. value-1], j;
+            */
+            for (c = 0; c < value; c++) {
+			b[c] = result[c];
+			if (result[c] % 2 == 0) {
+				j++;
+				if (j == p) {
+					return result[c];
+				}
+			}
+		}
+            
+		return 0;
+}
+
+2026-05-18 22:04:25,132 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.75), clauses=3)
+2026-05-18 22:04:48,015 - INFO  - syntax Correct
+2026-05-18 22:05:11,021 - INFO  - Loop Invariant:
+2026-05-18 22:05:11,022 - INFO  - [True, True, True, True, True]
+2026-05-18 22:05:11,022 - INFO  - 
+2026-05-18 22:05:11,022 - INFO  - Assertion:
+2026-05-18 22:05:11,022 - INFO  - []
+2026-05-18 22:05:11,022 - INFO  - 
+2026-05-18 22:05:11,022 - INFO  - Assigns:
+2026-05-18 22:05:11,022 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-18 22:05:11,022 - INFO  - Assigns: failures:
+2026-05-18 22:05:11,022 - INFO  - Goal Assigns nothing in 'foo150' (5/16):
+2026-05-18 22:05:11,022 - INFO  - 
+2026-05-18 22:05:11,022 - INFO  - Goal Assigns nothing in 'foo150' (7/16):
+2026-05-18 22:05:11,022 - INFO  - 
+2026-05-18 22:05:11,022 - INFO  - Goal Assigns nothing in 'foo150' (8/16):
+2026-05-18 22:05:11,022 - INFO  - 
+2026-05-18 22:05:11,022 - INFO  - Goal Assigns nothing in 'foo150' (12/16):
+2026-05-18 22:05:11,022 - INFO  - 
+2026-05-18 22:05:11,022 - INFO  - Goal Assigns nothing in 'foo150' (13/16):
+2026-05-18 22:05:11,023 - INFO  - 
+2026-05-18 22:05:11,023 - INFO  - 
+2026-05-18 22:05:11,023 - INFO  - Post Condition:
+2026-05-18 22:05:11,023 - INFO  - [False]
+2026-05-18 22:05:11,023 - INFO  - Post Condition: failures:
+2026-05-18 22:05:11,023 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c, line 20) in 'foo150':
+2026-05-18 22:05:11,023 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c at line: 20
+2026-05-18 22:05:11,023 - INFO  - Error line content: ensures 0 <= \result <= value;
+2026-05-18 22:05:11,023 - INFO  - 
+2026-05-18 22:05:11,023 - INFO  - 
+2026-05-18 22:05:11,023 - INFO  - Instance:
+2026-05-18 22:05:11,023 - INFO  - []
+2026-05-18 22:05:11,023 - INFO  - 
+2026-05-18 22:05:35,724 - INFO  - syntax Correct
+2026-05-18 22:05:59,097 - INFO  - Loop Invariant:
+2026-05-18 22:05:59,097 - INFO  - [True, True, True, True, True]
+2026-05-18 22:05:59,097 - INFO  - 
+2026-05-18 22:05:59,097 - INFO  - Assertion:
+2026-05-18 22:05:59,097 - INFO  - []
+2026-05-18 22:05:59,097 - INFO  - 
+2026-05-18 22:05:59,097 - INFO  - Assigns:
+2026-05-18 22:05:59,097 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-18 22:05:59,097 - INFO  - Assigns: failures:
+2026-05-18 22:05:59,097 - INFO  - Goal Assigns nothing in 'foo150' (5/16):
+2026-05-18 22:05:59,097 - INFO  - 
+2026-05-18 22:05:59,098 - INFO  - Goal Assigns nothing in 'foo150' (7/16):
+2026-05-18 22:05:59,098 - INFO  - 
+2026-05-18 22:05:59,098 - INFO  - Goal Assigns nothing in 'foo150' (8/16):
+2026-05-18 22:05:59,098 - INFO  - 
+2026-05-18 22:05:59,098 - INFO  - Goal Assigns nothing in 'foo150' (12/16):
+2026-05-18 22:05:59,098 - INFO  - 
+2026-05-18 22:05:59,098 - INFO  - Goal Assigns nothing in 'foo150' (13/16):
+2026-05-18 22:05:59,098 - INFO  - 
+2026-05-18 22:05:59,098 - INFO  - 
+2026-05-18 22:05:59,098 - INFO  - Post Condition:
+2026-05-18 22:05:59,098 - INFO  - []
+2026-05-18 22:05:59,098 - INFO  - 
+2026-05-18 22:05:59,098 - INFO  - Instance:
+2026-05-18 22:05:59,098 - INFO  - []
+2026-05-18 22:05:59,098 - INFO  - 
+2026-05-18 22:05:59,100 - INFO  - 
+SPECIFICATION FOR foo150
+2026-05-18 22:05:59,100 - INFO  - ==================================================
+
+2026-05-18 22:05:59,100 - INFO  - 
+QCP Specification for function foo150:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-18 22:05:59,264 - INFO  - 
+VERIFICATION FOR foo150
+2026-05-18 22:05:59,264 - INFO  - ==================================================
+
+2026-05-18 22:06:21,360 - INFO  - syntax Correct
+2026-05-18 22:06:44,588 - INFO  - Loop Invariant:
+2026-05-18 22:06:44,589 - INFO  - [True, True, True, True, True]
+2026-05-18 22:06:44,589 - INFO  - 
+2026-05-18 22:06:44,589 - INFO  - Assertion:
+2026-05-18 22:06:44,589 - INFO  - []
+2026-05-18 22:06:44,589 - INFO  - 
+2026-05-18 22:06:44,589 - INFO  - Assigns:
+2026-05-18 22:06:44,589 - INFO  - [True, True, True, True, True, True, False, True, False, False, True, True, True, False, False, True, True, True]
+2026-05-18 22:06:44,589 - INFO  - Assigns: failures:
+2026-05-18 22:06:44,589 - INFO  - Goal Assigns nothing in 'foo150' (5/16):
+2026-05-18 22:06:44,589 - INFO  - 
+2026-05-18 22:06:44,589 - INFO  - Goal Assigns nothing in 'foo150' (7/16):
+2026-05-18 22:06:44,589 - INFO  - 
+2026-05-18 22:06:44,589 - INFO  - Goal Assigns nothing in 'foo150' (8/16):
+2026-05-18 22:06:44,589 - INFO  - 
+2026-05-18 22:06:44,589 - INFO  - Goal Assigns nothing in 'foo150' (12/16):
+2026-05-18 22:06:44,589 - INFO  - 
+2026-05-18 22:06:44,589 - INFO  - Goal Assigns nothing in 'foo150' (13/16):
+2026-05-18 22:06:44,589 - INFO  - 
+2026-05-18 22:06:44,589 - INFO  - 
+2026-05-18 22:06:44,589 - INFO  - Post Condition:
+2026-05-18 22:06:44,589 - INFO  - []
+2026-05-18 22:06:44,589 - INFO  - 
+2026-05-18 22:06:44,589 - INFO  - Instance:
+2026-05-18 22:06:44,589 - INFO  - []
+2026-05-18 22:06:44,590 - INFO  - 
+2026-05-18 22:07:08,910 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c:18: 
+  syntax error:
+  Location: line 18, between columns 8 and 9, before or at token: (
+  16    
+  17    /* seq_val(i) is even */
+  18            (((\old(value) + 1) / 2) + ((i + 1) / 2) == \old(p)) &&
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  19            \result == seq_val(i))
+  20        ||
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:07:08,911 - INFO  - [spec-gen] refine 1/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=0
+2026-05-18 22:07:08,912 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:07:28,817 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c:34: Warning: 
+  unexpected token 'integer'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:07:28,818 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=4
+2026-05-18 22:07:28,819 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:07:57,508 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c (with preprocessing)
+[kernel] log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c:18: 
+  syntax error:
+  Location: line 18, between columns 6 and 7, before or at token: (
+  16    
+  17    /* or no p-th odd nor p-th even exists and result is 0 */
+  18          (\result == 0 &&
+        ^^^^^^^^^^^^^^^^^^^^^^
+  19             (\forall integer q; (\exists integer k; 0 <= k < value && (seq_val(k) % 2) == 1) ==> 1 <= p ==> \true) &&
+  20             (\forall integer q; (\exists integer k; 0 <= k < value && (seq_val(k) % 2) == 0) ==> 1 <= p ==> \true)
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:07:57,509 - INFO  - [spec-gen] refine 3/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=0
+2026-05-18 22:07:57,510 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 22:08:16,016 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=4)
+2026-05-18 22:08:16,255 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c:34: Warning: 
+  unexpected token 'integer'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:08:16,516 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c:34: Warning: 
+  unexpected token 'integer'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo150/20260518_215046_2894555_601b1dae/output/foo150.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 22:08:16,517 - INFO  - first_pass:
+2026-05-18 22:08:16,517 - INFO  - syntax=None, valid=None,satisfy=None
+2026-05-18 22:08:16,517 - INFO  - ==================================================
+2026-05-18 22:08:16,517 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 22:08:16,517 - INFO  - Total execution time: 1050.32 seconds (17.51 minutes)
+2026-05-18 22:08:16,517 - INFO  - ==================================================
+2026-05-18 22:08:16,517 - INFO  - ==================================================
+2026-05-18 22:08:16,517 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 22:08:16,517 - INFO  - Total API calls: 18
+2026-05-18 22:08:16,517 - INFO  - Total prompt tokens (input): 217,883
+2026-05-18 22:08:16,517 - INFO  - Total completion tokens (output): 19,068
+2026-05-18 22:08:16,517 - INFO  - Total tokens: 236,951
+2026-05-18 22:08:16,517 - INFO  - Average prompt tokens per call: 12104.6
+2026-05-18 22:08:16,517 - INFO  - Average completion tokens per call: 1059.3
+2026-05-18 22:08:16,518 - INFO  - Average total tokens per call: 13163.9
+2026-05-18 22:08:16,518 - INFO  - ==================================================

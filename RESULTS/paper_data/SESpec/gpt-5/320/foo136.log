@@ -1,0 +1,1288 @@
+2026-05-16 14:25:27,628 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde
+2026-05-16 14:25:27,628 - INFO  - 
+🚀 Starting generation of function: foo136
+2026-05-16 14:25:27,628 - INFO  - 
+OUTER PASS: 1/1
+2026-05-16 14:25:27,628 - INFO  - TRY TIME: 0
+2026-05-16 14:25:27,628 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-16 14:25:27,628 - INFO  - ==================================================
+
+2026-05-16 14:25:30,700 - INFO  - [auto only_loop] False — foo136 returns 'int'
+2026-05-16 14:25:30,701 - INFO  - Initial pending functions: ['foo136']
+2026-05-16 14:25:30,701 - INFO  - 
+GENERATE ANNOTATION FOR foo136
+2026-05-16 14:25:30,701 - INFO  - ==================================================
+
+2026-05-16 14:25:30,701 - INFO  - Function foo136 has been initialized
+2026-05-16 14:25:30,701 - INFO  - Starting to generate annotation code for foo136
+2026-05-16 14:25:30,788 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo136
+2026-05-16 14:25:30,788 - INFO  - ==================================================
+
+2026-05-16 14:25:30,910 - INFO  - Variable Maps:[{'g': '1', 'ret': '1', 'y': 'n@pre', 'n': 'y@pre'}]
+2026-05-16 14:25:30,910 - INFO  - Path conditions: ['n@pre > y@pre']
+2026-05-16 14:25:30,911 - INFO  - Pre condition: n@pre > y@pre && (g == 1) * (ret == 1) * (y == n@pre) * (n == y@pre)
+2026-05-16 14:25:30,911 - INFO  - Loop Condition: l <= n
+2026-05-16 14:25:30,912 - INFO  - Array Names: []
+2026-05-16 14:25:30,913 - INFO  - Updated Loop Conditions: ['l <= y@pre']
+2026-05-16 14:25:30,914 - INFO  - Global Unchanged Variables: ['g', 'y', 'n']
+2026-05-16 14:25:30,915 - INFO  - Non Inductive Variables: ['ret']
+2026-05-16 14:25:30,915 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-16 14:25:30,917 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-16 14:25:30,923 - INFO  - examples category: numeric
+2026-05-16 14:25:30,923 - INFO  - examples:
+2026-05-16 14:25:30,923 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-16 14:26:40,692 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.38, satisfy=0.00) clauses=8
+2026-05-16 14:27:18,700 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.25, satisfy=0.00) clauses=4
+2026-05-16 14:27:59,099 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.25, satisfy=0.00) clauses=4
+2026-05-16 14:27:59,100 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-16 14:28:50,439 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=0.38, satisfy=0.00) clauses=8
+2026-05-16 14:29:27,010 - INFO  - [inv-gen] refine 5/10 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=3
+2026-05-16 14:29:27,011 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-16 14:30:18,653 - INFO  - [inv-gen] refine 6/10 score=(syntax=True, valid=0.38, satisfy=0.00) clauses=8
+2026-05-16 14:30:56,413 - INFO  - [inv-gen] refine 7/10 score=(syntax=True, valid=0.40, satisfy=0.00) clauses=5
+2026-05-16 14:31:44,690 - INFO  - [inv-gen] refine 8/10 score=(syntax=True, valid=0.20, satisfy=0.00) clauses=5
+2026-05-16 14:32:32,626 - INFO  - [inv-gen] refine 9/10 score=(syntax=True, valid=0.00, satisfy=0.00) clauses=4
+2026-05-16 14:32:32,627 - INFO  - [inv-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=9)
+2026-05-16 14:33:01,864 - INFO  - [inv-gen] refine 10/10 score=(syntax=True, valid=0.40, satisfy=0.00) clauses=5
+2026-05-16 14:33:10,180 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.4, 0.0), clauses=5)
+2026-05-16 14:34:09,162 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-16 14:34:11,455 - INFO  - ACSL format loop invariant
+2026-05-16 14:34:11,455 - INFO  - /*@
+          loop invariant l >= 2 ==> ret <= l - 1;
+          loop assigns l, ret;
+            */
+            for (int l = 1; l <= n; l++) {
+			if (n % l == 0 && y % l == 0) {
+				ret = l;
+			}
+		}
+2026-05-16 14:34:11,458 - INFO  - QCP format loop invariant
+2026-05-16 14:34:11,462 - INFO  - /*@ Inv
+    (l >= 2 => ret <= l - 1
+          loop assigns l, ret)
+    */
+    
+            for (int l = 1; l <= n; l++) {
+			if (n % l == 0 && y % l == 0) {
+				ret = l;
+			}
+		}
+2026-05-16 14:34:14,287 - INFO  - CORRECT INVARIANT
+2026-05-16 14:34:14,288 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo136
+2026-05-16 14:34:14,288 - INFO  - ==================================================
+
+2026-05-16 14:34:14,357 - INFO  - Starting to generate ACSL specification for foo136
+2026-05-16 14:34:36,255 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:34:36,256 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-16 14:34:48,223 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:34:48,224 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-16 14:34:57,348 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:34:57,349 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-16 14:34:57,350 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 14:34:58,047 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:34:58,048 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-16 14:35:06,497 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:35:06,498 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-16 14:35:06,498 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 14:35:07,009 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:35:07,010 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-16 14:35:16,423 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:35:16,424 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-16 14:35:16,424 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 14:35:16,943 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:35:16,944 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-16 14:35:29,105 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":43: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:35:29,106 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-16 14:35:29,106 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-16 14:35:29,589 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:35:29,590 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-16 14:35:38,417 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=2)
+2026-05-16 14:35:38,940 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:35:38,942 - INFO  - 
+SPECIFICATION FOR foo136
+2026-05-16 14:35:38,942 - INFO  - ==================================================
+
+2026-05-16 14:35:38,942 - INFO  - 
+QCP Specification for function foo136:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-16 14:35:42,955 - INFO  - 
+VERIFICATION FOR foo136
+2026-05-16 14:35:42,956 - INFO  - ==================================================
+
+2026-05-16 14:35:43,332 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel] "/home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c":44: User Error: 
+  Can't preprocess annotation: Preprocessor call exited with an error
+  Some annotations will be kept as is
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:7: Warning: 
+  unexpected token ','
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:35:59,775 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c:5: Warning: 
+  unbound logic function divides. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:35:59,776 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-16 14:36:21,223 - INFO  - syntax Correct
+2026-05-16 14:36:32,934 - INFO  - Loop Invariant:
+2026-05-16 14:36:32,935 - INFO  - [True]
+2026-05-16 14:36:32,935 - INFO  - 
+2026-05-16 14:36:32,935 - INFO  - Assertion:
+2026-05-16 14:36:32,935 - INFO  - []
+2026-05-16 14:36:32,935 - INFO  - 
+2026-05-16 14:36:32,935 - INFO  - Assigns:
+2026-05-16 14:36:32,935 - INFO  - [True, True, True, True]
+2026-05-16 14:36:32,935 - INFO  - 
+2026-05-16 14:36:32,935 - INFO  - Post Condition:
+2026-05-16 14:36:32,935 - INFO  - [False, False]
+2026-05-16 14:36:32,936 - INFO  - 
+2026-05-16 14:36:32,936 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=3
+2026-05-16 14:36:32,936 - INFO  - postconditon before refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (n != 0 && y != 0) ==> lcm_of(n, y, \result) [POSTCONDITION FAILED];
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:36:43,440 - INFO  - postconditon after refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0;
+  ensures (n != 0 && y != 0) ==> lcm_of(n, y, \result);
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:36:57,154 - INFO  - syntax Correct
+2026-05-16 14:37:08,384 - INFO  - Loop Invariant:
+2026-05-16 14:37:08,385 - INFO  - [True]
+2026-05-16 14:37:08,385 - INFO  - 
+2026-05-16 14:37:08,385 - INFO  - Assertion:
+2026-05-16 14:37:08,385 - INFO  - []
+2026-05-16 14:37:08,385 - INFO  - 
+2026-05-16 14:37:08,385 - INFO  - Assigns:
+2026-05-16 14:37:08,385 - INFO  - [True, True, True, True]
+2026-05-16 14:37:08,385 - INFO  - 
+2026-05-16 14:37:08,385 - INFO  - Post Condition:
+2026-05-16 14:37:08,386 - INFO  - [False, False]
+2026-05-16 14:37:08,386 - INFO  - 
+2026-05-16 14:37:08,386 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=4
+2026-05-16 14:37:08,386 - INFO  - postconditon before refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (n != 0 && y != 0) ==> lcm_of(n, y, \result) [POSTCONDITION FAILED];
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:37:17,461 - INFO  - postconditon after refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0;
+  ensures (n != 0 && y != 0) ==> (\result >= 0 && divides(n, \result) && divides(y, \result));
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:37:30,966 - INFO  - syntax Correct
+2026-05-16 14:37:42,564 - INFO  - Loop Invariant:
+2026-05-16 14:37:42,565 - INFO  - [True]
+2026-05-16 14:37:42,565 - INFO  - 
+2026-05-16 14:37:42,566 - INFO  - Assertion:
+2026-05-16 14:37:42,566 - INFO  - []
+2026-05-16 14:37:42,566 - INFO  - 
+2026-05-16 14:37:42,566 - INFO  - Assigns:
+2026-05-16 14:37:42,566 - INFO  - [True, True, True, True]
+2026-05-16 14:37:42,566 - INFO  - 
+2026-05-16 14:37:42,566 - INFO  - Post Condition:
+2026-05-16 14:37:42,566 - INFO  - [False, False]
+2026-05-16 14:37:42,567 - INFO  - 
+2026-05-16 14:37:42,567 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=4
+2026-05-16 14:37:42,567 - INFO  - postconditon before refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (n != 0 && y != 0) ==> (\result >= 0 && divides(n, \result) && divides(y, \result)) [POSTCONDITION FAILED];
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:37:56,478 - INFO  - postconditon after refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0;
+  ensures (n > 0 && y > 0) ==> (divides(n, \result) && divides(y, \result));
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:38:09,260 - INFO  - syntax Correct
+2026-05-16 14:38:21,453 - INFO  - Loop Invariant:
+2026-05-16 14:38:21,454 - INFO  - [True]
+2026-05-16 14:38:21,454 - INFO  - 
+2026-05-16 14:38:21,454 - INFO  - Assertion:
+2026-05-16 14:38:21,454 - INFO  - []
+2026-05-16 14:38:21,454 - INFO  - 
+2026-05-16 14:38:21,454 - INFO  - Assigns:
+2026-05-16 14:38:21,454 - INFO  - [True, True, True, True]
+2026-05-16 14:38:21,454 - INFO  - 
+2026-05-16 14:38:21,456 - INFO  - Post Condition:
+2026-05-16 14:38:21,456 - INFO  - [False, False]
+2026-05-16 14:38:21,456 - INFO  - 
+2026-05-16 14:38:21,456 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=4
+2026-05-16 14:38:21,456 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-16 14:38:36,146 - INFO  - syntax Correct
+2026-05-16 14:38:47,642 - INFO  - Loop Invariant:
+2026-05-16 14:38:47,643 - INFO  - [True]
+2026-05-16 14:38:47,643 - INFO  - 
+2026-05-16 14:38:47,643 - INFO  - Assertion:
+2026-05-16 14:38:47,643 - INFO  - []
+2026-05-16 14:38:47,643 - INFO  - 
+2026-05-16 14:38:47,643 - INFO  - Assigns:
+2026-05-16 14:38:47,643 - INFO  - [True, True, True, True]
+2026-05-16 14:38:47,643 - INFO  - 
+2026-05-16 14:38:47,644 - INFO  - Post Condition:
+2026-05-16 14:38:47,644 - INFO  - [False, False]
+2026-05-16 14:38:47,644 - INFO  - 
+2026-05-16 14:38:47,644 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=4
+2026-05-16 14:38:47,645 - INFO  - postconditon before refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (n != 0 && y != 0) ==> lcm_of(n, y, \result) [POSTCONDITION FAILED];
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:38:55,015 - INFO  - postconditon after refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0;
+  ensures (n != 0 && y != 0) ==> (\result >= 0 && \exists integer k1, k2; \result == n * k1 && \result == y * k2);
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:39:08,424 - INFO  - syntax Correct
+2026-05-16 14:39:20,357 - INFO  - Loop Invariant:
+2026-05-16 14:39:20,358 - INFO  - [True]
+2026-05-16 14:39:20,358 - INFO  - 
+2026-05-16 14:39:20,358 - INFO  - Assertion:
+2026-05-16 14:39:20,358 - INFO  - []
+2026-05-16 14:39:20,358 - INFO  - 
+2026-05-16 14:39:20,358 - INFO  - Assigns:
+2026-05-16 14:39:20,358 - INFO  - [True, True, True, True]
+2026-05-16 14:39:20,358 - INFO  - 
+2026-05-16 14:39:20,359 - INFO  - Post Condition:
+2026-05-16 14:39:20,359 - INFO  - [False, False]
+2026-05-16 14:39:20,359 - INFO  - 
+2026-05-16 14:39:20,360 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=4
+2026-05-16 14:39:20,360 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-16 14:39:31,955 - INFO  - syntax Correct
+2026-05-16 14:39:43,364 - INFO  - Loop Invariant:
+2026-05-16 14:39:43,365 - INFO  - [True]
+2026-05-16 14:39:43,365 - INFO  - 
+2026-05-16 14:39:43,365 - INFO  - Assertion:
+2026-05-16 14:39:43,365 - INFO  - []
+2026-05-16 14:39:43,365 - INFO  - 
+2026-05-16 14:39:43,365 - INFO  - Assigns:
+2026-05-16 14:39:43,365 - INFO  - [True, True, True, True]
+2026-05-16 14:39:43,365 - INFO  - 
+2026-05-16 14:39:43,365 - INFO  - Post Condition:
+2026-05-16 14:39:43,365 - INFO  - [False, False]
+2026-05-16 14:39:43,365 - INFO  - 
+2026-05-16 14:39:43,366 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=4
+2026-05-16 14:39:43,366 - INFO  - postconditon before refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (n != 0 && y != 0) ==> lcm_of(n, y, \result) [POSTCONDITION FAILED];
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:39:50,929 - INFO  - postconditon after refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0;
+  ensures (n != 0 && y != 0) ==> (
+            \result >= 0 &&
+            divides(n, \result) && divides(y, \result) &&
+            (\forall integer t; t >= 0 && divides(n, t) && divides(y, t) ==> \result <= t)
+          );
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:40:02,742 - INFO  - syntax Correct
+2026-05-16 14:40:14,469 - INFO  - Loop Invariant:
+2026-05-16 14:40:14,469 - INFO  - [True]
+2026-05-16 14:40:14,469 - INFO  - 
+2026-05-16 14:40:14,469 - INFO  - Assertion:
+2026-05-16 14:40:14,469 - INFO  - []
+2026-05-16 14:40:14,469 - INFO  - 
+2026-05-16 14:40:14,469 - INFO  - Assigns:
+2026-05-16 14:40:14,469 - INFO  - [True, True, True, True]
+2026-05-16 14:40:14,469 - INFO  - 
+2026-05-16 14:40:14,470 - INFO  - Post Condition:
+2026-05-16 14:40:14,470 - INFO  - [False, False]
+2026-05-16 14:40:14,470 - INFO  - 
+2026-05-16 14:40:14,470 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=4
+2026-05-16 14:40:14,470 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=5)
+2026-05-16 14:40:25,724 - INFO  - syntax Correct
+2026-05-16 14:40:37,221 - INFO  - Loop Invariant:
+2026-05-16 14:40:37,229 - INFO  - [True]
+2026-05-16 14:40:37,229 - INFO  - 
+2026-05-16 14:40:37,229 - INFO  - Assertion:
+2026-05-16 14:40:37,229 - INFO  - []
+2026-05-16 14:40:37,229 - INFO  - 
+2026-05-16 14:40:37,229 - INFO  - Assigns:
+2026-05-16 14:40:37,229 - INFO  - [True, True, True, True]
+2026-05-16 14:40:37,229 - INFO  - 
+2026-05-16 14:40:37,234 - INFO  - Post Condition:
+2026-05-16 14:40:37,238 - INFO  - [False, False]
+2026-05-16 14:40:37,238 - INFO  - 
+2026-05-16 14:40:37,239 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.71, satisfy=0.00) clauses=4
+2026-05-16 14:40:37,239 - INFO  - postconditon before refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0 [POSTCONDITION FAILED];
+  ensures (n != 0 && y != 0) ==> lcm_of(n, y, \result) [POSTCONDITION FAILED];
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:40:45,883 - INFO  - postconditon after refine: 
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+  ensures (n == 0 || y == 0) ==> \result == 0;
+  ensures (n != 0 && y != 0) ==> \result * (\exists integer d; d == 0 ? 1 : 1), \false; // placeholder to avoid syntax
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:40:45,887 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.7142857142857143, 0.0), clauses=4)
+2026-05-16 14:41:00,030 - INFO  - syntax Correct
+2026-05-16 14:41:11,730 - INFO  - Loop Invariant:
+2026-05-16 14:41:11,731 - INFO  - [True]
+2026-05-16 14:41:11,731 - INFO  - 
+2026-05-16 14:41:11,731 - INFO  - Assertion:
+2026-05-16 14:41:11,731 - INFO  - []
+2026-05-16 14:41:11,731 - INFO  - 
+2026-05-16 14:41:11,731 - INFO  - Assigns:
+2026-05-16 14:41:11,731 - INFO  - [True, True, True, True]
+2026-05-16 14:41:11,731 - INFO  - 
+2026-05-16 14:41:11,731 - INFO  - Post Condition:
+2026-05-16 14:41:11,732 - INFO  - [False, False]
+2026-05-16 14:41:11,732 - INFO  - 
+2026-05-16 14:41:13,050 - INFO  - syntax Correct
+2026-05-16 14:41:14,462 - INFO  - Loop Invariant:
+2026-05-16 14:41:14,463 - INFO  - [True]
+2026-05-16 14:41:14,463 - INFO  - 
+2026-05-16 14:41:14,463 - INFO  - Assertion:
+2026-05-16 14:41:14,463 - INFO  - []
+2026-05-16 14:41:14,463 - INFO  - 
+2026-05-16 14:41:14,463 - INFO  - Assigns:
+2026-05-16 14:41:14,463 - INFO  - [True, True, True, True]
+2026-05-16 14:41:14,463 - INFO  - 
+2026-05-16 14:41:14,463 - INFO  - Post Condition:
+2026-05-16 14:41:14,463 - INFO  - []
+2026-05-16 14:41:14,463 - INFO  - 
+2026-05-16 14:41:15,697 - INFO  - syntax Correct
+2026-05-16 14:41:17,188 - INFO  - Loop Invariant:
+2026-05-16 14:41:17,189 - INFO  - [True]
+2026-05-16 14:41:17,189 - INFO  - 
+2026-05-16 14:41:17,189 - INFO  - Assertion:
+2026-05-16 14:41:17,189 - INFO  - []
+2026-05-16 14:41:17,189 - INFO  - 
+2026-05-16 14:41:17,189 - INFO  - Assigns:
+2026-05-16 14:41:17,189 - INFO  - [True, True, True, True]
+2026-05-16 14:41:17,189 - INFO  - 
+2026-05-16 14:41:17,190 - INFO  - Post Condition:
+2026-05-16 14:41:17,190 - INFO  - []
+2026-05-16 14:41:17,190 - INFO  - 
+2026-05-16 14:41:17,190 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo136
+2026-05-16 14:41:17,190 - INFO  - ==================================================
+2026-05-16 14:41:17,190 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo136/20260516_142527_3350015_8e08acde/output/foo136.c
+2026-05-16 14:41:17,190 - INFO  - Output file content:
+
+/*@ predicate divides(integer a, integer b) = \exists integer k; b == a * k; */
+
+/*@ predicate gcd_of(integer a, integer b, integer d) =
+      d >= 0 &&
+      divides(d, a) && divides(d, b) &&
+      (\forall integer e; e >= 0 && divides(e, a) && divides(e, b) ==> e <= d); */
+
+/*@ predicate lcm_of(integer a, integer b, integer m) =
+      m >= 0 &&
+      divides(a, m) && divides(b, m) &&
+      (\forall integer t; t >= 0 && divides(a, t) && divides(b, t) ==> m <= t); */
+
+/*@
+  requires n >= 0 && y >= 0;
+  assigns \nothing;
+*/
+int foo136(int n, int y) {
+
+    int ret = 1;
+    int g = 1;
+    if (n > y) {
+        int r = n;
+        n = y;
+        y = r;
+    }
+        
+    /* >>> LOOP INVARIANT TO FILL <<< */
+        
+    /*@
+      loop invariant l >= 2 ==> ret <= l - 1;
+      loop assigns l, ret;
+    */
+    for (int l = 1; l <= n; l++) {
+        if (n % l == 0 && y % l == 0) {
+            ret = l;
+        }
+    }
+        
+    g = (n * y) / ret;
+    return g;
+}
+
+2026-05-16 14:41:17,190 - INFO  - ==================================================
+2026-05-16 14:41:17,191 - INFO  - first_pass:
+2026-05-16 14:41:17,191 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-16 14:41:17,191 - INFO  - ==================================================
+2026-05-16 14:41:17,191 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-16 14:41:17,191 - INFO  - Total execution time: 949.56 seconds (15.83 minutes)
+2026-05-16 14:41:17,191 - INFO  - ==================================================
+2026-05-16 14:41:17,191 - INFO  - ==================================================
+2026-05-16 14:41:17,191 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-16 14:41:17,191 - INFO  - Total API calls: 25
+2026-05-16 14:41:17,191 - INFO  - Total prompt tokens (input): 199,608
+2026-05-16 14:41:17,191 - INFO  - Total completion tokens (output): 16,432
+2026-05-16 14:41:17,191 - INFO  - Total tokens: 216,040
+2026-05-16 14:41:17,192 - INFO  - Average prompt tokens per call: 7984.3
+2026-05-16 14:41:17,192 - INFO  - Average completion tokens per call: 657.3
+2026-05-16 14:41:17,192 - INFO  - Average total tokens per call: 8641.6
+2026-05-16 14:41:17,192 - INFO  - ==================================================

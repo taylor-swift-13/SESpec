@@ -1,0 +1,33 @@
+
+/*@
+  requires size >= 0;
+  assigns \nothing;
+  ensures size > 0 ==> \result >= 1;
+  ensures size > 0 ==> \result >= 1;
+  ensures size > 0 ==> \result <= size;
+  ensures size > 0 ==> 2 * \result == size + 1 || 2 * \result == size;
+*/
+int foo359(int size) {
+
+		int ret = 0;
+		int total = 0;
+		
+            
+        /*@
+          loop invariant 1 <= c <= size + 1;
+          loop invariant 0 <= total;
+          loop invariant 0 <= ret;
+          loop invariant size == \at(size,Pre);
+          loop invariant c == 2 * total || c == 2 * total + 1;
+          loop invariant ret == total * total;
+          loop assigns c, ret, total;
+            */
+            for (int c = 1; c <= size; c++) {
+			if (c % 2 != 0) {
+				ret += c;
+				total++;
+			}
+		}
+            
+		return ret / total;
+}

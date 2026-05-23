@@ -1,0 +1,1107 @@
+2026-05-15 02:17:35,646 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198
+2026-05-15 02:17:35,646 - INFO  - 
+🚀 Starting generation of function: foo223
+2026-05-15 02:17:35,646 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-15 02:17:35,646 - INFO  - ==================================================
+
+2026-05-15 02:17:36,881 - INFO  - [auto only_loop] False — foo223 returns 'int'
+2026-05-15 02:17:36,881 - INFO  - Initial pending functions: ['foo223']
+2026-05-15 02:17:36,881 - INFO  - 
+GENERATE ANNOTATION FOR foo223
+2026-05-15 02:17:36,881 - INFO  - ==================================================
+
+2026-05-15 02:17:36,881 - INFO  - Function foo223 has been initialized
+2026-05-15 02:17:36,882 - INFO  - Starting to generate annotation code for foo223
+2026-05-15 02:17:36,953 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo223
+2026-05-15 02:17:36,953 - INFO  - ==================================================
+
+2026-05-15 02:17:37,064 - INFO  - Variable Maps:[{'temp': 'n@pre', 'count': '0', 'res': '0', 'n': 'n@pre'}]
+2026-05-15 02:17:37,065 - INFO  - Path conditions: [None]
+2026-05-15 02:17:37,065 - INFO  - Pre condition: (temp == n@pre) * (count == 0) * (res == 0) * (n == n@pre)
+2026-05-15 02:17:37,065 - INFO  - Loop Condition: temp > 0
+2026-05-15 02:17:37,067 - INFO  - Array Names: []
+2026-05-15 02:17:37,067 - INFO  - Updated Loop Conditions: ['n@pre > 0']
+2026-05-15 02:17:37,068 - INFO  - Global Unchanged Variables: ['temp', 'n']
+2026-05-15 02:17:37,069 - INFO  - Non Inductive Variables: []
+2026-05-15 02:17:37,069 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-15 02:17:37,071 - INFO  - [inv-gen] single-slot mode: selected slot 2/2 (SE only); discarded 1 alternative slots
+2026-05-15 02:17:37,074 - INFO  - examples category: numeric
+2026-05-15 02:17:37,074 - INFO  - examples:
+2026-05-15 02:17:37,074 - INFO  - 
+Examples (category: numeric):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Pattern: a counter is BUILT UP across one or more earlier loops, then a
+// later loop CONSUMES it by decrementing. The assertion inside the
+// consumer loop typically claims the counter is still positive — that
+// holds iff the loop invariant `consumed + remaining == total`.
+//
+// The invariant of each producer loop must persist its contribution into
+// the shared counter; the consumer loop's invariant must relate the
+// running counter to the iteration variable so the assertion `k > 0`
+// follows from the loop condition.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n && n < INT_MAX;
+*/
+void produce_then_consume(int n) {
+    int k = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant k == i;        // every iteration adds 1 to k
+      loop assigns i, k;
+      loop variant n - i;
+    */
+    while (i < n) {
+        i++;
+        k++;
+    }
+    // Producer finished: k == n.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n;
+      loop invariant k + j == n;    // the relation that lets `assert k > 0` go through
+      loop assigns j, k;
+      loop variant n - j;
+    */
+    while (j < n) {
+        /*@ assert k > 0 || j == n; */
+        j++;
+        k--;
+    }
+    // After consumer: k == 0, j == n.
+}
+
+
+// Euclidean GCD via modular reduction. The right invariant is the
+// preservation pair `a >= 0 && b >= 0` and `a + b > 0`; together with
+// the loop variant `b` they guarantee termination at the true gcd.
+
+/*@
+  requires a >= 0 && b >= 0;
+  requires a + b > 0;
+  ensures \result > 0;
+  ensures \exists integer k; \old(a) == k * \result + (\old(a) % \result);
+*/
+int gcd(int a, int b) {
+    /*@
+      loop invariant a >= 0 && b >= 0;
+      loop invariant a + b > 0;
+      loop assigns a, b;
+      loop variant b;
+    */
+    while (b != 0) {
+        int r = a % b;
+        a = b;
+        b = r;
+    }
+    return a;
+}
+
+
+// Integer square root via incrementing counter. The loop invariant
+// `r * r <= n` is what carries the lower bound; the upper bound
+// follows from the negated loop condition at exit.
+
+/*@
+  requires n >= 0;
+  ensures \result >= 0;
+  ensures \result * \result <= n;
+  ensures (\result + 1) * (\result + 1) > n;
+*/
+int integer_sqrt(int n) {
+    int r = 0;
+    /*@
+      loop invariant 0 <= r;
+      loop invariant r * r <= n;
+      loop assigns r;
+      loop variant n - r * r;
+    */
+    while ((r + 1) * (r + 1) <= n) {
+        r++;
+    }
+    return r;
+}
+
+
+// Pattern: nondeterministic-controlled loop where the right invariant is a
+// parity / modular-arithmetic relation between the iteration variables.
+// Useful when the loop body has unknown() branches and the only state
+// preserved across all branches is `(x + y) % 2 == 0` or similar.
+
+int unknown();
+
+/*@
+  requires \true;
+  ensures \result == 0 || \result == 1;
+*/
+int parity_walk(int n) {
+    int x = 0;
+    int y = 0;
+
+    /*@
+      loop invariant (x + y) % 2 == 0;
+      loop invariant 0 <= x;
+      loop invariant 0 <= y;
+      loop assigns x, y;
+    */
+    while (unknown()) {
+        if (unknown()) {
+            x = x + 1;
+            y = y + 1;
+        } else {
+            x = x + 2;
+        }
+    }
+    // After the loop the parity invariant survives regardless of which
+    // branch fired; hence (x + y) % 2 == 0 holds and the post is provable.
+    return (x + y) % 2;
+}
+
+
+// Iterative power computation. Uses a helper logic function `power`
+// defined recursively so the invariant `result == power(base, e)` can
+// track the partial product across iterations.
+
+/*@
+  logic integer power(integer base, integer exp) =
+    exp <= 0 ? 1 : base * power(base, exp - 1);
+*/
+
+/*@
+  requires base >= 0;
+  requires exp >= 0;
+  ensures \result == power(base, exp);
+*/
+int power(int base, int exp) {
+    int result = 1;
+    int e = 0;
+    /*@
+      loop invariant 0 <= e <= exp;
+      loop invariant result == power(base, e);
+      loop assigns e, result;
+      loop variant exp - e;
+    */
+    while (e < exp) {
+        result *= base;
+        e++;
+    }
+    return result;
+}
+
+
+// Pattern: several sequential while-loops over disjoint ranges, with a
+// shared accumulator whose final value is a sum of the loop bounds. The
+// invariant of each loop must summarize what was contributed BEFORE the
+// loop entered, so the final assertion can chain facts across loops.
+
+#include <limits.h>
+
+/*@
+  requires 0 <= n0 && n0 < INT_MAX / 2;
+  requires 0 <= n1 && n1 < INT_MAX / 2;
+*/
+void sequential_count(int n0, int n1) {
+    int i0 = 0;
+    int k = 0;
+
+    /*@
+      loop invariant 0 <= i0 <= n0;
+      loop invariant k == i0;
+      loop assigns i0, k;
+      loop variant n0 - i0;
+    */
+    while (i0 < n0) {
+        i0++;
+        k++;
+    }
+    // After loop 1: k == n0.
+
+    int i1 = 0;
+    /*@
+      loop invariant 0 <= i1 <= n1;
+      loop invariant k == n0 + i1;
+      loop assigns i1, k;
+      loop variant n1 - i1;
+    */
+    while (i1 < n1) {
+        i1++;
+        k++;
+    }
+    // After loop 2: k == n0 + n1.
+
+    int j = 0;
+    /*@
+      loop invariant 0 <= j <= n0 + n1;
+      loop invariant k == n0 + n1;
+      loop assigns j;
+      loop variant (n0 + n1) - j;
+    */
+    while (j < n0 + n1) {
+        /*@ assert k > 0 || (n0 == 0 && n1 == 0); */
+        j++;
+    }
+}
+
+    ```
+
+2026-05-15 02:18:12,966 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.40, satisfy=0.00) clauses=5
+2026-05-15 02:18:41,377 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:19:21,876 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=0.83, satisfy=0.00) clauses=6
+2026-05-15 02:19:29,445 - INFO  - [inv-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=5
+2026-05-15 02:19:29,445 - INFO  - [inv-gen] converged at refine 4
+2026-05-15 02:19:31,028 - INFO  - ACSL format loop invariant
+2026-05-15 02:19:31,028 - INFO  - /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+2026-05-15 02:19:31,030 - INFO  - QCP format loop invariant
+2026-05-15 02:19:31,030 - INFO  - /*@ Inv
+    ((n@pre > 0) => (count >= 0)) &&
+((n@pre > 0) => (temp <= n@pre)) &&
+((n@pre > 0) => (temp <= n@pre)) &&
+((!(n@pre > 0)) => ((temp == n@pre)&&(count == 0)&&(res == 0)&&(n == n@pre))) &&
+(n == n@pre
+          loop assigns res, temp, count)
+    */
+    
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+2026-05-15 02:19:32,517 - INFO  - CORRECT INVARIANT
+2026-05-15 02:19:32,518 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo223
+2026-05-15 02:19:32,518 - INFO  - ==================================================
+
+2026-05-15 02:19:32,530 - INFO  - Starting to generate ACSL specification for foo223
+2026-05-15 02:20:06,744 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp >> 1 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:06,747 - INFO  - [spec-gen] refine 1/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:14,456 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:28: Warning: 
+  \result meaningless. Ignoring code annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:14,456 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:14,457 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:20:14,809 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp >> 1 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:14,809 - INFO  - [spec-gen] refine 3/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:19,468 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp / 2 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:19,470 - INFO  - [spec-gen] refine 4/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:19,470 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:20:19,783 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp >> 1 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:19,784 - INFO  - [spec-gen] refine 5/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:24,313 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp / 2 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:24,313 - INFO  - [spec-gen] refine 6/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:24,314 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:20:24,613 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp >> 1 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:24,613 - INFO  - [spec-gen] refine 7/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:47,167 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp / 2 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:47,167 - INFO  - [spec-gen] refine 8/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:20:47,167 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:20:47,393 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp >> 1 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:20:47,394 - INFO  - [spec-gen] refine 9/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:21:04,562 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp / 2 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:21:04,564 - INFO  - [spec-gen] refine 10/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=0
+2026-05-15 02:21:04,564 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-15 02:21:04,565 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(False, 0.0, 0.0), clauses=0)
+2026-05-15 02:21:04,910 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp >> 1 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:21:04,911 - INFO  - 
+SPECIFICATION FOR foo223
+2026-05-15 02:21:04,911 - INFO  - ==================================================
+
+2026-05-15 02:21:04,912 - INFO  - 
+QCP Specification for function foo223:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-15 02:21:05,062 - INFO  - 
+VERIFICATION FOR foo223
+2026-05-15 02:21:05,063 - INFO  - ==================================================
+
+2026-05-15 02:21:05,063 - INFO  - TRY TIME: 0
+2026-05-15 02:21:05,415 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c:3: Warning: 
+  term temp >> 1 has type ℤ, but int is expected. Ignoring global annotation
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-15 02:21:25,462 - INFO  - syntax Correct
+2026-05-15 02:21:36,150 - INFO  - Loop Invariant:
+2026-05-15 02:21:36,150 - INFO  - [True, True, True, True, True]
+2026-05-15 02:21:36,150 - INFO  - 
+2026-05-15 02:21:36,150 - INFO  - Assertion:
+2026-05-15 02:21:36,150 - INFO  - []
+2026-05-15 02:21:36,150 - INFO  - 
+2026-05-15 02:21:36,151 - INFO  - Assigns:
+2026-05-15 02:21:36,151 - INFO  - [True, True]
+2026-05-15 02:21:36,151 - INFO  - 
+2026-05-15 02:21:36,151 - INFO  - Post Condition:
+2026-05-15 02:21:36,151 - INFO  - [False]
+2026-05-15 02:21:36,151 - INFO  - 
+2026-05-15 02:21:36,151 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.88, satisfy=0.00) clauses=2
+2026-05-15 02:21:36,152 - INFO  - postconditon before refine: 
+
+/*@
+  ensures \result == (n ^ (\old(n) > 0 ? (
+    (1 << 0) |
+    (1 << 1) |
+    (1 << 2) |
+    (1 << 3) |
+    (1 << 4) |
+    (1 << 5) |
+    (1 << 6) |
+    (1 << 7) |
+    (1 << 8) |
+    (1 << 9) |
+    (1 << 10) |
+    (1 << 11) |
+    (1 << 12) |
+    (1 << 13) |
+    (1 << 14) |
+    (1 << 15) |
+    (1 << 16) |
+    (1 << 17) |
+    (1 << 18) |
+    (1 << 19) |
+    (1 << 20) |
+    (1 << 21) |
+    (1 << 22) |
+    (1 << 23) |
+    (1 << 24) |
+    (1 << 25) |
+    (1 << 26) |
+    (1 << 27) |
+    (1 << 28) |
+    (1 << 29) |
+    (1 << 30)
+  ) : 0)) [POSTCONDITION FAILED];
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:21:38,981 - INFO  - postconditon after refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:21:39,660 - INFO  - syntax Correct
+2026-05-15 02:21:40,413 - INFO  - Loop Invariant:
+2026-05-15 02:21:40,413 - INFO  - [True, True, True, True, True]
+2026-05-15 02:21:40,413 - INFO  - 
+2026-05-15 02:21:40,413 - INFO  - Assertion:
+2026-05-15 02:21:40,413 - INFO  - []
+2026-05-15 02:21:40,413 - INFO  - 
+2026-05-15 02:21:40,413 - INFO  - Assigns:
+2026-05-15 02:21:40,413 - INFO  - [True, True]
+2026-05-15 02:21:40,413 - INFO  - 
+2026-05-15 02:21:40,413 - INFO  - Post Condition:
+2026-05-15 02:21:40,413 - INFO  - []
+2026-05-15 02:21:40,413 - INFO  - 
+2026-05-15 02:21:40,414 - INFO  - [spec-gen] refine 2/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-15 02:21:40,414 - INFO  - postconditon before refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:21:42,306 - INFO  - postconditon after refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:21:42,996 - INFO  - syntax Correct
+2026-05-15 02:21:43,802 - INFO  - Loop Invariant:
+2026-05-15 02:21:43,803 - INFO  - [True, True, True, True, True]
+2026-05-15 02:21:43,803 - INFO  - 
+2026-05-15 02:21:43,803 - INFO  - Assertion:
+2026-05-15 02:21:43,803 - INFO  - []
+2026-05-15 02:21:43,803 - INFO  - 
+2026-05-15 02:21:43,803 - INFO  - Assigns:
+2026-05-15 02:21:43,803 - INFO  - [True, True]
+2026-05-15 02:21:43,803 - INFO  - 
+2026-05-15 02:21:43,803 - INFO  - Post Condition:
+2026-05-15 02:21:43,803 - INFO  - []
+2026-05-15 02:21:43,803 - INFO  - 
+2026-05-15 02:21:43,803 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-15 02:21:43,804 - INFO  - postconditon before refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:21:46,023 - INFO  - postconditon after refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:21:46,666 - INFO  - syntax Correct
+2026-05-15 02:21:47,414 - INFO  - Loop Invariant:
+2026-05-15 02:21:47,414 - INFO  - [True, True, True, True, True]
+2026-05-15 02:21:47,414 - INFO  - 
+2026-05-15 02:21:47,414 - INFO  - Assertion:
+2026-05-15 02:21:47,414 - INFO  - []
+2026-05-15 02:21:47,414 - INFO  - 
+2026-05-15 02:21:47,414 - INFO  - Assigns:
+2026-05-15 02:21:47,414 - INFO  - [True, True]
+2026-05-15 02:21:47,415 - INFO  - 
+2026-05-15 02:21:47,415 - INFO  - Post Condition:
+2026-05-15 02:21:47,415 - INFO  - []
+2026-05-15 02:21:47,415 - INFO  - 
+2026-05-15 02:21:47,415 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-15 02:21:47,415 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:21:48,131 - INFO  - syntax Correct
+2026-05-15 02:21:48,989 - INFO  - Loop Invariant:
+2026-05-15 02:21:48,989 - INFO  - [True, True, True, True, True]
+2026-05-15 02:21:48,989 - INFO  - 
+2026-05-15 02:21:48,990 - INFO  - Assertion:
+2026-05-15 02:21:48,990 - INFO  - []
+2026-05-15 02:21:48,990 - INFO  - 
+2026-05-15 02:21:48,990 - INFO  - Assigns:
+2026-05-15 02:21:48,990 - INFO  - [True, True]
+2026-05-15 02:21:48,990 - INFO  - 
+2026-05-15 02:21:48,990 - INFO  - Post Condition:
+2026-05-15 02:21:48,990 - INFO  - []
+2026-05-15 02:21:48,990 - INFO  - 
+2026-05-15 02:21:48,991 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-15 02:21:48,991 - INFO  - postconditon before refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:22:05,300 - INFO  - postconditon after refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:22:06,043 - INFO  - syntax Correct
+2026-05-15 02:22:06,918 - INFO  - Loop Invariant:
+2026-05-15 02:22:06,918 - INFO  - [True, True, True, True, True]
+2026-05-15 02:22:06,918 - INFO  - 
+2026-05-15 02:22:06,918 - INFO  - Assertion:
+2026-05-15 02:22:06,918 - INFO  - []
+2026-05-15 02:22:06,918 - INFO  - 
+2026-05-15 02:22:06,918 - INFO  - Assigns:
+2026-05-15 02:22:06,918 - INFO  - [True, True]
+2026-05-15 02:22:06,918 - INFO  - 
+2026-05-15 02:22:06,919 - INFO  - Post Condition:
+2026-05-15 02:22:06,919 - INFO  - []
+2026-05-15 02:22:06,919 - INFO  - 
+2026-05-15 02:22:06,919 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-15 02:22:06,919 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:22:07,691 - INFO  - syntax Correct
+2026-05-15 02:22:08,510 - INFO  - Loop Invariant:
+2026-05-15 02:22:08,511 - INFO  - [True, True, True, True, True]
+2026-05-15 02:22:08,511 - INFO  - 
+2026-05-15 02:22:08,511 - INFO  - Assertion:
+2026-05-15 02:22:08,511 - INFO  - []
+2026-05-15 02:22:08,511 - INFO  - 
+2026-05-15 02:22:08,511 - INFO  - Assigns:
+2026-05-15 02:22:08,511 - INFO  - [True, True]
+2026-05-15 02:22:08,511 - INFO  - 
+2026-05-15 02:22:08,511 - INFO  - Post Condition:
+2026-05-15 02:22:08,511 - INFO  - []
+2026-05-15 02:22:08,511 - INFO  - 
+2026-05-15 02:22:08,512 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-15 02:22:08,512 - INFO  - postconditon before refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:22:11,966 - INFO  - postconditon after refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:22:12,678 - INFO  - syntax Correct
+2026-05-15 02:22:13,472 - INFO  - Loop Invariant:
+2026-05-15 02:22:13,472 - INFO  - [True, True, True, True, True]
+2026-05-15 02:22:13,473 - INFO  - 
+2026-05-15 02:22:13,473 - INFO  - Assertion:
+2026-05-15 02:22:13,473 - INFO  - []
+2026-05-15 02:22:13,473 - INFO  - 
+2026-05-15 02:22:13,473 - INFO  - Assigns:
+2026-05-15 02:22:13,473 - INFO  - [True, True]
+2026-05-15 02:22:13,473 - INFO  - 
+2026-05-15 02:22:13,473 - INFO  - Post Condition:
+2026-05-15 02:22:13,473 - INFO  - []
+2026-05-15 02:22:13,473 - INFO  - 
+2026-05-15 02:22:13,474 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-15 02:22:13,474 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:22:14,182 - INFO  - syntax Correct
+2026-05-15 02:22:15,001 - INFO  - Loop Invariant:
+2026-05-15 02:22:15,002 - INFO  - [True, True, True, True, True]
+2026-05-15 02:22:15,002 - INFO  - 
+2026-05-15 02:22:15,002 - INFO  - Assertion:
+2026-05-15 02:22:15,002 - INFO  - []
+2026-05-15 02:22:15,002 - INFO  - 
+2026-05-15 02:22:15,002 - INFO  - Assigns:
+2026-05-15 02:22:15,002 - INFO  - [True, True]
+2026-05-15 02:22:15,002 - INFO  - 
+2026-05-15 02:22:15,002 - INFO  - Post Condition:
+2026-05-15 02:22:15,002 - INFO  - []
+2026-05-15 02:22:15,002 - INFO  - 
+2026-05-15 02:22:15,003 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-15 02:22:15,003 - INFO  - postconditon before refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:22:17,231 - INFO  - postconditon after refine: 
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:22:17,902 - INFO  - syntax Correct
+2026-05-15 02:22:18,662 - INFO  - Loop Invariant:
+2026-05-15 02:22:18,662 - INFO  - [True, True, True, True, True]
+2026-05-15 02:22:18,662 - INFO  - 
+2026-05-15 02:22:18,662 - INFO  - Assertion:
+2026-05-15 02:22:18,662 - INFO  - []
+2026-05-15 02:22:18,662 - INFO  - 
+2026-05-15 02:22:18,662 - INFO  - Assigns:
+2026-05-15 02:22:18,662 - INFO  - [True, True]
+2026-05-15 02:22:18,662 - INFO  - 
+2026-05-15 02:22:18,663 - INFO  - Post Condition:
+2026-05-15 02:22:18,663 - INFO  - []
+2026-05-15 02:22:18,663 - INFO  - 
+2026-05-15 02:22:18,663 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=1
+2026-05-15 02:22:18,663 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=3)
+2026-05-15 02:22:18,665 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 1.0, 0.0), clauses=1)
+2026-05-15 02:22:19,377 - INFO  - syntax Correct
+2026-05-15 02:22:20,159 - INFO  - Loop Invariant:
+2026-05-15 02:22:20,160 - INFO  - [True, True, True, True, True]
+2026-05-15 02:22:20,160 - INFO  - 
+2026-05-15 02:22:20,160 - INFO  - Assertion:
+2026-05-15 02:22:20,160 - INFO  - []
+2026-05-15 02:22:20,160 - INFO  - 
+2026-05-15 02:22:20,160 - INFO  - Assigns:
+2026-05-15 02:22:20,160 - INFO  - [True, True]
+2026-05-15 02:22:20,160 - INFO  - 
+2026-05-15 02:22:20,160 - INFO  - Post Condition:
+2026-05-15 02:22:20,160 - INFO  - []
+2026-05-15 02:22:20,160 - INFO  - 
+2026-05-15 02:22:20,836 - INFO  - syntax Correct
+2026-05-15 02:22:21,592 - INFO  - Loop Invariant:
+2026-05-15 02:22:21,593 - INFO  - [True, True, True, True, True]
+2026-05-15 02:22:21,593 - INFO  - 
+2026-05-15 02:22:21,593 - INFO  - Assertion:
+2026-05-15 02:22:21,593 - INFO  - []
+2026-05-15 02:22:21,593 - INFO  - 
+2026-05-15 02:22:21,593 - INFO  - Assigns:
+2026-05-15 02:22:21,593 - INFO  - [True, True]
+2026-05-15 02:22:21,593 - INFO  - 
+2026-05-15 02:22:21,593 - INFO  - Post Condition:
+2026-05-15 02:22:21,593 - INFO  - []
+2026-05-15 02:22:21,593 - INFO  - 
+2026-05-15 02:22:21,593 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo223
+2026-05-15 02:22:21,593 - INFO  - ==================================================
+2026-05-15 02:22:21,594 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5.4-mini/foo223/20260515_021735_850120_7a36f198/output/foo223.c
+2026-05-15 02:22:21,594 - INFO  - Output file content:
+
+/*@
+  assigns \nothing;
+*/
+int foo223(int n) {
+
+        int res = 0;
+        int count = 0;
+        int temp = n;
+        
+            
+        /* >>> LOOP INVARIANT TO FILL <<< */
+        
+            /*@
+          loop invariant (\at(n,Pre) > 0) ==> (count >= 0);
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (\at(n,Pre) > 0) ==> (temp <= \at(n,Pre));
+          loop invariant (!(\at(n,Pre) > 0)) ==> ((temp == \at(n,Pre))&&(count == 0)&&(res == 0)&&(n == \at(n,Pre)));
+          loop invariant n == \at(n,Pre);
+          loop assigns res, temp, count;
+            */
+            while (temp > 0) {
+            if (count % 2 == 0) {
+                res = res | (1 << count);
+            }
+            count++;
+            temp >>= 1;
+        }
+            
+        return n ^ res;
+}
+
+2026-05-15 02:22:21,594 - INFO  - ==================================================
+2026-05-15 02:22:21,594 - INFO  - first_pass:
+2026-05-15 02:22:21,594 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-15 02:22:21,594 - INFO  - ==================================================
+2026-05-15 02:22:21,594 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-15 02:22:21,594 - INFO  - Total execution time: 285.95 seconds (4.77 minutes)
+2026-05-15 02:22:21,594 - INFO  - ==================================================
+2026-05-15 02:22:21,594 - INFO  - ==================================================
+2026-05-15 02:22:21,594 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-15 02:22:21,595 - INFO  - Total API calls: 17
+2026-05-15 02:22:21,595 - INFO  - Total prompt tokens (input): 88,248
+2026-05-15 02:22:21,595 - INFO  - Total completion tokens (output): 7,668
+2026-05-15 02:22:21,595 - INFO  - Total tokens: 95,916
+2026-05-15 02:22:21,595 - INFO  - Average prompt tokens per call: 5191.1
+2026-05-15 02:22:21,595 - INFO  - Average completion tokens per call: 451.1
+2026-05-15 02:22:21,595 - INFO  - Average total tokens per call: 5642.1
+2026-05-15 02:22:21,595 - INFO  - ==================================================

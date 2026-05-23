@@ -1,0 +1,863 @@
+2026-05-18 21:47:16,647 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9
+2026-05-18 21:47:16,647 - INFO  - 
+🚀 Starting generation of function: foo105
+2026-05-18 21:47:16,647 - INFO  - 
+OUTER PASS: 1/1
+2026-05-18 21:47:16,647 - INFO  - TRY TIME: 0
+2026-05-18 21:47:16,648 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-18 21:47:16,648 - INFO  - ==================================================
+
+2026-05-18 21:47:16,929 - INFO  - [auto only_loop] False — foo105 returns 'int'
+2026-05-18 21:47:16,930 - INFO  - Initial pending functions: ['foo105', 'malloc']
+2026-05-18 21:47:16,930 - INFO  - Now processing function malloc
+
+2026-05-18 21:47:16,930 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-18 21:47:16,930 - INFO  - 
+GENERATE ANNOTATION FOR foo105
+2026-05-18 21:47:16,930 - INFO  - ==================================================
+
+2026-05-18 21:47:16,930 - INFO  - Function foo105 has been initialized
+2026-05-18 21:47:16,930 - INFO  - Starting to generate annotation code for foo105
+2026-05-18 21:47:16,991 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo105
+2026-05-18 21:47:16,991 - INFO  - ==================================================
+
+2026-05-18 21:47:17,058 - INFO  - Variable Maps:[{}]
+2026-05-18 21:47:17,059 - INFO  - Path conditions: [None]
+2026-05-18 21:47:17,059 - INFO  - Pre condition: 
+2026-05-18 21:47:17,059 - INFO  - Loop Condition: index < fib_len
+2026-05-18 21:47:17,060 - INFO  - Array Names: ['fib']
+2026-05-18 21:47:17,060 - INFO  - Updated Loop Conditions: ['index < fib_len']
+2026-05-18 21:47:17,060 - INFO  - Global Unchanged Variables: []
+2026-05-18 21:47:17,060 - INFO  - Non Inductive Variables: []
+2026-05-18 21:47:17,061 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-18 21:47:17,062 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-18 21:47:17,064 - INFO  - examples category: array
+2026-05-18 21:47:17,064 - INFO  - examples:
+2026-05-18 21:47:17,064 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-18 21:47:27,415 - INFO  - [inv-gen] refine 1/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-18 21:47:27,416 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:47:39,735 - INFO  - [inv-gen] refine 2/3 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=2
+2026-05-18 21:47:39,737 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:48:34,160 - INFO  - [inv-gen] refine 3/3 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=2
+2026-05-18 21:48:52,321 - INFO  - [inv-gen] refine exhausted → final Houdini on best (score=(True, 0.5, 0.0), clauses=2)
+2026-05-18 21:50:49,001 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-18 21:51:26,473 - INFO  - ACSL format loop invariant
+2026-05-18 21:51:26,474 - INFO  - /*@
+          loop invariant 0 <= index <= fib_len;
+          loop assigns fib[0..fib_len-1], index;
+        */
+            while (index < fib_len) {
+			fib[index] = fib[index - 2] + fib[index - 1];
+			index++;
+		}
+2026-05-18 21:51:26,475 - INFO  - QCP format loop invariant
+2026-05-18 21:51:26,475 - INFO  - /*@ Inv
+    (0 <= index && index <= fib_len
+          loop assigns fib_l[0..fib_len-1], index)
+    */
+    
+            while (index < fib_len) {
+			fib[index] = fib[index - 2] + fib[index - 1];
+			index++;
+		}
+2026-05-18 21:52:02,361 - INFO  - CORRECT INVARIANT
+2026-05-18 21:52:02,361 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo105
+2026-05-18 21:52:02,361 - INFO  - ==================================================
+
+2026-05-18 21:52:02,376 - INFO  - Starting to generate ACSL specification for foo105
+2026-05-18 21:52:32,821 - INFO  - syntax Correct
+2026-05-18 21:52:48,422 - INFO  - Loop Invariant:
+2026-05-18 21:52:48,423 - INFO  - [True]
+2026-05-18 21:52:48,423 - INFO  - 
+2026-05-18 21:52:48,423 - INFO  - Assertion:
+2026-05-18 21:52:48,423 - INFO  - []
+2026-05-18 21:52:48,423 - INFO  - 
+2026-05-18 21:52:48,423 - INFO  - Assigns:
+2026-05-18 21:52:48,423 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 21:52:48,423 - INFO  - Assigns: failures:
+2026-05-18 21:52:48,423 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 21:52:48,423 - INFO  - 
+2026-05-18 21:52:48,423 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 21:52:48,423 - INFO  - 
+2026-05-18 21:52:48,423 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 21:52:48,423 - INFO  - 
+2026-05-18 21:52:48,423 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 21:52:48,423 - INFO  - 
+2026-05-18 21:52:48,423 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 21:52:48,423 - INFO  - 
+2026-05-18 21:52:48,423 - INFO  - 
+2026-05-18 21:52:48,424 - INFO  - Post Condition:
+2026-05-18 21:52:48,424 - INFO  - [False]
+2026-05-18 21:52:48,424 - INFO  - Post Condition: failures:
+2026-05-18 21:52:48,424 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c, line 14) in 'foo105':
+2026-05-18 21:52:48,424 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c at line: 14
+2026-05-18 21:52:48,424 - INFO  - Error line content: ensures \result == fib_at(n);
+2026-05-18 21:52:48,424 - INFO  - 
+2026-05-18 21:52:48,424 - INFO  - 
+2026-05-18 21:52:48,424 - INFO  - Instance:
+2026-05-18 21:52:48,424 - INFO  - []
+2026-05-18 21:52:48,424 - INFO  - 
+2026-05-18 21:52:48,425 - INFO  - [spec-gen] refine 1/3 score=(syntax=True, satisfy=0.00, valid=0.45) clauses=3
+2026-05-18 21:52:48,425 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  logic integer fib_at(integer k) =
+    k == 0 ? 0
+    : k == 1 ? 1
+    : fib_at(k-1) + fib_at(k-2);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == fib_at(n) [POSTCONDITION FAILED];
+*/
+int foo105(int n) {
+
+		if(n < 0) return -1;
+		else if(n == 0) return 0;
+
+		int *fib = (int *)malloc(sizeof(int) * (n + 1));
+int fib_len = n + 1;
+		fib[0] = 0;
+		fib[1] = 1;
+		int index = 2;
+
+		
+            
+        /*@
+          loop invariant 0 <= index <= fib_len;
+          loop assigns fib[0..fib_len-1], index;
+        */
+            while (index < fib_len) {
+			fib[index] = fib[index - 2] + fib[index - 1];
+			index++;
+		}
+            
+
+		return fib[n];
+}
+
+2026-05-18 21:53:07,475 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  logic integer fib_at(integer k) =
+    k == 0 ? 0
+    : k == 1 ? 1
+    : fib_at(k-1) + fib_at(k-2);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \from n, \valid(fib + (0..n)) ? fib[0..n-1] : \nothing; // descriptive, but Frama-C will accept explicit written region below
+  assigns fib[0..(n)] ;
+  ensures \result == (\at(n, Pre) == 0 ? 0 : (\at(n, Pre) == 1 ? 1 : fib_at(\at(n, Pre))));
+*/
+int foo105(int n) {
+
+		if(n < 0) return -1;
+		else if(n == 0) return 0;
+
+		int *fib = (int *)malloc(sizeof(int) * (n + 1));
+int fib_len = n + 1;
+		fib[0] = 0;
+		fib[1] = 1;
+		int index = 2;
+
+		
+            
+        /*@
+          loop invariant 0 <= index <= fib_len;
+          loop assigns fib[0..fib_len-1], index;
+        */
+            while (index < fib_len) {
+			fib[index] = fib[index - 2] + fib[index - 1];
+			index++;
+		}
+            
+
+		return fib[n];
+}
+
+2026-05-18 21:53:07,911 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c:13: Warning: 
+  unexpected token '\from'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-18 21:53:07,912 - INFO  - [spec-gen] refine 2/3 score=(syntax=False, satisfy=0.00, valid=0.00) clauses=4
+2026-05-18 21:53:07,913 - INFO  - [acsl-fixer] no deterministic fix applicable
+2026-05-18 21:53:42,374 - INFO  - syntax Correct
+2026-05-18 21:53:56,602 - INFO  - Loop Invariant:
+2026-05-18 21:53:56,602 - INFO  - [True]
+2026-05-18 21:53:56,602 - INFO  - 
+2026-05-18 21:53:56,602 - INFO  - Assertion:
+2026-05-18 21:53:56,602 - INFO  - []
+2026-05-18 21:53:56,602 - INFO  - 
+2026-05-18 21:53:56,602 - INFO  - Assigns:
+2026-05-18 21:53:56,602 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 21:53:56,602 - INFO  - Assigns: failures:
+2026-05-18 21:53:56,602 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 21:53:56,602 - INFO  - 
+2026-05-18 21:53:56,602 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 21:53:56,602 - INFO  - 
+2026-05-18 21:53:56,602 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 21:53:56,602 - INFO  - 
+2026-05-18 21:53:56,602 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 21:53:56,602 - INFO  - 
+2026-05-18 21:53:56,602 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 21:53:56,602 - INFO  - 
+2026-05-18 21:53:56,602 - INFO  - 
+2026-05-18 21:53:56,603 - INFO  - Post Condition:
+2026-05-18 21:53:56,603 - INFO  - [False]
+2026-05-18 21:53:56,603 - INFO  - Post Condition: failures:
+2026-05-18 21:53:56,603 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c, line 14) in 'foo105':
+2026-05-18 21:53:56,603 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c at line: 14
+2026-05-18 21:53:56,603 - INFO  - Error line content: ensures \result == fib_at(n);
+2026-05-18 21:53:56,603 - INFO  - 
+2026-05-18 21:53:56,603 - INFO  - 
+2026-05-18 21:53:56,603 - INFO  - Instance:
+2026-05-18 21:53:56,603 - INFO  - []
+2026-05-18 21:53:56,603 - INFO  - 
+2026-05-18 21:53:56,603 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.45) clauses=3
+2026-05-18 21:53:56,603 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 21:53:56,605 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.45454545454545453), clauses=3)
+2026-05-18 21:54:18,031 - INFO  - syntax Correct
+2026-05-18 21:54:32,354 - INFO  - Loop Invariant:
+2026-05-18 21:54:32,354 - INFO  - [True]
+2026-05-18 21:54:32,355 - INFO  - 
+2026-05-18 21:54:32,355 - INFO  - Assertion:
+2026-05-18 21:54:32,355 - INFO  - []
+2026-05-18 21:54:32,355 - INFO  - 
+2026-05-18 21:54:32,355 - INFO  - Assigns:
+2026-05-18 21:54:32,355 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 21:54:32,355 - INFO  - Assigns: failures:
+2026-05-18 21:54:32,355 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 21:54:32,355 - INFO  - 
+2026-05-18 21:54:32,355 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 21:54:32,355 - INFO  - 
+2026-05-18 21:54:32,355 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 21:54:32,355 - INFO  - 
+2026-05-18 21:54:32,356 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 21:54:32,356 - INFO  - 
+2026-05-18 21:54:32,356 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 21:54:32,356 - INFO  - 
+2026-05-18 21:54:32,356 - INFO  - 
+2026-05-18 21:54:32,356 - INFO  - Post Condition:
+2026-05-18 21:54:32,356 - INFO  - [False]
+2026-05-18 21:54:32,356 - INFO  - Post Condition: failures:
+2026-05-18 21:54:32,356 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c, line 14) in 'foo105':
+2026-05-18 21:54:32,356 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c at line: 14
+2026-05-18 21:54:32,356 - INFO  - Error line content: ensures \result == fib_at(n);
+2026-05-18 21:54:32,356 - INFO  - 
+2026-05-18 21:54:32,356 - INFO  - 
+2026-05-18 21:54:32,357 - INFO  - Instance:
+2026-05-18 21:54:32,357 - INFO  - []
+2026-05-18 21:54:32,357 - INFO  - 
+2026-05-18 21:54:53,732 - INFO  - syntax Correct
+2026-05-18 21:55:06,345 - INFO  - Loop Invariant:
+2026-05-18 21:55:06,345 - INFO  - [True]
+2026-05-18 21:55:06,345 - INFO  - 
+2026-05-18 21:55:06,345 - INFO  - Assertion:
+2026-05-18 21:55:06,346 - INFO  - []
+2026-05-18 21:55:06,346 - INFO  - 
+2026-05-18 21:55:06,346 - INFO  - Assigns:
+2026-05-18 21:55:06,346 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 21:55:06,346 - INFO  - Assigns: failures:
+2026-05-18 21:55:06,346 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 21:55:06,346 - INFO  - 
+2026-05-18 21:55:06,346 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 21:55:06,346 - INFO  - 
+2026-05-18 21:55:06,346 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 21:55:06,346 - INFO  - 
+2026-05-18 21:55:06,347 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 21:55:06,347 - INFO  - 
+2026-05-18 21:55:06,347 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 21:55:06,347 - INFO  - 
+2026-05-18 21:55:06,347 - INFO  - 
+2026-05-18 21:55:06,347 - INFO  - Post Condition:
+2026-05-18 21:55:06,347 - INFO  - []
+2026-05-18 21:55:06,347 - INFO  - 
+2026-05-18 21:55:06,347 - INFO  - Instance:
+2026-05-18 21:55:06,347 - INFO  - []
+2026-05-18 21:55:06,348 - INFO  - 
+2026-05-18 21:55:06,350 - INFO  - 
+SPECIFICATION FOR foo105
+2026-05-18 21:55:06,350 - INFO  - ==================================================
+
+2026-05-18 21:55:06,350 - INFO  - 
+QCP Specification for function foo105:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-18 21:55:06,478 - INFO  - 
+VERIFICATION FOR foo105
+2026-05-18 21:55:06,485 - INFO  - ==================================================
+
+2026-05-18 21:55:27,921 - INFO  - syntax Correct
+2026-05-18 21:55:39,708 - INFO  - Loop Invariant:
+2026-05-18 21:55:39,708 - INFO  - [True]
+2026-05-18 21:55:39,708 - INFO  - 
+2026-05-18 21:55:39,708 - INFO  - Assertion:
+2026-05-18 21:55:39,708 - INFO  - []
+2026-05-18 21:55:39,709 - INFO  - 
+2026-05-18 21:55:39,709 - INFO  - Assigns:
+2026-05-18 21:55:39,709 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 21:55:39,709 - INFO  - Assigns: failures:
+2026-05-18 21:55:39,709 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 21:55:39,709 - INFO  - 
+2026-05-18 21:55:39,709 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 21:55:39,709 - INFO  - 
+2026-05-18 21:55:39,709 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 21:55:39,709 - INFO  - 
+2026-05-18 21:55:39,709 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 21:55:39,709 - INFO  - 
+2026-05-18 21:55:39,709 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 21:55:39,710 - INFO  - 
+2026-05-18 21:55:39,710 - INFO  - 
+2026-05-18 21:55:39,710 - INFO  - Post Condition:
+2026-05-18 21:55:39,710 - INFO  - []
+2026-05-18 21:55:39,710 - INFO  - 
+2026-05-18 21:55:39,710 - INFO  - Instance:
+2026-05-18 21:55:39,710 - INFO  - []
+2026-05-18 21:55:39,710 - INFO  - 
+2026-05-18 21:56:38,425 - INFO  - syntax Correct
+2026-05-18 21:56:53,105 - INFO  - Loop Invariant:
+2026-05-18 21:56:53,105 - INFO  - [True]
+2026-05-18 21:56:53,106 - INFO  - 
+2026-05-18 21:56:53,106 - INFO  - Assertion:
+2026-05-18 21:56:53,106 - INFO  - []
+2026-05-18 21:56:53,106 - INFO  - 
+2026-05-18 21:56:53,106 - INFO  - Assigns:
+2026-05-18 21:56:53,106 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 21:56:53,106 - INFO  - Assigns: failures:
+2026-05-18 21:56:53,106 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 21:56:53,106 - INFO  - 
+2026-05-18 21:56:53,106 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 21:56:53,106 - INFO  - 
+2026-05-18 21:56:53,106 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 21:56:53,106 - INFO  - 
+2026-05-18 21:56:53,106 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 21:56:53,106 - INFO  - 
+2026-05-18 21:56:53,107 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 21:56:53,107 - INFO  - 
+2026-05-18 21:56:53,107 - INFO  - 
+2026-05-18 21:56:53,107 - INFO  - Post Condition:
+2026-05-18 21:56:53,107 - INFO  - [False]
+2026-05-18 21:56:53,107 - INFO  - Post Condition: failures:
+2026-05-18 21:56:53,107 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c, line 14) in 'foo105':
+2026-05-18 21:56:53,107 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c at line: 14
+2026-05-18 21:56:53,107 - INFO  - Error line content: ensures (n < 0) ? \result == -1
+2026-05-18 21:56:53,107 - INFO  - 
+2026-05-18 21:56:53,107 - INFO  - 
+2026-05-18 21:56:53,107 - INFO  - Instance:
+2026-05-18 21:56:53,107 - INFO  - []
+2026-05-18 21:56:53,107 - INFO  - 
+2026-05-18 21:56:53,108 - INFO  - [spec-gen] refine 1/3 score=(syntax=True, satisfy=0.00, valid=0.45) clauses=3
+2026-05-18 21:56:53,108 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  logic integer fib_at(integer k) =
+    k == 0 ? 0
+    : k == 1 ? 1
+    : fib_at(k-1) + fib_at(k-2);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures (n < 0) ? \result == -1
+          : (n == 0) ? \result == 0
+          : \result == fib_at(n) [POSTCONDITION FAILED];
+*/
+int foo105(int n) {
+
+		if(n < 0) return -1;
+		else if(n == 0) return 0;
+
+		int *fib = (int *)malloc(sizeof(int) * (n + 1));
+int fib_len = n + 1;
+		fib[0] = 0;
+		fib[1] = 1;
+		int index = 2;
+
+		
+            
+        /*@
+          loop invariant 0 <= index <= fib_len;
+          loop assigns fib[0..fib_len-1], index;
+        */
+            while (index < fib_len) {
+			fib[index] = fib[index - 2] + fib[index - 1];
+			index++;
+		}
+            
+
+		return fib[n];
+}
+
+2026-05-18 21:57:33,893 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  logic integer fib_at(integer k) =
+    k == 0 ? 0
+    : k == 1 ? 1
+    : fib_at(k-1) + fib_at(k-2);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == fib_at(n);
+*/
+int foo105(int n) {
+
+		if(n < 0) return -1;
+		else if(n == 0) return 0;
+
+		int *fib = (int *)malloc(sizeof(int) * (n + 1));
+int fib_len = n + 1;
+		fib[0] = 0;
+		fib[1] = 1;
+		int index = 2;
+
+		
+            
+        /*@
+          loop invariant 0 <= index <= fib_len;
+          loop assigns fib[0..fib_len-1], index;
+        */
+            while (index < fib_len) {
+			fib[index] = fib[index - 2] + fib[index - 1];
+			index++;
+		}
+            
+
+		return fib[n];
+}
+
+2026-05-18 21:57:55,725 - INFO  - syntax Correct
+2026-05-18 21:58:10,461 - INFO  - Loop Invariant:
+2026-05-18 21:58:10,461 - INFO  - [True]
+2026-05-18 21:58:10,461 - INFO  - 
+2026-05-18 21:58:10,461 - INFO  - Assertion:
+2026-05-18 21:58:10,461 - INFO  - []
+2026-05-18 21:58:10,461 - INFO  - 
+2026-05-18 21:58:10,461 - INFO  - Assigns:
+2026-05-18 21:58:10,461 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 21:58:10,461 - INFO  - Assigns: failures:
+2026-05-18 21:58:10,462 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 21:58:10,462 - INFO  - 
+2026-05-18 21:58:10,462 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 21:58:10,462 - INFO  - 
+2026-05-18 21:58:10,462 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 21:58:10,462 - INFO  - 
+2026-05-18 21:58:10,462 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 21:58:10,462 - INFO  - 
+2026-05-18 21:58:10,462 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 21:58:10,462 - INFO  - 
+2026-05-18 21:58:10,462 - INFO  - 
+2026-05-18 21:58:10,462 - INFO  - Post Condition:
+2026-05-18 21:58:10,462 - INFO  - [False]
+2026-05-18 21:58:10,462 - INFO  - Post Condition: failures:
+2026-05-18 21:58:10,462 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c, line 14) in 'foo105':
+2026-05-18 21:58:10,463 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c at line: 14
+2026-05-18 21:58:10,463 - INFO  - Error line content: ensures \result == fib_at(n);
+2026-05-18 21:58:10,463 - INFO  - 
+2026-05-18 21:58:10,463 - INFO  - 
+2026-05-18 21:58:10,463 - INFO  - Instance:
+2026-05-18 21:58:10,463 - INFO  - []
+2026-05-18 21:58:10,463 - INFO  - 
+2026-05-18 21:58:10,463 - INFO  - [spec-gen] refine 2/3 score=(syntax=True, satisfy=0.00, valid=0.45) clauses=3
+2026-05-18 21:58:10,464 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@
+  logic integer fib_at(integer k) =
+    k == 0 ? 0
+    : k == 1 ? 1
+    : fib_at(k-1) + fib_at(k-2);
+*/
+
+/*@
+  requires n >= 0;
+  assigns \nothing;
+  ensures \result == fib_at(n) [POSTCONDITION FAILED];
+*/
+int foo105(int n) {
+
+		if(n < 0) return -1;
+		else if(n == 0) return 0;
+
+		int *fib = (int *)malloc(sizeof(int) * (n + 1));
+int fib_len = n + 1;
+		fib[0] = 0;
+		fib[1] = 1;
+		int index = 2;
+
+		
+            
+        /*@
+          loop invariant 0 <= index <= fib_len;
+          loop assigns fib[0..fib_len-1], index;
+        */
+            while (index < fib_len) {
+			fib[index] = fib[index - 2] + fib[index - 1];
+			index++;
+		}
+            
+
+		return fib[n];
+}
+
+2026-05-18 21:58:24,696 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@
+  logic integer fib_at(integer k) =
+    k == 0 ? 0
+    : k == 1 ? 1
+    : fib_at(k-1) + fib_at(k-2);
+*/
+
+/*@
+  requires n >= 0 && n <= 1;
+  assigns \nothing;
+  ensures \result == fib_at(n);
+*/
+int foo105(int n) {
+
+		if(n < 0) return -1;
+		else if(n == 0) return 0;
+
+		int *fib = (int *)malloc(sizeof(int) * (n + 1));
+int fib_len = n + 1;
+		fib[0] = 0;
+		fib[1] = 1;
+		int index = 2;
+
+		
+            
+        /*@
+          loop invariant 0 <= index <= fib_len;
+          loop assigns fib[0..fib_len-1], index;
+        */
+            while (index < fib_len) {
+			fib[index] = fib[index - 2] + fib[index - 1];
+			index++;
+		}
+            
+
+		return fib[n];
+}
+
+2026-05-18 21:58:45,907 - INFO  - syntax Correct
+2026-05-18 21:59:00,502 - INFO  - Loop Invariant:
+2026-05-18 21:59:00,502 - INFO  - [True]
+2026-05-18 21:59:00,502 - INFO  - 
+2026-05-18 21:59:00,502 - INFO  - Assertion:
+2026-05-18 21:59:00,502 - INFO  - []
+2026-05-18 21:59:00,502 - INFO  - 
+2026-05-18 21:59:00,502 - INFO  - Assigns:
+2026-05-18 21:59:00,502 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 21:59:00,502 - INFO  - Assigns: failures:
+2026-05-18 21:59:00,502 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 21:59:00,502 - INFO  - 
+2026-05-18 21:59:00,502 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 21:59:00,503 - INFO  - 
+2026-05-18 21:59:00,503 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 21:59:00,503 - INFO  - 
+2026-05-18 21:59:00,503 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 21:59:00,503 - INFO  - 
+2026-05-18 21:59:00,503 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 21:59:00,503 - INFO  - 
+2026-05-18 21:59:00,503 - INFO  - 
+2026-05-18 21:59:00,503 - INFO  - Post Condition:
+2026-05-18 21:59:00,503 - INFO  - [False]
+2026-05-18 21:59:00,503 - INFO  - Post Condition: failures:
+2026-05-18 21:59:00,503 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c, line 14) in 'foo105':
+2026-05-18 21:59:00,503 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c at line: 14
+2026-05-18 21:59:00,503 - INFO  - Error line content: ensures \result == fib_at(n);
+2026-05-18 21:59:00,503 - INFO  - 
+2026-05-18 21:59:00,504 - INFO  - 
+2026-05-18 21:59:00,504 - INFO  - Instance:
+2026-05-18 21:59:00,504 - INFO  - []
+2026-05-18 21:59:00,504 - INFO  - 
+2026-05-18 21:59:00,504 - INFO  - [spec-gen] refine 3/3 score=(syntax=True, satisfy=0.00, valid=0.45) clauses=3
+2026-05-18 21:59:00,504 - INFO  - [spec-gen] rollback (no_improve_rounds=2, patience=2); rollback file + prune messages to best snapshot (msgs=1)
+2026-05-18 21:59:00,506 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 0.0, 0.45454545454545453), clauses=3)
+2026-05-18 21:59:22,007 - INFO  - syntax Correct
+2026-05-18 21:59:36,120 - INFO  - Loop Invariant:
+2026-05-18 21:59:36,120 - INFO  - [True]
+2026-05-18 21:59:36,120 - INFO  - 
+2026-05-18 21:59:36,120 - INFO  - Assertion:
+2026-05-18 21:59:36,120 - INFO  - []
+2026-05-18 21:59:36,120 - INFO  - 
+2026-05-18 21:59:36,120 - INFO  - Assigns:
+2026-05-18 21:59:36,120 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 21:59:36,120 - INFO  - Assigns: failures:
+2026-05-18 21:59:36,120 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 21:59:36,120 - INFO  - 
+2026-05-18 21:59:36,120 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 21:59:36,120 - INFO  - 
+2026-05-18 21:59:36,120 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 21:59:36,120 - INFO  - 
+2026-05-18 21:59:36,120 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 21:59:36,121 - INFO  - 
+2026-05-18 21:59:36,121 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 21:59:36,121 - INFO  - 
+2026-05-18 21:59:36,121 - INFO  - 
+2026-05-18 21:59:36,121 - INFO  - Post Condition:
+2026-05-18 21:59:36,121 - INFO  - [False]
+2026-05-18 21:59:36,121 - INFO  - Post Condition: failures:
+2026-05-18 21:59:36,121 - INFO  - Goal Post-condition (file log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c, line 14) in 'foo105':
+2026-05-18 21:59:36,121 - INFO  - Error found in file: log/sespec/gpt-5-mini/foo105/20260518_214716_2874432_98139da9/output/foo105.c at line: 14
+2026-05-18 21:59:36,121 - INFO  - Error line content: ensures (n < 0) ? \result == -1
+2026-05-18 21:59:36,121 - INFO  - 
+2026-05-18 21:59:36,121 - INFO  - 
+2026-05-18 21:59:36,121 - INFO  - Instance:
+2026-05-18 21:59:36,121 - INFO  - []
+2026-05-18 21:59:36,121 - INFO  - 
+2026-05-18 21:59:57,410 - INFO  - syntax Correct
+2026-05-18 22:00:09,219 - INFO  - Loop Invariant:
+2026-05-18 22:00:09,220 - INFO  - [True]
+2026-05-18 22:00:09,220 - INFO  - 
+2026-05-18 22:00:09,220 - INFO  - Assertion:
+2026-05-18 22:00:09,220 - INFO  - []
+2026-05-18 22:00:09,220 - INFO  - 
+2026-05-18 22:00:09,220 - INFO  - Assigns:
+2026-05-18 22:00:09,220 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 22:00:09,220 - INFO  - Assigns: failures:
+2026-05-18 22:00:09,220 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 22:00:09,220 - INFO  - 
+2026-05-18 22:00:09,220 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 22:00:09,220 - INFO  - 
+2026-05-18 22:00:09,220 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 22:00:09,221 - INFO  - 
+2026-05-18 22:00:09,221 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 22:00:09,221 - INFO  - 
+2026-05-18 22:00:09,221 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 22:00:09,221 - INFO  - 
+2026-05-18 22:00:09,221 - INFO  - 
+2026-05-18 22:00:09,221 - INFO  - Post Condition:
+2026-05-18 22:00:09,221 - INFO  - []
+2026-05-18 22:00:09,221 - INFO  - 
+2026-05-18 22:00:09,221 - INFO  - Instance:
+2026-05-18 22:00:09,221 - INFO  - []
+2026-05-18 22:00:09,221 - INFO  - 
+2026-05-18 22:00:30,914 - INFO  - syntax Correct
+2026-05-18 22:00:43,973 - INFO  - Loop Invariant:
+2026-05-18 22:00:43,973 - INFO  - [True]
+2026-05-18 22:00:43,973 - INFO  - 
+2026-05-18 22:00:43,973 - INFO  - Assertion:
+2026-05-18 22:00:43,973 - INFO  - []
+2026-05-18 22:00:43,973 - INFO  - 
+2026-05-18 22:00:43,974 - INFO  - Assigns:
+2026-05-18 22:00:43,974 - INFO  - [False, True, True, False, True, False, False, False, True]
+2026-05-18 22:00:43,974 - INFO  - Assigns: failures:
+2026-05-18 22:00:43,974 - INFO  - Goal Assigns nothing in 'foo105':
+2026-05-18 22:00:43,974 - INFO  - 
+2026-05-18 22:00:43,974 - INFO  - Goal Assigns nothing in 'foo105' (3/8):
+2026-05-18 22:00:43,974 - INFO  - 
+2026-05-18 22:00:43,974 - INFO  - Goal Assigns nothing in 'foo105' (5/8):
+2026-05-18 22:00:43,974 - INFO  - 
+2026-05-18 22:00:43,974 - INFO  - Goal Assigns nothing in 'foo105' (6/8):
+2026-05-18 22:00:43,974 - INFO  - 
+2026-05-18 22:00:43,974 - INFO  - Goal Assigns nothing in 'foo105' (7/8):
+2026-05-18 22:00:43,974 - INFO  - 
+2026-05-18 22:00:43,975 - INFO  - 
+2026-05-18 22:00:43,975 - INFO  - Post Condition:
+2026-05-18 22:00:43,975 - INFO  - []
+2026-05-18 22:00:43,975 - INFO  - 
+2026-05-18 22:00:43,975 - INFO  - Instance:
+2026-05-18 22:00:43,975 - INFO  - []
+2026-05-18 22:00:43,975 - INFO  - 
+2026-05-18 22:00:43,975 - INFO  - first_pass:
+2026-05-18 22:00:43,975 - INFO  - syntax=1, valid=None,satisfy=None
+2026-05-18 22:00:43,975 - INFO  - ==================================================
+2026-05-18 22:00:43,975 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-18 22:00:43,976 - INFO  - Total execution time: 807.33 seconds (13.46 minutes)
+2026-05-18 22:00:43,976 - INFO  - ==================================================
+2026-05-18 22:00:43,976 - INFO  - ==================================================
+2026-05-18 22:00:43,976 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-18 22:00:43,976 - INFO  - Total API calls: 10
+2026-05-18 22:00:43,976 - INFO  - Total prompt tokens (input): 62,260
+2026-05-18 22:00:43,976 - INFO  - Total completion tokens (output): 6,804
+2026-05-18 22:00:43,976 - INFO  - Total tokens: 69,064
+2026-05-18 22:00:43,976 - INFO  - Average prompt tokens per call: 6226.0
+2026-05-18 22:00:43,976 - INFO  - Average completion tokens per call: 680.4
+2026-05-18 22:00:43,976 - INFO  - Average total tokens per call: 6906.4
+2026-05-18 22:00:43,976 - INFO  - ==================================================

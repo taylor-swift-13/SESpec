@@ -1,0 +1,960 @@
+2026-05-16 14:03:40,472 - INFO  - workspace_root=/home/yangfp/SESpec/src/log/sespec/gpt-5/foo147/20260516_140340_3302840_8a32cc2a
+2026-05-16 14:03:40,472 - INFO  - 
+🚀 Starting generation of function: foo147
+2026-05-16 14:03:40,472 - INFO  - 
+OUTER PASS: 1/1
+2026-05-16 14:03:40,473 - INFO  - TRY TIME: 0
+2026-05-16 14:03:40,473 - INFO  - 
+FUNCTION INITIALIZATION
+2026-05-16 14:03:40,473 - INFO  - ==================================================
+
+2026-05-16 14:03:42,610 - INFO  - [auto only_loop] False — foo147 returns 'int'
+2026-05-16 14:03:42,610 - INFO  - Initial pending functions: ['foo147', 'malloc']
+2026-05-16 14:03:42,611 - INFO  - Now processing function malloc
+
+2026-05-16 14:03:42,611 - INFO  - [stdlib stub] Skipping body extraction for 'malloc' (treated as external; Frama-C uses its built-in libc contract)
+2026-05-16 14:03:42,611 - INFO  - 
+GENERATE ANNOTATION FOR foo147
+2026-05-16 14:03:42,611 - INFO  - ==================================================
+
+2026-05-16 14:03:42,611 - INFO  - Function foo147 has been initialized
+2026-05-16 14:03:42,611 - INFO  - Starting to generate annotation code for foo147
+2026-05-16 14:03:42,692 - INFO  - 
+GENERATE LOOP INVARIANT FOR foo147
+2026-05-16 14:03:42,692 - INFO  - ==================================================
+
+2026-05-16 14:03:42,801 - INFO  - Variable Maps:[{}]
+2026-05-16 14:03:42,801 - INFO  - Path conditions: [None]
+2026-05-16 14:03:42,801 - INFO  - Pre condition: 
+2026-05-16 14:03:42,801 - INFO  - Loop Condition: d <= count
+2026-05-16 14:03:42,803 - INFO  - Array Names: ['div']
+2026-05-16 14:03:42,803 - INFO  - Updated Loop Conditions: ['d <= count']
+2026-05-16 14:03:42,803 - INFO  - Global Unchanged Variables: []
+2026-05-16 14:03:42,803 - INFO  - Non Inductive Variables: []
+2026-05-16 14:03:42,804 - INFO  - Unchanged Arrays (Read-only): []
+2026-05-16 14:03:42,806 - INFO  - [inv-gen] multi-slot mode: 3 candidate(s) (SE+goal, SE only, simple placeholder)
+2026-05-16 14:03:42,809 - INFO  - examples category: array
+2026-05-16 14:03:42,809 - INFO  - examples:
+2026-05-16 14:03:42,809 - INFO  - 
+Examples (category: array):
+You must use these follow examples as a reference to complete the task, with the following requirements:
+    - You may use the invariant generation logic from these examples as a guide for your own invariant.
+    - You may directly use the predicates or functions defined in these examples.
+    - You may refer to the patterns or ideas from these examples to create new predicates or functions.
+    ```
+    // Count array elements satisfying a per-element predicate (here `> 0`).
+// A recursive `logic integer cntpos` lets the invariant
+// `cnt == cntpos(a, 0, i)` track the count so far across iterations.
+
+/*@
+  logic integer cntpos(int* a, integer lo, integer hi) =
+    lo >= hi ? 0
+             : cntpos(a, lo, hi - 1) + (a[hi - 1] > 0 ? 1 : 0);
+*/
+
+/*@
+  requires \valid_read(a + (0..n-1));
+  requires n >= 0;
+  ensures 0 <= \result <= n;
+  ensures \result == cntpos(a, 0, n);
+*/
+int count_positive(int* a, int n) {
+    int cnt = 0;
+    int i = 0;
+
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant 0 <= cnt <= i;
+      loop invariant cnt == cntpos(a, 0, i);
+      loop assigns i, cnt;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > 0) {
+            cnt++;
+        }
+        i++;
+    }
+    return cnt;
+}
+
+
+// Pattern: in-place array permutation / partition where the loop body
+// swaps two positions guarded by a data-dependent test. The right
+// invariant is usually a SET-LEVEL claim ("multiset of array contents is
+// preserved") combined with a per-element bound (`0 <= a[k] < n`).
+
+/*@
+  logic integer count_eq{L}(int* a, integer lo, integer hi, integer v) =
+    lo >= hi ? 0
+             : count_eq(a, lo, hi - 1, v) + (a[hi - 1] == v ? 1 : 0);
+*/
+
+/*@
+  requires \valid(a + (0..n-1));
+  requires n >= 0;
+  requires \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer i; 0 <= i < n ==> 0 <= a[i] < n;
+  ensures \forall integer v; 0 <= v < n ==>
+            count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+  assigns a[0..n-1];
+*/
+void cycle_sort(int* a, int n) {
+    int i = 0;
+    /*@
+      loop invariant 0 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < n ==> 0 <= a[k] < n;
+      loop invariant \forall integer v; 0 <= v < n ==>
+                       count_eq(a, 0, n, v) == \at(count_eq(a, 0, n, v), Pre);
+      loop assigns i, a[0..n-1];
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] == i) {
+            i++;
+        } else {
+            // swap a[i] and a[a[i]]
+            int j = a[i];
+            int tmp = a[j];
+            a[j] = a[i];
+            a[i] = tmp;
+        }
+    }
+}
+
+
+// Per-element array relations expressed DIRECTLY with `\forall` — no
+// custom `predicate` / `logic` helper required. `\at(e, Pre)` may appear
+// inside a `loop invariant` directly (NOT inside a predicate body).
+
+/*@
+  requires n >= 1;
+  requires \valid_read(a + (0..n-1));
+  ensures \forall integer k; 0 <= k < n ==> a[k] <= \result;
+  ensures \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+  assigns \nothing;
+*/
+int find_max(int *a, int n) {
+    int m = a[0];
+    int i = 1;
+    /*@
+      loop invariant 1 <= i <= n;
+      loop invariant \forall integer k; 0 <= k < i ==> a[k] <= m;
+      loop invariant \forall integer k; 0 <= k < n ==> a[k] == \at(a[k], Pre);
+      loop assigns i, m;
+      loop variant n - i;
+    */
+    while (i < n) {
+        if (a[i] > m) m = a[i];
+        i++;
+    }
+    return m;
+}
+
+
+// Accumulate the sum of an array slice. A recursive `logic integer sum`
+// captures the running total so the invariant `total == sum(array, 0, i)`
+// chains directly to the postcondition.
+
+/*@
+  logic integer sum(int* array, integer begin, integer end) =
+    end <= begin ? 0 : sum(array,begin, end - 1) + array[end - 1];
+*/
+
+/*@ requires \valid(array + (0 .. n-1));
+    requires n >= 0;
+    ensures \result == sum(array, 0, n);
+*/
+int array_sum(int* array, int n) {
+    int total = 0;
+    int i = 0;
+    
+    /*@ loop invariant 0 <= i <= n;
+        loop invariant total == sum(array, 0, i);
+        loop assigns total, i;
+    */
+    while (i < n) {
+        total += array[i];
+        i++;
+    }
+    
+    return total;
+}
+
+
+
+
+
+
+
+
+    ```
+
+2026-05-16 14:04:45,420 - INFO  - [inv-gen] refine 1/10 score=(syntax=True, valid=0.33, satisfy=0.00) clauses=6
+2026-05-16 14:05:22,507 - INFO  - [inv-gen] refine 2/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=4
+2026-05-16 14:05:56,289 - INFO  - [inv-gen] refine 3/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=5
+2026-05-16 14:05:56,294 - INFO  - [inv-gen] converged at refine 3
+2026-05-16 14:06:31,118 - INFO  - [inv-gen] multi-slot: candidate succeeded; skipping fallback slot(s)
+2026-05-16 14:06:48,684 - INFO  - ACSL format loop invariant
+2026-05-16 14:06:48,685 - INFO  - /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+2026-05-16 14:06:48,686 - INFO  - QCP format loop invariant
+2026-05-16 14:06:48,690 - INFO  - /*@ Inv
+    (3 <= d) &&
+((d <= count) => 3 <= d && d <= count) &&
+(div_len == count + 1) &&
+(div_l[0] == 1 && div_l[1] == m && div_l[2] == m * m) &&
+(forall (k:Z), 3 <= k && k < d => div_l[k] == ((m - 1) * (div_l[k - 1] + div_l[k - 2])) % w
+      loop assigns d, div_l[0 .. div_len - 1])
+    */
+    
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+2026-05-16 14:07:08,682 - INFO  - CORRECT INVARIANT
+2026-05-16 14:07:08,686 - INFO  - 
+GENERATE FUNCTION SPECIFICATION FOR foo147
+2026-05-16 14:07:08,686 - INFO  - ==================================================
+
+2026-05-16 14:07:08,757 - INFO  - Starting to generate ACSL specification for foo147
+2026-05-16 14:08:04,489 - INFO  - syntax Correct
+2026-05-16 14:08:27,009 - INFO  - Loop Invariant:
+2026-05-16 14:08:27,010 - INFO  - [True, True, True, True, True]
+2026-05-16 14:08:27,010 - INFO  - 
+2026-05-16 14:08:27,010 - INFO  - Assertion:
+2026-05-16 14:08:27,010 - INFO  - []
+2026-05-16 14:08:27,010 - INFO  - 
+2026-05-16 14:08:27,010 - INFO  - Assigns:
+2026-05-16 14:08:27,010 - INFO  - [False, False, True, False, False, False, False, True]
+2026-05-16 14:08:27,010 - INFO  - 
+2026-05-16 14:08:27,011 - INFO  - Post Condition:
+2026-05-16 14:08:27,011 - INFO  - [False]
+2026-05-16 14:08:27,011 - INFO  - 
+2026-05-16 14:08:27,012 - INFO  - [spec-gen] refine 1/10 score=(syntax=True, valid=0.50, satisfy=0.00) clauses=2
+2026-05-16 14:08:27,012 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  assigns \nothing;
+  ensures \result == seq_value(count, m) [POSTCONDITION FAILED];
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:08:34,243 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0; // optional but keeps seq_value consistent with modulo arithmetic
+  assigns ((int*)\result == \null ? \nothing : ((int*)\result)[0]); // placeholder to avoid empty block
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    /*@ 
+      // Ensure allocation succeeded for subsequent writes
+      requires \valid(div + (0 .. count));
+    */
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:08:34,902 - INFO  - syntax Error
+[kernel] Parsing log/sespec/gpt-5/foo147/20260516_140340_3302840_8a32cc2a/output/foo147.c (with preprocessing)
+[kernel:annot-error] log/sespec/gpt-5/foo147/20260516_140340_3302840_8a32cc2a/output/foo147.c:12: Warning: 
+  unexpected token '\nothing'
+[kernel] User Error: warning annot-error treated as fatal error.
+[kernel] User Error: stopping on
+  file "log/sespec/gpt-5/foo147/20260516_140340_3302840_8a32cc2a/output/foo147.c"
+  that has errors. Add '-kernel-msg-key pp' for preprocessing command.
+[kernel] Frama-C aborted: invalid user input.
+
+2026-05-16 14:08:34,902 - INFO  - [spec-gen] refine 2/10 score=(syntax=False, valid=0.00, satisfy=0.00) clauses=3
+2026-05-16 14:09:22,614 - INFO  - syntax Correct
+2026-05-16 14:09:45,175 - INFO  - Loop Invariant:
+2026-05-16 14:09:45,176 - INFO  - [True, True, True, True, True]
+2026-05-16 14:09:45,176 - INFO  - 
+2026-05-16 14:09:45,176 - INFO  - Assertion:
+2026-05-16 14:09:45,176 - INFO  - []
+2026-05-16 14:09:45,176 - INFO  - 
+2026-05-16 14:09:45,176 - INFO  - Assigns:
+2026-05-16 14:09:45,176 - INFO  - [False, False, True, False, False, False, False, True]
+2026-05-16 14:09:45,176 - INFO  - 
+2026-05-16 14:09:45,176 - INFO  - Post Condition:
+2026-05-16 14:09:45,176 - INFO  - []
+2026-05-16 14:09:45,176 - INFO  - 
+2026-05-16 14:09:45,177 - INFO  - [spec-gen] refine 3/10 score=(syntax=True, valid=0.54, satisfy=0.00) clauses=3
+2026-05-16 14:09:45,177 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+  assigns \nothing;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:09:59,701 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:10:15,167 - INFO  - syntax Correct
+2026-05-16 14:10:20,812 - INFO  - Loop Invariant:
+2026-05-16 14:10:20,813 - INFO  - [True, True, True, True, True]
+2026-05-16 14:10:20,813 - INFO  - 
+2026-05-16 14:10:20,813 - INFO  - Assertion:
+2026-05-16 14:10:20,813 - INFO  - []
+2026-05-16 14:10:20,813 - INFO  - 
+2026-05-16 14:10:20,813 - INFO  - Assigns:
+2026-05-16 14:10:20,813 - INFO  - []
+2026-05-16 14:10:20,813 - INFO  - 
+2026-05-16 14:10:20,813 - INFO  - Post Condition:
+2026-05-16 14:10:20,813 - INFO  - []
+2026-05-16 14:10:20,813 - INFO  - 
+2026-05-16 14:10:20,814 - INFO  - [spec-gen] refine 4/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=2
+2026-05-16 14:10:20,814 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:10:28,047 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:10:43,064 - INFO  - syntax Correct
+2026-05-16 14:10:53,172 - INFO  - Loop Invariant:
+2026-05-16 14:10:53,173 - INFO  - [True, True, True, True, True]
+2026-05-16 14:10:53,173 - INFO  - 
+2026-05-16 14:10:53,173 - INFO  - Assertion:
+2026-05-16 14:10:53,174 - INFO  - []
+2026-05-16 14:10:53,174 - INFO  - 
+2026-05-16 14:10:53,174 - INFO  - Assigns:
+2026-05-16 14:10:53,174 - INFO  - []
+2026-05-16 14:10:53,174 - INFO  - 
+2026-05-16 14:10:53,174 - INFO  - Post Condition:
+2026-05-16 14:10:53,175 - INFO  - []
+2026-05-16 14:10:53,175 - INFO  - 
+2026-05-16 14:10:53,178 - INFO  - [spec-gen] refine 5/10 score=(syntax=True, valid=1.00, satisfy=0.00) clauses=2
+2026-05-16 14:10:53,178 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:11:01,889 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:11:17,379 - INFO  - syntax Correct
+2026-05-16 14:11:37,392 - INFO  - Loop Invariant:
+2026-05-16 14:11:37,393 - INFO  - [True, True, True, True, False]
+2026-05-16 14:11:37,393 - INFO  - 
+2026-05-16 14:11:37,394 - INFO  - Assertion:
+2026-05-16 14:11:37,394 - INFO  - []
+2026-05-16 14:11:37,394 - INFO  - 
+2026-05-16 14:11:37,394 - INFO  - Assigns:
+2026-05-16 14:11:37,394 - INFO  - []
+2026-05-16 14:11:37,394 - INFO  - 
+2026-05-16 14:11:37,394 - INFO  - Post Condition:
+2026-05-16 14:11:37,394 - INFO  - []
+2026-05-16 14:11:37,394 - INFO  - 
+2026-05-16 14:11:37,395 - INFO  - [spec-gen] refine 6/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=2
+2026-05-16 14:11:37,395 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-16 14:11:52,191 - INFO  - syntax Correct
+2026-05-16 14:12:11,411 - INFO  - Loop Invariant:
+2026-05-16 14:12:11,412 - INFO  - [True, True, True, True, False]
+2026-05-16 14:12:11,412 - INFO  - 
+2026-05-16 14:12:11,412 - INFO  - Assertion:
+2026-05-16 14:12:11,412 - INFO  - []
+2026-05-16 14:12:11,412 - INFO  - 
+2026-05-16 14:12:11,412 - INFO  - Assigns:
+2026-05-16 14:12:11,412 - INFO  - []
+2026-05-16 14:12:11,413 - INFO  - 
+2026-05-16 14:12:11,413 - INFO  - Post Condition:
+2026-05-16 14:12:11,413 - INFO  - []
+2026-05-16 14:12:11,413 - INFO  - 
+2026-05-16 14:12:11,413 - INFO  - [spec-gen] refine 7/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=2
+2026-05-16 14:12:11,413 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:12:24,929 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant w == 1000000007;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop invariant d > 3 ==> div[d - 1] == ((m - 1) * (div[d - 2] + div[d - 3])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:12:39,167 - INFO  - syntax Correct
+2026-05-16 14:12:52,974 - INFO  - Loop Invariant:
+2026-05-16 14:12:52,975 - INFO  - [True, True, True, True, True, False, True]
+2026-05-16 14:12:52,975 - INFO  - 
+2026-05-16 14:12:52,976 - INFO  - Assertion:
+2026-05-16 14:12:52,976 - INFO  - []
+2026-05-16 14:12:52,976 - INFO  - 
+2026-05-16 14:12:52,976 - INFO  - Assigns:
+2026-05-16 14:12:52,976 - INFO  - []
+2026-05-16 14:12:52,976 - INFO  - 
+2026-05-16 14:12:52,976 - INFO  - Post Condition:
+2026-05-16 14:12:52,976 - INFO  - []
+2026-05-16 14:12:52,976 - INFO  - 
+2026-05-16 14:12:52,976 - INFO  - [spec-gen] refine 8/10 score=(syntax=True, valid=0.86, satisfy=0.00) clauses=2
+2026-05-16 14:12:52,976 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-16 14:13:07,861 - INFO  - syntax Correct
+2026-05-16 14:13:21,568 - INFO  - Loop Invariant:
+2026-05-16 14:13:21,571 - INFO  - [True, True, True, True, False]
+2026-05-16 14:13:21,571 - INFO  - 
+2026-05-16 14:13:21,571 - INFO  - Assertion:
+2026-05-16 14:13:21,571 - INFO  - []
+2026-05-16 14:13:21,571 - INFO  - 
+2026-05-16 14:13:21,571 - INFO  - Assigns:
+2026-05-16 14:13:21,571 - INFO  - []
+2026-05-16 14:13:21,571 - INFO  - 
+2026-05-16 14:13:21,572 - INFO  - Post Condition:
+2026-05-16 14:13:21,572 - INFO  - []
+2026-05-16 14:13:21,572 - INFO  - 
+2026-05-16 14:13:21,572 - INFO  - [spec-gen] refine 9/10 score=(syntax=True, valid=0.80, satisfy=0.00) clauses=2
+2026-05-16 14:13:21,573 - INFO  - postconditon before refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:13:34,974 - INFO  - postconditon after refine: 
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop invariant \forall integer k; 3 <= k < d ==> div[k] == ((m - 1) * (div[k - 1] + div[k - 2])) % w;
+      loop invariant (3 <= d <= count) ==> div[d] == ((m - 1) * (div[d - 1] + div[d - 2])) % w;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:13:53,489 - INFO  - syntax Correct
+2026-05-16 14:14:06,946 - INFO  - Loop Invariant:
+2026-05-16 14:14:06,947 - INFO  - [True, True, True, True, False, False]
+2026-05-16 14:14:06,947 - INFO  - 
+2026-05-16 14:14:06,947 - INFO  - Assertion:
+2026-05-16 14:14:06,947 - INFO  - []
+2026-05-16 14:14:06,948 - INFO  - 
+2026-05-16 14:14:06,948 - INFO  - Assigns:
+2026-05-16 14:14:06,948 - INFO  - []
+2026-05-16 14:14:06,948 - INFO  - 
+2026-05-16 14:14:06,948 - INFO  - Post Condition:
+2026-05-16 14:14:06,948 - INFO  - []
+2026-05-16 14:14:06,948 - INFO  - 
+2026-05-16 14:14:06,948 - INFO  - [spec-gen] refine 10/10 score=(syntax=True, valid=0.67, satisfy=0.00) clauses=2
+2026-05-16 14:14:06,948 - INFO  - [spec-gen] regression (2 consecutive iters cur_key<=best_key); rollback file + prune messages to best snapshot (msgs=7)
+2026-05-16 14:14:06,954 - INFO  - [spec-gen] refine exhausted → final Houdini on best (score=(True, 1.0, 0.0), clauses=2)
+2026-05-16 14:14:34,811 - INFO  - syntax Correct
+2026-05-16 14:14:49,963 - INFO  - Loop Invariant:
+2026-05-16 14:14:49,965 - INFO  - [True, True, True, True, False]
+2026-05-16 14:14:49,965 - INFO  - 
+2026-05-16 14:14:49,965 - INFO  - Assertion:
+2026-05-16 14:14:49,965 - INFO  - []
+2026-05-16 14:14:49,965 - INFO  - 
+2026-05-16 14:14:49,965 - INFO  - Assigns:
+2026-05-16 14:14:49,966 - INFO  - []
+2026-05-16 14:14:49,966 - INFO  - 
+2026-05-16 14:14:49,966 - INFO  - Post Condition:
+2026-05-16 14:14:49,966 - INFO  - []
+2026-05-16 14:14:49,966 - INFO  - 
+2026-05-16 14:15:04,142 - INFO  - syntax Correct
+2026-05-16 14:15:07,418 - INFO  - Loop Invariant:
+2026-05-16 14:15:07,420 - INFO  - [True, True, True, True]
+2026-05-16 14:15:07,420 - INFO  - 
+2026-05-16 14:15:07,420 - INFO  - Assertion:
+2026-05-16 14:15:07,426 - INFO  - []
+2026-05-16 14:15:07,426 - INFO  - 
+2026-05-16 14:15:07,426 - INFO  - Assigns:
+2026-05-16 14:15:07,426 - INFO  - []
+2026-05-16 14:15:07,426 - INFO  - 
+2026-05-16 14:15:07,426 - INFO  - Post Condition:
+2026-05-16 14:15:07,426 - INFO  - []
+2026-05-16 14:15:07,426 - INFO  - 
+2026-05-16 14:15:07,430 - INFO  - 
+SPECIFICATION FOR foo147
+2026-05-16 14:15:07,431 - INFO  - ==================================================
+
+2026-05-16 14:15:07,431 - INFO  - 
+QCP Specification for function foo147:
+/*@
+
+Require emp
+Ensure Results(__return)
+*/
+2026-05-16 14:15:09,810 - INFO  - 
+VERIFICATION FOR foo147
+2026-05-16 14:15:09,812 - INFO  - ==================================================
+
+2026-05-16 14:15:25,161 - INFO  - syntax Correct
+2026-05-16 14:15:27,861 - INFO  - Loop Invariant:
+2026-05-16 14:15:27,861 - INFO  - [True, True, True, True]
+2026-05-16 14:15:27,861 - INFO  - 
+2026-05-16 14:15:27,866 - INFO  - Assertion:
+2026-05-16 14:15:27,866 - INFO  - []
+2026-05-16 14:15:27,867 - INFO  - 
+2026-05-16 14:15:27,867 - INFO  - Assigns:
+2026-05-16 14:15:27,867 - INFO  - []
+2026-05-16 14:15:27,867 - INFO  - 
+2026-05-16 14:15:27,867 - INFO  - Post Condition:
+2026-05-16 14:15:27,867 - INFO  - []
+2026-05-16 14:15:27,867 - INFO  - 
+2026-05-16 14:15:27,867 - INFO  - 
+🎯 FINAL SPECIFICATION FOR foo147
+2026-05-16 14:15:27,867 - INFO  - ==================================================
+2026-05-16 14:15:27,867 - INFO  - Output path: /home/yangfp/SESpec/src/log/sespec/gpt-5/foo147/20260516_140340_3302840_8a32cc2a/output/foo147.c
+2026-05-16 14:15:27,867 - INFO  - Output file content:
+
+#include <stdlib.h>
+
+/*@ logic integer seq_value(integer k, integer m) =
+      k <= 0 ? 1 :
+      (k == 1 ? m :
+      (k == 2 ? m * m :
+       ((m - 1) * (seq_value(k - 1, m) + seq_value(k - 2, m))) % 1000000007)); */
+/*@
+  requires count >= 2;
+  requires m >= 0;
+*/
+int foo147(int count, int m) {
+
+    int w = 1000000007;
+    int *div = (int *)malloc(sizeof(int) * (count + 1));
+    int div_len = count + 1;
+
+    div[0] = 1;
+    div[1] = m;
+    div[2] = m * m;
+
+    /*@
+      loop invariant 3 <= d;
+      loop invariant (d <= count) ==> 3 <= d && d <= count;
+      loop invariant div_len == count + 1;
+      loop invariant div[0] == 1 && div[1] == m && div[2] == m * m;
+      loop assigns d, div[0 .. div_len - 1];
+    */
+    for (int d = 3; d <= count; d++) {
+        div[d] = ((m - 1)
+                * (div[d - 1] + div[d - 2])) % w;
+    }
+
+    return div[count];
+}
+
+2026-05-16 14:15:27,875 - INFO  - ==================================================
+2026-05-16 14:15:27,875 - INFO  - first_pass:
+2026-05-16 14:15:27,875 - INFO  - syntax=1, valid=1,satisfy=1
+2026-05-16 14:15:27,875 - INFO  - ==================================================
+2026-05-16 14:15:27,875 - INFO  - ⏰ OVERALL EXECUTION TIME STATISTICS
+2026-05-16 14:15:27,875 - INFO  - Total execution time: 707.40 seconds (11.79 minutes)
+2026-05-16 14:15:27,878 - INFO  - ==================================================
+2026-05-16 14:15:27,879 - INFO  - ==================================================
+2026-05-16 14:15:27,879 - INFO  - 📊 TOKEN USAGE STATISTICS
+2026-05-16 14:15:27,879 - INFO  - Total API calls: 13
+2026-05-16 14:15:27,879 - INFO  - Total prompt tokens (input): 134,800
+2026-05-16 14:15:27,879 - INFO  - Total completion tokens (output): 8,986
+2026-05-16 14:15:27,879 - INFO  - Total tokens: 143,786
+2026-05-16 14:15:27,879 - INFO  - Average prompt tokens per call: 10369.2
+2026-05-16 14:15:27,879 - INFO  - Average completion tokens per call: 691.2
+2026-05-16 14:15:27,879 - INFO  - Average total tokens per call: 11060.5
+2026-05-16 14:15:27,879 - INFO  - ==================================================
