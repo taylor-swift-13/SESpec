@@ -1215,8 +1215,17 @@ class SpecificationConvertor:
             return " ".join(f"{prefix} ({var}:Z)," for var in variables)
 
         def expand_chained_relations(expr: str) -> str:
-            atom = r"(?:[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]+\])?|[0-9]+)"
-            pattern = re.compile(rf"\b({atom})\s*(<=|<)\s*({atom})\s*(<=|<)\s*({atom})\b")
+            # An operand is an identifier (optionally subscripted) or a literal,
+            # optionally followed by `+`/`-`/`*` arithmetic terms. Without the
+            # arithmetic tail, a chain whose middle term is an expression —
+            # `0 <= low + 1 <= high <= n` (case frama-c-loop/21) — fails to
+            # match and only the literal-bounded part expands, leaving the
+            # triple `0 <= low + 1 <= high` that QCP rejects ("nary expr
+            # operator"). `&&`/`||`/`=>` and comparison operators are not in the
+            # tail, so an operand never spans a logical connective.
+            term = r"(?:[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]+\])?|[0-9]+)"
+            atom = rf"(?:{term}(?:\s*[+\-*]\s*{term})*)"
+            pattern = re.compile(rf"({atom})\s*(<=|<)\s*({atom})\s*(<=|<)\s*({atom})")
             previous = None
             while previous != expr:
                 previous = expr
@@ -1234,9 +1243,26 @@ class SpecificationConvertor:
         def convert_expr(expr: str) -> str:
             expr = expr.strip()
             expr = re.sub(r"^[A-Za-z_][A-Za-z0-9_]*\s*:\s*", "", expr)
-            expr = re.sub(r"\\valid(?:_read)?\s*\([^)]*\)", "true", expr)
-            expr = re.sub(r"\\separated\s*\([^)]*\)", "true", expr)
-            expr = re.sub(r"\\at\(\s*([^,]+?)\s*,\s*Pre\s*\)", lambda m: f"{m.group(1).strip()}@pre", expr)
+            # `[^)]*` stops at the first `)`, so a nested range like
+            # `\valid_read(a + (0..n-1))` left a dangling outer `)` →
+            # `(true))`, tripping QCP's bison parser. Match one level of
+            # nested parens so the whole predicate (incl. its range) is consumed.
+            expr = re.sub(r"\\valid(?:_read)?\s*\((?:[^()]|\([^()]*\))*\)", "true", expr)
+            expr = re.sub(r"\\separated\s*\((?:[^()]|\([^()]*\))*\)", "true", expr)
+            def _at_to_pre(m):
+                operand = m.group(1).strip()
+                # QCP's bison parser rejects an element subscript followed by
+                # `@pre` (`a_l[k]@pre` → "Expected C expression"). The array
+                # ghost list (`a_l`) already denotes the array's logical
+                # contents, so for a read-only array `\at(a[k], Pre)` is just
+                # `a_l[k]`; dropping the `@pre` is both parseable and correct,
+                # and for a modified array it soundly weakens the (otherwise
+                # inexpressible) "unchanged" clause to a tautology. A scalar
+                # `\at(x, Pre)` keeps `x@pre`, which QCP accepts.
+                if "[" in operand:
+                    return operand
+                return f"{operand}@pre"
+            expr = re.sub(r"\\at\(\s*([^,]+?)\s*,\s*Pre\s*\)", _at_to_pre, expr)
             expr = re.sub(r"\\(forall|exists)\s+(?:int|integer)\s+([^;]+);", convert_quantifier, expr)
             expr = expr.replace("==>", "=>")
             expr = expr.replace("\\true", "true").replace("\\false", "false")
@@ -1249,10 +1275,39 @@ class SpecificationConvertor:
             expr = re.sub(r"\s+", " ", expr)
             return simplify_trivial_true(expr)
 
+        def _is_tautology(clause: str) -> bool:
+            # Drop clauses that carry no information: `E == E`, optionally under
+            # a quantifier/guard (`forall (k:Z), G => E == E`). These arise
+            # routinely from `a[k] == \at(a[k], Pre)` once the unparseable
+            # `@pre` is dropped from the subscript, and from redundant LLM
+            # invariants. Keeping them only inflates the conjunction, which can
+            # tip QCP over its clause budget ("too many clause", case
+            # frama-c-loop/12). A no-op clause can never be load-bearing, so
+            # removing it never weakens the invariant.
+            body = re.sub(r"^\s*forall\s*\([^)]*\)\s*,\s*.*?=>\s*", "", clause).strip()
+            body = body.strip("()").strip()
+            sides = re.split(r"\s*==\s*", body)
+            return len(sides) == 2 and sides[0].strip() == sides[1].strip()
+
+        def _is_pre_guarded_implication(clause: str) -> bool:
+            # Drop a top-level implication `(GUARD) => P` whose GUARD constrains
+            # a parameter's pre-state (`@pre`). LLMs routinely emit these as
+            # defensive paraphrases of an unconditional clause that is already
+            # present (`(0 < n@pre) => 0 <= i <= n`) or that the precondition
+            # makes vacuous (`(!(0 < n@pre)) => ...` when `n > 0` is required).
+            # They add nothing the prover can use yet inflate the conjunction —
+            # which both tips QCP past its clause budget and, for some shapes,
+            # crashes symexec outright (case frama-c-loop/12). A frame clause
+            # such as `n == n@pre` has no top-level `=>` and is kept.
+            head = clause.split("=>", 1)
+            return len(head) == 2 and "@pre" in head[0]
+
         invariants = []
         for invariant in extract_loop_invariants(before):
             converted = convert_expr(invariant)
-            if converted and converted != "true":
+            if (converted and converted != "true"
+                    and not _is_tautology(converted)
+                    and not _is_pre_guarded_implication(converted)):
                 invariants.append(f"({converted})")
 
         body_parts = []

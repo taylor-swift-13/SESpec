@@ -43,7 +43,114 @@ def _read_file(file_path: str) -> str:
 def _strip_qcp_loop_assertions(code: str) -> str:
     code = re.sub(r"/\*@\s*Print user assertion[\s\S]*?\*/\s*", "", code)
     code = re.sub(r"/\*@\s*Inv[\s\S]*?\*/\s*", "", code)
-    return code
+    # Strip ACSL line-comment assertions (`//@ assert ...;`) left in the body.
+    # QCP only understands block annotations (`/*@ ... */`); a `//@ assert`
+    # carrying arithmetic trips the bison parser (`unexpected PT_PLUS`, case
+    # frama-c-loop/2, where the assert sits inside the target's loop body).
+    # These are user verification goals, not inputs to postcondition
+    # synthesis, so dropping them does not weaken the SE result. QCP never
+    # emits `//@`, so this only ever removes ACSL leftovers.
+    code = re.sub(r"^[ \t]*//@.*$\n?", "", code, flags=re.MULTILINE)
+    # SE-translation hardening: strip ACSL-style /*@ loop invariant ...;
+    # loop assigns ...; */ blocks too. They occasionally survive in the
+    # 2_output file (written by inv_gen during the LLM-fill iteration)
+    # and the QCP bison parser chokes on the `loop invariant` keyword,
+    # tripping create_post's SE call (case sespec/102: PT_NATLIT at the
+    # `0 <= sum` clause).
+    #
+    # Only match annotation blocks whose body *itself* mentions a
+    # `loop invariant` / `loop assigns` / `loop variant` clause. Iterate
+    # over every /*@...*/ block so we don't catch unrelated blocks
+    # (predicate / logic / requires / ensures …) that just happen to
+    # precede a loop annotation elsewhere in the file. A prior version
+    # of this strip used a regex with a global look-ahead which
+    # incorrectly dropped predicate definitions in sespec/149.
+    annot_re = re.compile(r"/\*@[\s\S]*?\*/\s*")
+    loop_kw_re = re.compile(r"\bloop\s+(?:invariant|assigns|variant)\b")
+    out = []
+    cursor = 0
+    for m in annot_re.finditer(code):
+        body = m.group(0)
+        if loop_kw_re.search(body):
+            # drop this block
+            out.append(code[cursor:m.start()])
+            cursor = m.end()
+    out.append(code[cursor:])
+    return "".join(out)
+
+
+def _acsl_ptr_lengths(acsl_code: str) -> dict[str, str]:
+    """Recover array lengths from ACSL `\\valid[_read](p + (lo..hi))` ranges.
+
+    The QCP precondition built by spec_gen / convertor falls back to the
+    undeclared predicate `store_int_ptr(p)` whenever its own regex length
+    resolver (Utils.utils.resolve_array_lengths) cannot bind a length —
+    which it cannot for `while (i < n)` array loops, since `_loop_upper_bounds`
+    only scans `for` headers. The LLM-produced ACSL, however, already carries
+    the resolved bound as a validity range, e.g.
+
+        requires \\valid_read(a + (0..n-1));
+
+    Translate those ranges into QCP element counts so the caller can rewrite
+    `store_int_ptr(a)` into `store_int_array(a, n, a_l)`. Returns ptr-name →
+    length-expression. Only the first range seen for a pointer is kept.
+    """
+    # \valid / \valid_read ( <ptr> + ( <lo> .. <hi> ) )
+    # <ptr> is either a bare name `a` or an address-of-element `&a[0]`.
+    rng = re.compile(
+        r"\\valid(?:_read)?\s*\(\s*"
+        r"(?:&\s*(\w+)\s*\[\s*0\s*\]|(\w+))"
+        r"\s*\+\s*\(\s*([^.]+?)\s*\.\.\s*([^)]+?)\s*\)\s*\)"
+    )
+    out: dict[str, str] = {}
+    for m in rng.finditer(acsl_code):
+        name = m.group(1) or m.group(2)
+        lo, hi = m.group(3).strip(), m.group(4).strip()
+        if name in out:
+            continue
+        if lo == "0":
+            # 0..hi  →  hi+1 elements; simplify the common `n-1` to `n`.
+            base = re.fullmatch(r"(.+?)\s*-\s*1", hi)
+            length = base.group(1).strip() if base else f"{hi} + 1"
+        else:
+            length = f"({hi}) - ({lo}) + 1"
+        out[name] = length
+    return out
+
+
+def _rewrite_store_int_ptr_from_acsl(qcp_code: str, acsl_code: str) -> str:
+    """Rewrite QCP `store_int_ptr(p)` → `store_int_array(p, <len>, p_l)` using
+    lengths recovered from the ACSL validity ranges (see `_acsl_ptr_lengths`).
+
+    `store_int_ptr` is not a declared QCP predicate, so leaving it in makes
+    symexec abort with `Use of undeclared identifier 'store_int_ptr'`. We only
+    rewrite a pointer when (a) the ACSL gives it a length and (b) the QCP code
+    already binds its `<p>_l` ghost (always emitted alongside the predicate),
+    so the rewritten `store_int_array` stays well-formed. Pointers whose ACSL
+    is only a plain `\\valid(p)` (no range) keep `store_int_ptr` and still
+    fail — those need a length from another source.
+    """
+    lengths = _acsl_ptr_lengths(acsl_code)
+    for name, length in lengths.items():
+        if f"{name}_l" not in qcp_code:
+            continue
+        store = f"store_int_array({name}, {length}, {name}_l)"
+        qcp_code = re.sub(
+            r"\bstore_int_ptr\s*\(\s*" + re.escape(name) + r"\s*\)",
+            store,
+            qcp_code,
+        )
+        # Without a length bound, symexec cannot derive that even `a[0]` is a
+        # valid read (the array may be empty), aborting with "Cannot derive the
+        # precondition of Memory Read". The body-driven length resolver emits
+        # this same `len > 0 && len < 100` guard (spec_gen.py); mirror it here
+        # for the ACSL-range fallback by appending it once to the `Require`.
+        qcp_code = qcp_code.replace(
+            f"Require {store}",
+            f"Require {store} && ({length} > 0 && {length} < 100)",
+            1,
+        )
+    return qcp_code
 
 
 def _strip_qcp_unsupported_prelude(code: str) -> str:
@@ -53,7 +160,27 @@ def _strip_qcp_unsupported_prelude(code: str) -> str:
         r"[A-Za-z_][A-Za-z0-9_]*\s*\([^;{}]*\)\s*;\s*\n",
         flags=re.MULTILINE,
     )
-    return prototype.sub("", code)
+    code = prototype.sub("", code)
+    return _strip_qcp_labels(code)
+
+
+def _strip_qcp_labels(code: str) -> str:
+    """Remove standalone C label statements (`Label_a:` on its own line).
+
+    Source programs sometimes place a label only to anchor an ACSL
+    `\\at(expr, Label_a)` assertion (case sespec frama-c-loop/3). The assertion
+    is stripped upstream, but the orphan label survives into the QCP input,
+    where the bison parser rejects it (`unexpected PT_COLON, expecting
+    PT_SEMI`). QCP supports neither `goto` nor labelled `\\at`, so a label can
+    never be referenced in a QCP program — dropping it is always safe. `case`
+    and `default` labels never match this pattern (a `case` label carries an
+    expression before the colon; `default` is excluded explicitly)."""
+    return re.sub(
+        r"^[ \t]*(?!default\b)[A-Za-z_]\w*[ \t]*:[ \t]*$\n?",
+        "",
+        code,
+        flags=re.MULTILINE,
+    )
 
 
 def _extract_loop_annotation_blocks(acsl_code: str) -> list[str]:
@@ -85,7 +212,38 @@ def _insert_invariants_before_loops(code: str, qcp_invariants: list[str]) -> str
         parts.append("\n")
         cursor = match.start()
     parts.append(code[cursor:])
-    return "".join(parts)
+    return _hoist_for_loop_decls("".join(parts))
+
+
+def _hoist_for_loop_decls(code: str) -> str:
+    """Hoist a `for`-loop's inline index declaration out of the header when an
+    `Inv` block has been inserted right before it.
+
+    QCP places the loop `Inv` *before* the loop, but `for (int i = 0; ...)`
+    scopes `i` to the loop body, so an `Inv` that mentions `i` fails with
+    `Use of undeclared identifier 'i'` (cases goo13/15/16). Rewriting
+
+        /*@ Inv ... i ... */ for (int i = 0; C; S) { ... }
+
+    into
+
+        int i = 0;
+        /*@ Inv ... i ... */ for (i = 0; C; S) { ... }
+
+    declares `i` in the enclosing scope so the `Inv` can see it, while the
+    re-init in the header keeps loop semantics identical. Only `for` headers
+    directly preceded by an `Inv` are touched; `while` loops and inner loops
+    without their own `Inv` are left alone."""
+    pat = re.compile(
+        r"(/\*@\s*Inv[\s\S]*?\*/\s*)"
+        r"for\s*\(\s*(int|unsigned\s+int|long|size_t)\s+(\w+)\s*=\s*([^;]+);",
+    )
+
+    def repl(m):
+        inv, ty, var, init = m.group(1), m.group(2), m.group(3), m.group(4).strip()
+        return f"{ty} {var} = {init};\n{inv}for ({var} = {init};"
+
+    return pat.sub(repl, code)
 
 
 def _prepare_qcp_input(
@@ -116,6 +274,10 @@ def _prepare_qcp_input(
     qcp_code = _strip_qcp_unsupported_prelude(qcp_code)
     qcp_code = convertor.insert_qcp_externs(qcp_code, qcp_external_decls)
     qcp_code = _insert_invariants_before_loops(qcp_code, qcp_invariants)
+    # Run *after* invariants are re-inserted: `store_int_ptr` is emitted both
+    # in the `Require` clause and (via convertor.create_exists_str) inside the
+    # freshly inserted `Inv` block, so rewriting earlier would miss the latter.
+    qcp_code = _rewrite_store_int_ptr_from_acsl(qcp_code, acsl_code)
     with open(input_file, "w", encoding="utf-8") as file:
         file.write(qcp_code)
     return input_file, None

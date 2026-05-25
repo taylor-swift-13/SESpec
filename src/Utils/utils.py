@@ -376,17 +376,39 @@ def _match_name_convention(param, scalar_names):
 
 # Match `for (... i = 0; i < BOUND ...)` to recover the loop's bound name.
 def _loop_upper_bounds(code: str) -> dict:
-    """Map loop-variable name → set of upper-bound identifiers found in
-    `for (... <i> = 0; <i> < <BOUND> ...)`. Multiple loops over the same
-    variable accumulate."""
+    """Map loop-variable name → set of upper-bound identifiers found in loop
+    headers. Multiple loops over the same variable accumulate.
+
+    Two header shapes are recognised, both with a strict `<` so the bound `B`
+    is the element count of an array indexed by the loop variable:
+
+      for (<i> = 0; <i> < <B> ...)
+      while (<i> < <B>)
+
+    The `while` shape is essential for the very common array idiom that does
+    *not* use a canonical `for`:
+
+        int i = 1; while (i < n) { ... a[i] ... }
+
+    Without it `resolve_array_lengths` cannot bind a length for `a`, so the
+    QCP precondition falls back to the undeclared `store_int_ptr(a)` and
+    symexec aborts (`Use of undeclared identifier 'store_int_ptr'`). The loop
+    variable's initial value is irrelevant to the upper bound, so the `while`
+    pattern intentionally does not constrain it. Compound conditions
+    (`low+1 < high`) and non-identifier bounds (`i < n/2`) are left unmatched
+    on purpose — a wrong length is worse than none."""
     out: dict = {}
-    pat = re.compile(
+    for_pat = re.compile(
         r'for\s*\(\s*(?:int\s+|unsigned\s+int\s+|long\s+|size_t\s+)?'
         r'([A-Za-z_]\w*)\s*=\s*0\s*;\s*'
         r'\1\s*<\s*([A-Za-z_]\w*)'
     )
-    for m in pat.finditer(code):
-        out.setdefault(m.group(1), set()).add(m.group(2))
+    while_pat = re.compile(
+        r'while\s*\(\s*([A-Za-z_]\w*)\s*<\s*([A-Za-z_]\w*)\s*\)'
+    )
+    for pat in (for_pat, while_pat):
+        for m in pat.finditer(code):
+            out.setdefault(m.group(1), set()).add(m.group(2))
     return out
 
 
