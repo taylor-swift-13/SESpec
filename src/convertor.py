@@ -8,6 +8,40 @@ from collections import Counter
 from llm import *
  
 
+# Loop-aware postcondition-derivation guide. Shared by postcondition/assigns
+# generation (specgen) and the function-contract refine prompt: when the target
+# function contains a loop, the model is told to symbolically continue from the
+# loop-exit state (last loop invariant + negated loop condition) through the
+# post-loop code to the return point, instead of guessing the return state.
+_LOOP_AWARE_DERIVATION_GUIDE = (
+    "### Loop-aware postcondition derivation: ###\n"
+    "The function below contains at least one loop. To produce a sound "
+    "`ensures` clause:\n"
+    "- Take the **last** `loop invariant` of the loop together with the "
+    "**negation of the loop condition** (loop-exit state).\n"
+    "- Symbolically execute every statement after the loop, propagating "
+    "the state through assignments, branches, and any nested loops "
+    "(applying the same rule recursively).\n"
+    "- The `ensures` clause must describe the resulting state at the "
+    "function's return point — not the state mid-loop.\n"
+    "- Do not weaken the postcondition: every fact derivable from the "
+    "loop-exit state plus the post-loop code must be reflected, "
+    "including return values and any memory written after the loop.\n"
+)
+
+
+def loop_aware_derivation_guide(code: str) -> str:
+    """Return the loop-aware derivation guide when ``code`` contains a loop,
+    else ''. ``code`` may be the annotated function or its raw body."""
+    if not code:
+        return ''
+    if re.search(r'\bloop\s+invariant\b', code) or re.search(
+        r'\b(for|while|do)\s*[\(\{]', code
+    ):
+        return _LOOP_AWARE_DERIVATION_GUIDE
+    return ''
+
+
 class SpecificationConvertor:
 
     def __init__(self, function_info: FunctionInfo = None, llm_config: LLMConfig = None):
@@ -2211,29 +2245,10 @@ ensures {result};
             prompt_template = file.read()
 
         # When the function body contains a loop, instruct the model to
-        # symbolically continue execution from the *last* loop invariant
-        # (combined with the negation of the loop condition) through the
-        # remaining straight-line code until the function returns, and use the
-        # resulting state as the postcondition.
-        loop_guide = ''
-        if re.search(r'\bloop\s+invariant\b', annotations) or re.search(
-            r'\b(for|while|do)\s*[\(\{]', annotations
-        ):
-            loop_guide = (
-                "### Loop-aware postcondition derivation: ###\n"
-                "The function below contains at least one loop. To produce a sound "
-                "`ensures` clause:\n"
-                "- Take the **last** `loop invariant` of the loop together with the "
-                "**negation of the loop condition** (loop-exit state).\n"
-                "- Symbolically execute every statement after the loop, propagating "
-                "the state through assignments, branches, and any nested loops "
-                "(applying the same rule recursively).\n"
-                "- The `ensures` clause must describe the resulting state at the "
-                "function's return point — not the state mid-loop.\n"
-                "- Do not weaken the postcondition: every fact derivable from the "
-                "loop-exit state plus the post-loop code must be reflected, "
-                "including return values and any memory written after the loop.\n"
-            )
+        # symbolically continue execution from the loop-exit state through the
+        # remaining straight-line code to the return point (shared helper, also
+        # reused by the function-contract refine prompt).
+        loop_guide = loop_aware_derivation_guide(annotations)
 
         # Category-specific ACSL pitfalls (universal + program-type-specific
         # hints). Critical for recursive programs: carries the `decreases`

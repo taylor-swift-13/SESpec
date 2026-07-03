@@ -3,7 +3,7 @@ import re
 import logging
 from Utils.main_class import *
 from Utils.utils import extract_function, source_has_acsl_assert
-from convertor import SpecificationConvertor
+from convertor import SpecificationConvertor, loop_aware_derivation_guide
 from specification_verify import SpecVerifier
 from LoopInvGen.acsl_fixer import ACSLFixer
 from config import *
@@ -1912,11 +1912,16 @@ class SpecGenerator:
             self._OUTPUT_FORMAT_FULL_FILE if allow_full_file
             else self._OUTPUT_FORMAT_TARGET_ONLY
         )
+        # When the target function has a loop, reuse the same loop-aware
+        # postcondition-derivation guide as generation so refinement re-derives
+        # the loop-exit -> return state instead of patching the contract blindly.
+        loop_guide = loop_aware_derivation_guide(c_code)
         error_prompt = prompt_template.format(
             error_str=error_message,
             strategy_blocks=strategy_blocks,
             c_code=c_code,
             category_hints=category_hints,
+            loop_guide=loop_guide,
             output_format_block=output_format_block,
         )
         return error_prompt
