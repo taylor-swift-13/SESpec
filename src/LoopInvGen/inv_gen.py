@@ -1,4 +1,5 @@
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import re
 import os
@@ -1336,21 +1337,218 @@ class InvGenerator:
 
     def get_annotations(self, prompt):
         """Call OpenAI API to get ACSL annotations"""
-       
-
-        def extract_last_c_code(text):
-                # Match C code blocks (Markdown code blocks or code starting with #include)
-                code_blocks = re.findall(r'```c(.*?)```', text, re.DOTALL)  # Markdown code blocks
-
-                return code_blocks[-1] if code_blocks else text  # Return last C code block
-
-            # Process response
         assistant_response = self.llm.chat(prompt)
+        return self._clean_annotation_response(assistant_response)
+
+    @staticmethod
+    def _clean_annotation_response(assistant_response):
+        """Normalize one model response to the last emitted C translation unit."""
         assistant_response = re.sub(r'>\s*Reasoning\s*[\s\S]*?(?=\n\n|$)', '', assistant_response, flags=re.IGNORECASE)
         assistant_response = re.sub(r'<think>.*?</think>', '', assistant_response, flags=re.DOTALL)
-        assistant_response = extract_last_c_code(assistant_response)
+        code_blocks = re.findall(r'```c(.*?)```', assistant_response, re.DOTALL)
+        return code_blocks[-1] if code_blocks else assistant_response
 
-        return assistant_response
+    def _goal_is_available(self) -> bool:
+        """Return whether a verification goal is public to this invocation.
+
+        Integrations may set ``goal_available`` explicitly.  Otherwise we
+        inspect only the model-visible function source; the original source is
+        intentionally not consulted so a target-hiding adapter cannot leak it
+        through template selection.
+        """
+        configured = getattr(self.config, 'goal_available', None)
+        if configured is not None:
+            return bool(configured)
+        visible_source = getattr(self.info, 'code', '') or ''
+        return bool(re.search(
+            r'(?:/\*@\s*(?:assert|ensures)\b|//@\s*(?:assert|ensures)\b|'
+            r'\bassert\s*\()',
+            visible_source,
+        ))
+
+    def _new_parallel_chatbot(self):
+        """Construct an isolated chat session for one parallel strategy."""
+        factory = getattr(self, '_parallel_chatbot_factory', None)
+        return factory() if factory is not None else Chatbot(self.llm_config)
+
+    def _parallel_generate_templates(self, prompt_specs):
+        """Generate one response per named template concurrently.
+
+        Each branch owns an independent chat history.  Results are returned in
+        input order so merging is deterministic even when requests finish in a
+        different order.
+        """
+        if not prompt_specs:
+            return []
+        results = [None] * len(prompt_specs)
+
+        def generate(index, name, prompt):
+            response = self._new_parallel_chatbot().chat(prompt)
+            return index, name, response
+
+        with ThreadPoolExecutor(max_workers=len(prompt_specs)) as pool:
+            futures = [
+                pool.submit(generate, index, name, prompt)
+                for index, (name, prompt) in enumerate(prompt_specs)
+            ]
+            for future in as_completed(futures):
+                index, name, response = future.result()
+                results[index] = (name, response)
+        return results
+
+    @staticmethod
+    def _loop_clauses(block_body):
+        """Extract complete loop clauses from one ACSL annotation body.
+
+        Quantified invariants contain an internal semicolon, so a clause ends
+        after one semicolon plus one for each quantifier declaration.
+        """
+        clauses = []
+        current = []
+        required_semicolons = 0
+        seen_semicolons = 0
+        start_re = re.compile(r'^\s*loop\s+(?:invariant|assigns|variant)\b')
+        for line in block_body.splitlines(keepends=True):
+            if not current:
+                if not start_re.match(line):
+                    continue
+                current = [line]
+                required_semicolons = 1 + len(re.findall(
+                    r'\\(?:forall|exists|let)\b', line
+                ))
+                seen_semicolons = line.count(';')
+            else:
+                current.append(line)
+                required_semicolons += len(re.findall(
+                    r'\\(?:forall|exists|let)\b', line
+                ))
+                seen_semicolons += line.count(';')
+            if seen_semicolons >= required_semicolons:
+                clause = ''.join(current).strip()
+                if 'PLACE_HOLDER_' not in clause:
+                    clauses.append(clause)
+                current = []
+                required_semicolons = 0
+                seen_semicolons = 0
+        return clauses
+
+    @staticmethod
+    def _body_without_loop_clauses(block_body):
+        """Remove loop clauses while retaining other ACSL declarations."""
+        output = []
+        skipping = False
+        required_semicolons = 0
+        seen_semicolons = 0
+        start_re = re.compile(r'^\s*loop\s+(?:invariant|assigns|variant)\b')
+        for line in block_body.splitlines(keepends=True):
+            if not skipping and start_re.match(line):
+                skipping = True
+                required_semicolons = 1 + len(re.findall(
+                    r'\\(?:forall|exists|let)\b', line
+                ))
+                seen_semicolons = line.count(';')
+            elif skipping:
+                required_semicolons += len(re.findall(
+                    r'\\(?:forall|exists|let)\b', line
+                ))
+                seen_semicolons += line.count(';')
+            else:
+                output.append(line)
+            if skipping and seen_semicolons >= required_semicolons:
+                skipping = False
+                required_semicolons = 0
+                seen_semicolons = 0
+        return ''.join(output)
+
+    @classmethod
+    def _merge_parallel_annotations(cls, candidates, fallback):
+        """Union clauses from parallel templates into matching loop blocks."""
+        block_re = re.compile(r'/\*@(?P<body>[\s\S]*?)\*/')
+        cleaned = []
+        for candidate in candidates:
+            if not candidate:
+                continue
+            candidate = strip_unfilled_supplementary(candidate)
+            cleaned.append(candidate)
+        if not cleaned:
+            return strip_unfilled_supplementary(fallback)
+
+        def loop_bodies(text):
+            return [
+                match.group('body') for match in block_re.finditer(text)
+                if re.search(r'\bloop\s+(?:invariant|assigns|variant)\b',
+                             match.group('body'))
+            ]
+
+        # Keep the deterministic template as the structural base whenever it
+        # contains the expected loop blocks.  Model branches contribute only
+        # ACSL clauses/helpers; an otherwise useful branch therefore cannot
+        # accidentally rewrite the C program while returning a full file.
+        base = (
+            fallback
+            if loop_bodies(fallback)
+            else next((text for text in cleaned if loop_bodies(text)), fallback)
+        )
+        all_bodies = [loop_bodies(text) for text in cleaned]
+        block_index = 0
+
+        def replace_block(match):
+            nonlocal block_index
+            body = match.group('body')
+            if not re.search(r'\bloop\s+(?:invariant|assigns|variant)\b', body):
+                return match.group(0)
+
+            merged = []
+            seen = set()
+            for bodies in all_bodies:
+                if block_index >= len(bodies):
+                    continue
+                for clause in cls._loop_clauses(bodies[block_index]):
+                    key = re.sub(r'\s+', ' ', clause).strip()
+                    if key not in seen:
+                        seen.add(key)
+                        merged.append(clause)
+
+            remainder = cls._body_without_loop_clauses(body).rstrip()
+            indent_match = re.search(
+                r'(?m)^(\s*)loop\s+(?:invariant|assigns|variant)\b', body
+            )
+            indent = indent_match.group(1) if indent_match else '  '
+            rendered = '\n'.join(
+                '\n'.join(indent + line.lstrip() for line in clause.splitlines())
+                for clause in merged
+            )
+            pieces = [piece for piece in (remainder, rendered) if piece.strip()]
+            block_index += 1
+            return '/*@\n' + '\n'.join(pieces).strip() + '\n*/'
+
+        merged_text = block_re.sub(replace_block, base)
+
+        # Preserve helper definitions emitted by any branch.  These blocks are
+        # top-level and safe to deduplicate textually before the C translation
+        # unit; unused helpers are removed by the existing cleanup stage.
+        definitions = []
+        definition_keys = set()
+        for text in cleaned:
+            for match in block_re.finditer(text):
+                body = match.group('body')
+                if not re.match(r'^\s*(?:logic|predicate)\b', body):
+                    continue
+                definition = match.group(0).strip()
+                key = re.sub(r'\s+', ' ', definition)
+                if key not in definition_keys and definition not in merged_text:
+                    definition_keys.add(key)
+                    definitions.append(definition)
+        definition_placeholder_re = re.compile(
+            r'/\*@\s*PLACE_HOLDER_PREDICATE_OR_LOGIC_FUNCTION\s*\*/'
+        )
+        rendered_definitions = '\n'.join(definitions)
+        merged_text, replacement_count = definition_placeholder_re.subn(
+            rendered_definitions, merged_text, count=1
+        )
+        if definitions and replacement_count == 0:
+            merged_text = rendered_definitions + '\n' + merged_text
+        return strip_unused_predicates(merged_text)
 
     
     
@@ -1587,16 +1785,37 @@ class InvGenerator:
                                     self.logger.info(annotations_with_goal)
                                 annotations_list.append(annotations_with_goal)
 
-                                
             else:
                 simple = True
+
+            # Some loops yield no symbolic var-map even though the structural
+            # SE pass still found useful facts such as ``loop assigns``.  Keep
+            # the same three-way generation contract for those loops instead
+            # of silently falling back to Simple only.
+            if (
+                self.config.use_se
+                and not inner_flags[idx]
+                and not simple
+                and len(annotations_list) == 1
+            ):
+                annotations_with_supp = self.append_supplementary_annotations(
+                    annotations
+                )
+                annotations_list.append(annotations_with_supp)
+                annotations_with_goal = self.append_verification_goal_annotations(
+                    annotations, None, None
+                )
+                annotations_with_goal = self.append_supplementary_annotations(
+                    annotations_with_goal
+                )
+                annotations_list.append(annotations_with_goal)
 
             if self.config.recursive_loop:
                 annotations_list = [annotations_list[0]]
 
-            # Triple-slot selection: SE+goal first (has `==> PLACE_HOLDER`
-            # template anchoring the assert), SE only, then simple as final
-            # fallback. Sequential with early-break on full success.
+            # Build the three generation strategies.  When all are available
+            # they are launched concurrently and merged before verification;
+            # they are not a sequential fallback chain.
             # Layout after construction:
             #   [0] simple placeholder (no SE info, no PLACE_HOLDER_*)
             #   [1] SE template WITHOUT verification_goal placeholder
@@ -1604,23 +1823,24 @@ class InvGenerator:
             #
             # Rule:
             #   use_se=False (or inner_flags[idx])   → [simple]
-            #   use_se=True                          → [SE+goal, SE, simple]
+            #   use_se=True                          → [SE, SE+goal, simple]
             if simple or len(annotations_list) <= 1:
                 annotations_list = [annotations_list[0]]
                 slot_kinds = ['simple placeholder']
             elif len(annotations_list) >= 3:
                 annotations_list = [
-                    annotations_list[2],  # SE + verification_goal
                     annotations_list[1],  # SE only
+                    annotations_list[2],  # SE + verification_goal
                     annotations_list[0],  # simple
                 ]
-                slot_kinds = ['SE+goal', 'SE only', 'simple placeholder']
+                slot_kinds = ['SE only', 'SE+goal', 'simple placeholder']
             else:
                 # No SE+goal built (var_maps empty); fall back to dual-slot
                 annotations_list = [annotations_list[1], annotations_list[0]]
                 slot_kinds = ['SE only', 'simple placeholder']
+            mode = 'parallel' if len(annotations_list) >= 3 else 'fallback'
             self.logger.info(
-                f'[inv-gen] multi-slot mode: {len(annotations_list)} '
+                f'[inv-gen] {mode} template mode: {len(annotations_list)} '
                 f'candidate(s) ({", ".join(slot_kinds)})'
             )
 
@@ -1633,26 +1853,69 @@ class InvGenerator:
 
 
 
-            # Skip the legacy rotation/trim in multi-slot mode — we want
-            # `annotations_list` in the desired sequence [SE+goal, SE, simple]
-            # already, so the highest-priority candidate runs first and
-            # simple is the final fallback.
+            # Skip the legacy rotation/trim in multi-slot mode.
             if len(annotations_list) == 1:
                 first_element = annotations_list.pop(0)
                 annotations_list.append(first_element)
 
+            # Generate SE, SE+goal, and Simple concurrently, then combine
+            # their clauses into one candidate.  With no public goal, the
+            # second branch becomes a deliberately diverse SE generation and
+            # never sees an empty goal placeholder.
+            if len(annotations_list) >= 3:
+                examples = (
+                    self.get_examples(loop_content)
+                    if getattr(self.config, 'use_examples', True)
+                    else ''
+                )
+                goal_available = self._goal_is_available()
+                prompt_specs = []
+                for annotations, slot_kind in zip(annotations_list, slot_kinds):
+                    if 'simple' in slot_kind:
+                        prompt = self.get_simgen_prompt(annotations)
+                    elif slot_kind == 'SE+goal' and not goal_available:
+                        prompt = self.get_user_prompt_template(
+                            annotations_list[0], pre_condition, examples
+                        ) + (
+                            '\nProduce an independent SE-guided candidate. '
+                            'Explore materially different equalities, bounds, '
+                            'and conserved relations; no verification goal is '
+                            'available, so do not invent one.'
+                        )
+                        slot_kind = 'SE diverse'
+                    else:
+                        prompt = self.get_user_prompt_template(
+                            annotations, pre_condition, examples
+                        )
+                    prompt_specs.append((slot_kind, prompt))
+
+                generated = self._parallel_generate_templates(prompt_specs)
+                responses = [
+                    self._clean_annotation_response(response)
+                    for _, response in generated
+                ]
+                annotations = self._merge_parallel_annotations(
+                    responses, annotations_list[0]
+                )
+                self.logger.info(
+                    '[inv-gen] parallel templates merged: '
+                    + ', '.join(name for name, _ in generated)
+                )
+                annotations_list = [annotations]
+                slot_kinds = ['parallel merged']
+
 
             correct_flag = False
             loop_invariant = ''
-            # Lazy per-slot LLM fill: only call the LLM for slot N when the
-            # main loop actually reaches it. Earlier slots may have
-            # succeeded and broken out, so we avoid burning tokens on
-            # fallback slots that never run.
+            # A reduced one/two-template mode retains the legacy fallback;
+            # the full three-template mode arrives here as one merged pool.
             examples = None
 
             for i, (annotations, slot_kind) in enumerate(zip(annotations_list, slot_kinds)):
 
-                if 'simple' in slot_kind:
+                if slot_kind == 'parallel merged':
+                    user_prompt = None
+                elif 'simple' in slot_kind:
                     self.logger.debug(f"handle simple loop (slot {i+1})")
                     user_prompt = self.get_simgen_prompt(annotations)
                 else:
@@ -1665,7 +1928,8 @@ class InvGenerator:
                     user_prompt = self.get_user_prompt_template(
                         annotations, pre_condition, examples
                     )
-                annotations = self.get_annotations(user_prompt)
+                if user_prompt is not None:
+                    annotations = self.get_annotations(user_prompt)
 
                 if self.config.debug:
                     self.logger.info("candidated loop invariant")
@@ -1959,4 +2223,3 @@ class InvGenerator:
 # if __name__ == "__main__":
 #     generator = InvGenerator()
 #     generator.run()
-

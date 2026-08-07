@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from typing import Optional
 
 @dataclass
 class MainConfig:
@@ -42,6 +43,9 @@ class MainConfig:
     pass_count:int = 5
     think:bool = True
     use_se:bool = True  # False forces LLM for all postcondition generation; also disables structural loop-invariant template
+    # None auto-detects a public assertion/ensures clause in the model-visible
+    # source.  Adapters that deliberately hide the target should set False.
+    goal_available:Optional[bool] = None
     use_examples:bool = True  # False disables loading category-specific examples into inv_gen prompts; useful for ablation
     trivial_refine:bool = False  # True swaps refine prompt to refine_trivial.txt: only {error_str} + {c_code}, no strategy/category hints; used for ablation
 

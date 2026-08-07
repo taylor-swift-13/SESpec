@@ -1,5 +1,6 @@
 import openai
 import re
+import threading
 from config import LLMConfig
 from abc import ABC, abstractmethod # 导入 ABC 和 abstractmethod 用于创建抽象基类
 from typing import Dict
@@ -13,6 +14,7 @@ class TokenTracker:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance._lock = threading.Lock()
             cls._instance.stats = {
                 "total_prompt_tokens": 0,
                 "total_completion_tokens": 0,
@@ -23,26 +25,34 @@ class TokenTracker:
     
     def record(self, prompt_tokens: int, completion_tokens: int, total_tokens: int):
         """记录一次 API 调用的 token 使用情况"""
-        self.stats["total_prompt_tokens"] += prompt_tokens
-        self.stats["total_completion_tokens"] += completion_tokens
-        # 使用 prompt_tokens + completion_tokens 作为 total_tokens，确保统计一致性
-        # 而不是直接使用 API 返回的 total_tokens（可能包含其他 token）
-        calculated_total = prompt_tokens + completion_tokens
-        self.stats["total_tokens"] += calculated_total
-        self.stats["call_count"] += 1
+        with self._lock:
+            self.stats["total_prompt_tokens"] += prompt_tokens
+            self.stats["total_completion_tokens"] += completion_tokens
+            # 使用 prompt_tokens + completion_tokens 作为 total_tokens，确保统计一致性
+            # 而不是直接使用 API 返回的 total_tokens（可能包含其他 token）
+            calculated_total = prompt_tokens + completion_tokens
+            self.stats["total_tokens"] += calculated_total
+            self.stats["call_count"] += 1
+
+    def record_call_without_usage(self):
+        """Record a completed API call whose provider omitted usage data."""
+        with self._lock:
+            self.stats["call_count"] += 1
     
     def get_stats(self) -> Dict:
         """获取当前统计信息"""
-        return self.stats.copy()
+        with self._lock:
+            return self.stats.copy()
     
     def reset(self):
         """重置统计信息"""
-        self.stats = {
-            "total_prompt_tokens": 0,
-            "total_completion_tokens": 0,
-            "total_tokens": 0,
-            "call_count": 0
-        }
+        with self._lock:
+            self.stats = {
+                "total_prompt_tokens": 0,
+                "total_completion_tokens": 0,
+                "total_tokens": 0,
+                "call_count": 0
+            }
 
 
 # 全局 token 追踪器实例
@@ -126,7 +136,7 @@ class OpenAILLM(BaseChatModel):
             else:
                 # 如果 API 调用成功但没有 usage 信息，仍然应该计入调用次数
                 # 但无法记录 token 使用情况
-                _token_tracker.stats["call_count"] += 1
+                _token_tracker.record_call_without_usage()
             
             # 处理 <think> 标签，并更新历史
             processed_response = self._process_response_think_tags(assistant_response)
