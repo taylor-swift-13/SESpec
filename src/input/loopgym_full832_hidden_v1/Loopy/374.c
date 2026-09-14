@@ -1,0 +1,19 @@
+                                                          
+
+void loopy_374(void) {
+    int x = 0;
+    int y = 50;
+    while(x < 100) {
+	if (x < 50) {
+	    x = x + 1;
+	} else {
+	    x = x + 1;
+	    y = y + 1;
+	}
+    }
+    {;
+
+}
+
+    return;
+}

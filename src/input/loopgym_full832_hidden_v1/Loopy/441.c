@@ -1,0 +1,25 @@
+                                                                 
+extern int unknown_int(void);
+
+int SIZE = 50000001;
+
+/*@
+  requires n <= SIZE;
+*/
+void loopy_441(int n) {
+  int i, j;
+  
+  i = 0; j=0;
+  while(i<n){ 
+ 
+    if(unknown_int())	  
+      i = i + 6; 
+    else
+     i = i + 3;    
+  }
+  {;
+
+}
+
+  return;
+}

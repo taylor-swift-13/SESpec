@@ -1,0 +1,21 @@
+                                                                            
+extern int unknown_int(void);
+/*@
+  requires n>=0 && sum==0 && i==0;
+*/
+void loopy_395(int n, int sum, int i) {
+  
+  
+  
+  
+  
+  while (i<n) {
+    sum=sum+i;
+    i++;
+  }
+  {;
+
+}
+
+  return;
+}

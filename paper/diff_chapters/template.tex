@@ -1,0 +1,56 @@
+\subsection{Template Generation}
+\label{sec:template}
+
+\DIFaddbegin
+The $\mathrm{LoopInvTemGen}$ procedure takes as inputs the loop body, the loop precondition, and the sets of unchanged and non-inductive variables, and generates invariant templates. These templates have parameters partially determined by symbolic execution results, while the remaining undetermined parameters are completed using the subsequent LLM synthesis method (i.e., $\mathrm{OuterLoopLLMCall}$ in Algorithm~\ref{alg:loopinv-gen}). The prompt support material used during instantiation, including selected examples and ACSL guidance, is constructed as described in Section~\ref{sec:prompt}.
+\DIFaddend
+%This template-based approach transforms LLM-based invariant synthesis into a constrained completion task,  improving the syntactic correctness of generated invariants while reducing the LLM's workload.
+\DIFaddbegin
+Below we introduce six forms of invariant templates. The first four are deterministically derived from symbolic execution and cover variables whose behavior is captured by $\textit{SP}$; the fifth is a goal-dependent template that is enabled only when a verification goal is provided at the loop boundary; the sixth is a deliberately free-form \emph{sink} template that lets the LLM contribute invariants involving quantifiers and inductive predicates, which symbolic execution cannot anchor.
+Without this sink, loop invariants that rely on relations not enumerated by symbolic execution, such as quantified array properties or recursive‑data‑structure predicates, would have no skeleton to complete and could not be expressed.
+\DIFaddend
+
+\begin{itemize}
+    \item Unchanged variables:
+For any variable $v \in uV$ and any execution path $\pi_j$ to the loop entry $p$, $v$ retains its symbolic value $\sigma_{p, \pi_j}(v)$ at the loop entry:
+\[ PC_{\pi_j} \Rightarrow v = \sigma_{p, \pi_j}(v) \]
+
+
+\item Loop skip conditional property: 
+For a path $\pi_j$ to $p$ and a loop condition $B$, if $B$ for path $\pi_j$ is false, the loop is skipped without altering variables:
+\[\neg (B \land (PC_{\pi_j} \land \sigma_{p, \pi_j})) \Rightarrow v = \sigma_{p, \pi_j}(v)\]
+%where $\mathrm{StateForm}$ returns the logical formula specifying the values of corresponding symbolic state. % This ensures $v$ retains its initial value. 
+%Both the above two types of invariants satisfy the base and preservation conditions.
+
+
+
+\item Non-inductive variables: 
+For a non-inductive variable $v$ (whose value is updated independently of its value from the previous iteration) and any path $\pi_j$ to $p$:
+\[(B \land (PC_{\pi_j} \land \sigma_{p, \pi_j})) \Rightarrow (v = \sigma_{p, \pi_j}(v)) \lor \Phi(v)\]
+where $\Phi(v)$ is the inductive invariant to be synthesized.
+
+
+\item Inductive variables: 
+For an inductive variable $v$ (which is neither unchanged nor non-inductive) and any path $\pi_j$ to $p$:
+\[ (B \land (PC_{\pi_j} \land \sigma_{p, \pi_j})) \Rightarrow \Phi(v) \]
+
+\item Verification goals:
+In addition to variable-specific templates, we also introduce templates corresponding to each verification goal.
+%The rationale is that, under deductive verification, many verification goals are themselves loop invariants in disguise.
+For a verification goal $g$ and any path $\pi_j$ to $p$:
+\[ (B \land (PC_{\pi_j} \land \sigma_{p, \pi_j})) \Rightarrow \Phi(g)
+\]
+
+\item Free-form sink: an unanchored slot $\Phi$ that lets the LLM propose invariants involving quantifiers and inductive predicates that the deterministic forms above cannot anchor.
+
+\end{itemize}
+
+
+
+
+
+
+
+
+
+This template-driven approach is crucial for our loop invariant generation algorithm. By leveraging information derived from symbolic execution, it simplifies the LLM's task, shifting from full invariant generation from scratch to completing invariant templates. It also offers structural guidance, helping the LLM produce formulas that conform to the required ACSL logical syntax. More importantly, this approach encourages strong invariants that capture relevant variable behaviors across feasible execution paths, while the final verifier-guided refinement step determines which generated clauses can be accepted by Frama-C/WP.

@@ -1,0 +1,21 @@
+                                                                
+
+void loopy_124(int i)
+{
+  int j=0;
+  
+  int x=100;
+   
+  {
+  i =0;
+  while (i< x) {
+    j = j + 2;
+    i++;
+  }
+}
+
+  {;
+
+}
+
+}

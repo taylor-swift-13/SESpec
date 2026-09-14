@@ -516,9 +516,7 @@ def aggregate(components):
 
 def remap_path(p):
     pp = Path(p)
-    if pp.exists():
-        return pp
-    return Path(str(p).replace("/paper_data_final/", "/paper_data/"))
+    return pp
 
 
 def process_case(case_id, rows, timeout, force, cache):

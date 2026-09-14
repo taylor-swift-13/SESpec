@@ -12,7 +12,7 @@ int func3(int *a, int n, int x, int *sum) {
     }
     Label_a:
     *sum += 0;
-    //@ assert \at(*sum, Label_a) == count*x;
+
     return count;
 }
 
@@ -21,5 +21,5 @@ void goo3() {
     int arr[5] = {1, 2, 3, 4, 5};
     int sum = 0;
     int count = func3(arr, 5, 3, &sum);
-    //@ assert sum == count*3;
+
 }

@@ -1,4 +1,5 @@
 import openai
+import os
 import re
 import threading
 from config import LLMConfig
@@ -115,8 +116,11 @@ class OpenAILLM(BaseChatModel):
             # 在本流水线（7-17 次顺序调用）里实用。默认 `medium` 太慢。
             if str(self.model_name).startswith("gpt-5"):
                 effort = getattr(self.config, 'reasoning_effort', 'low') or 'low'
-                # high effort produces a lot more reasoning tokens; scale the budget.
-                kwargs["max_completion_tokens"] = 24000 if effort == "high" else 8000
+                kwargs["temperature"] = self.temperature
+                kwargs["top_p"] = self.top_p
+                kwargs["max_completion_tokens"] = int(
+                    getattr(self.config, 'max_completion_tokens', 8192)
+                )
                 kwargs["reasoning_effort"] = effort
             else:
                 kwargs["temperature"] = self.temperature

@@ -1,0 +1,83 @@
+Refinement is invoked after \toolname\ has produced candidate loop invariants or function specifications. A candidate can fail in three different ways: it may be syntactically incorrect (failing to conform to ACSL grammar), it may be semantically invalid (failing to be proved by Frama-C/WP), or logically weak (verifiable but too weak to prove a downstream assertion when such a target exists). The refinement procedure takes five inputs: the annotated program $\mathcal{F}$, the candidate annotation region $\mathcal{A}_{0}$ (the loop invariant or specification clauses to be repaired, while the rest of $\mathcal{F}$, denoted by $\mathcal{F}^{-}$, remains fixed), the local symbolic context $\Gamma$ saved when the candidate was generated, the target kind $k \in \{\textit{loop},\textit{spec}\}$, and the LLM. The output is $\mathcal{F}^*$ with a verifier-checked annotation region $\mathcal{A}^*$ when the iteration converges, or the strongest verifier-checked subset found after budget exhaustion. 
+
+Algorithm~\ref{alg:inv-repair} shows the control flow. The algorithm first separates the candidate annotations from the surrounding program, storing the latter as $\mathcal{F}^{-}$, so every refinement round edits only the current annotation region. Each iteration runs Frama-C/WP on the current $\mathcal{F}$. If verification succeeds, the loop stops. If the verifier reports a syntax or type error before semantic proof begins, refinement follows the syntax-repair branch. Otherwise, the proof failures are classified by their proof role and the target kind $k$; only the non-empty failure categories are rendered into the next prompt. If the iteration budget is exhausted, the algorithm switches to a conservative Houdini-style pruning pass. 
+\begin{algorithm}[htbp]
+\caption{Verifier-Guided Refinement $\mathrm{Refine}$}
+\label{alg:inv-repair}
+\small
+\KwIn{$\mathcal{F}$ with candidate annotation  $\mathcal{A}_{0}$, symbolic context $\Gamma$, target kind $k \in \{\textit{loop},\textit{spec}\}$, \textit{LLM}}
+\KwOut{$\mathcal{F}^*$ with verifier-checked annotation $\mathcal{A}^*$}
+
+$\mathcal{A} \gets \mathcal{A}_{0}$\;
+$\mathcal{F}^{-} \gets \mathcal{F} - \mathcal{A}_{0}$\;
+
+\While{$\mathit{Errors} \gets \neg \mathrm{Verify}(\mathcal{F})$}{
+    \If{reach iteration limit}{
+        \tcp{\small \textit{Layer 3: Houdini-style pruning}}
+        $\mathcal{A} \gets \mathrm{Houdini}(\mathcal{F}^{-},\mathcal{A},\mathit{Errors})$\;
+        $\mathcal{F} \gets (\mathcal{F}^{-},\mathcal{A})$\;
+        $\textbf{break}$\;
+    }
+    \uIf{$\mathit{Errors} = \textit{syntax error}$}{
+        \tcp{\small \textit{Layer 1: syntax repair}}
+        $\mathcal{A} \gets \mathrm{RepairCallLLM}(\mathcal{A},\Gamma,\mathit{Errors})$\;
+    }
+    \Else{
+        \tcp{\small \textit{Layer 2: strategy-driven refinement or regeneration}}
+        $\mathit{guidance} \gets \mathrm{BuildGuide}(\mathrm{Classify}(\mathit{Errors},k),\Gamma)$\;
+        $\mathcal{A} \gets \mathrm{RefineCallLLM}(\mathcal{A},\Gamma,\mathit{guidance})$\;
+    }
+    $\mathcal{F} \gets (\mathcal{F}^{-},\mathcal{A})$\;
+}
+
+\Return $\mathcal{F}$\;
+\end{algorithm}
+
+The verifier-guided refinement stage is implemented as three layers, matching the three branches in Algorithm~\ref{alg:inv-repair}.
+
+
+\textbf{Layer 1: syntax repair.}
+Layer 1 handles syntax and type errors. If Frama-C rejects the candidate before generating proof obligations, \toolname\ calls the LLM with only the current annotation region and the corresponding verifier error. The returned annotation is checked again by Frama-C/WP. This layer only makes the candidate parsable; semantic repair is handled by Layer 2.
+
+\textbf{Layer 2: strategy-driven semantic refinement or regeneration.}
+When the candidate parses but Frama-C/WP fails to prove it, \toolname\ classifies the failures into typed categories such as loop-invariant obligations, function-specification obligations, callee-instance obligations, frame obligations, and downstream assertion obligations. The complete category-to-strategy mapping is given in Table~\ref{tab:refine-strategy}. For each round, \toolname\ loads only the strategy blocks whose categories are non-empty, so the prompt exposes the formal failure together with its matching fix strategy. This is the main refinement step: it revises invalid clauses, strengthens valid but insufficient clauses, or regenerates an unstable annotation region when the current candidate is globally inconsistent. 
+
+\textbf{Layer 3: Houdini pruning.}
+When the refinement budget is exhausted, \toolname\ runs one Houdini-style deletion pass over the current annotation region. For loop refinement, it removes still-failing loop invariants while preserving the largest verifier-checked subset. For function-level refinement, it removes failing target \texttt{ensures} clauses and residual loop invariants. This layer is intentionally conservative: it only deletes clauses identified by verifier feedback and returns the strongest subset accepted by the verifier.
+
+\begin{table*}[t]
+\centering
+\setlength{\tabcolsep}{5pt}
+\caption{Refinement strategies by verifier-failure category.}
+\label{tab:refine-strategy}
+\begin{tabular}{@{}p{0.14\textwidth}p{0.38\textwidth}p{0.40\textwidth}@{}}
+\toprule
+\textbf{Target} & \textbf{Verifier feedback} & \textbf{Refinement strategy} \\
+\midrule
+\multirow{4}{*}{Loop invariant}
+ & Establishment (base) obligation fails & Drop or guard facts not implied by the pre-loop state. \\
+ & Preservation obligation fails & Rebuild the inductive relation from the loop body's one-step effect. \\
+ & Invariant holds but the downstream goal or assertion is unproved & Add loop-exit consequences linking the negated guard to the inductive and unchanged facts. \\
+ & Several invariants fail or the candidate is globally inconsistent & Discard the candidate and regenerate from the original template. \\
+\midrule
+\multirow{4}{*}{Function specification}
+ & Target postcondition obligation fails & Drop over-strong claims or split them into path-sensitive clauses. \\
+ & Callee-instance obligation fails at a call site & Strengthen caller-side facts before the call, or weaken an over-strong callee precondition. \\
+ & Postcondition holds but a user assertion still fails & Add the missing bridge facts to the specification or to the loop-exit facts. \\
+ & Frame (\texttt{assigns}) obligation fails & Add only the missing externally visible locations. \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+The same algorithm serves loop-level and function-level refinement; only the set of error categories produced by $\mathrm{Classify}(\mathit{Errors},k)$, and hence the strategy rows selected from Table~\ref{tab:refine-strategy} differs. This keeps the control loop uniform while letting each failure category receive its own repair action.
+\noindent\textit{Implementation note (best-candidate rollback).}
+Algorithm~\ref{alg:inv-repair} presents the logical refinement skeleton. In the implementation, \toolname\ additionally tracks the best candidate seen so far, using a lexicographic score
+\[
+\mathrm{Score}(\mathcal{F}) =
+\big(\mathbf{1}_{\mathrm{parse}},\,
+\tfrac{|\mathrm{Valid}(\mathit{VC})|}{|\mathit{VC}|},\,
+|C|\big),
+\]
+where $\mathit{VC}$ is the set of verification conditions generated by Frama-C/WP for the candidate, $\mathrm{Valid}(\cdot)$ is the subset proved, $C$ is the number of retained clauses, and $\mathbf{1}_{\mathrm{parse}}$ is $1$ iff the candidate parses. Candidates are ordered lexicographically by this score, preferring parseability, then proof ratio, then the number of retained clauses. If two consecutive rounds do not improve the best score (\(\textit{patience}=2\)), the implementation restores the best recorded candidate and resumes refinement from that snapshot. If the iteration budget is exhausted, Houdini starts from the same best candidate.
+
+%The key is read from left to right, larger first: \toolname\ first keeps the candidate that is syntactically correct; if that ties, the one proving a larger fraction of the verification conditions; and if those also tie, the one with more retained clauses $|C|$. 

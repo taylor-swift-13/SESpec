@@ -1,0 +1,19 @@
+                                                                                
+extern int unknown_int(void);
+
+#define a (2)
+
+void loopy_207(int i, int n) { 
+  int sn=0;
+  {
+  i=1;
+  while (i<=n) {
+    sn = sn + a;
+    i++;
+  }
+}
+  {;
+
+}
+
+}

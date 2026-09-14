@@ -1,0 +1,111 @@
+\DIFbluesubsection{RQ6: How strong are \toolname's specifications versus the baselines?}
+\label{subsec:rq6-strength}
+\DIFaddbegin
+Validity certifies that a specification is discharged by its verifier, but it does not rank how informative the specification is. We therefore evaluate specification strength on the both-valid intersection using two complementary methods: an LLM-based semantic judge as the primary oracle, and a Frama-C/WP-based implication check as supporting evidence on the subset that SMT solvers can adjudicate.
+\DIFaddend
+
+
+
+\DIFaddbegin
+\smallskip
+\noindent\textbf{LLM-as-a-judge evaluation.}
+Table~\ref{tab:strength_summary} reports pairwise strength judgments on the both-valid pairs. Pooled across models, \toolname\ is judged stronger than \autospec\ on 50.0\% of pairs, against 31.5\% in the reverse direction; against \specgen\ the comparison is closer, with \toolname\ ahead on 36.1\% and \specgen\ on 34.3\%. These numbers should be read together with each tool's mechanism rather than as a single victory metric, because the three tools obtain strength in fundamentally different ways.
+\DIFaddend
+
+\DIFaddbegin
+\autospec\ instead compensates with exhaustive accumulation: it repeatedly samples the LLM to grow a large, redundant pool of candidate \texttt{ensures} and \texttt{loop invariant} clauses and filters by WP-validity, so the load-bearing facts are typically buried among many tautological or trivially implied ones; its strength comes from brute-force sampling rather than from semantic reasoning. \toolname\ takes a third route: at every generation boundary it injects the local symbolic context to steer the LLM toward more path-sensitive, non-redundant clauses than the \autospec\ sampler reliably reaches. On loop-free programs that stay within the flattened-memory model, the symbolic post-state is covered by Proposition~\ref{thm:sp-sound-complete}: within the same flattened-memory state-pair vocabulary, it entails any postcondition over the covered locations.
+\DIFaddend
+
+\DIFaddbegin
+The model-wise results are not uniformly in \toolname's favor. On \texttt{gpt-5-mini}, \autospec\ wins more \autospec--\toolname\ pairs than \toolname\ does (45.1\% vs.\ 34.3\%). We attribute this to weaker models being less reliable at instantiating the symbolic relations exposed by \toolname: invalid or over-strong clauses are rejected by WP and then weakened or removed during refinement, reducing final specification strength. On stronger models the direction reverses, with \toolname\ stronger on 47.9\% of pairs for \texttt{gpt-5.4-mini} and 58.9\% for \texttt{gpt-5}, suggesting that symbolic guidance scales with model capability.
+\DIFaddend
+
+\DIFaddbegin
+For strength comparison on the both-valid pairs, we employ an LLM-based pairwise judge (Fig.~\ref{fig:prompt-judge}), which evaluates semantic strength rather than verifier-specific acceptance and explicitly ignores language-specific syntax. It nonetheless inherits the limitations of LLM-based judgment, which motivates the verifier-grounded cross-check shown in Fig.~\ref{fig:fc_vs_judge_strength}: a Frama-C/WP implication test agrees with the judge on the subset it can decide, but leaves the majority of pairs incomparable under the per-goal budget.
+\DIFaddend
+
+
+
+
+
+
+\DIFaddbegin
+\smallskip
+\noindent\textbf{Frama-C/WP-based implication checking.}
+We tested whether the LLM judge could be replaced by a direct Frama-C/WP implication check. For each both-valid pair we generated implication-checking harnesses for the postconditions and the matched loop invariants, and discharged the resulting obligations with Alt-Ergo and Z3 under a 5-second per-goal budget. On the \texttt{gpt-5.4-mini} both-valid set against \autospec, WP produced a definite ordering for only 51 of 242 pairs (21.1\%), leaving 191 pairs (78.9\%) incomparable. Among the WP-decided cases the direction agrees with the LLM judge, \toolname\ is stronger in 33 cases and \autospec\ in 10, in line with the judge's 47.9\% vs.\ 31.4\% ranking, which supports the judge on the subset WP can decide.
+\DIFaddend
+
+\DIFaddbegin
+The large incomparable fraction should not be read as direct evidence of weak generated specifications. It mainly reflects the difficulty of automatically proving implication or equivalence between independently written specifications, a limitation also highlighted by the CLEVER benchmark~\cite{thakur2025clever}. For implication or equivalence checking of specifications, the verifier must discharge a conjunction of obligations: \texttt{requires}-implication, \texttt{ensures}-implication, and mutual loop-invariant obligations over typed memory, address shifts, recursive logic helpers, integer casts, and bit-vector operators, the same machinery that dominates the timeouts reported in Section~\ref{subsec:rq8-failure}. We found that raising the budget to several minutes moves only a handful of cases out of the incomparable category, while rendering the experiment intractable at this scale. We therefore use the LLM judge as the primary strength oracle in Table~\ref{tab:strength_summary}: it returns a verdict on every pair within a fixed budget, agrees in direction with WP wherever WP can decide, and remains usable across the JML/ACSL boundary where no single verifier applies.
+\DIFaddend
+
+\begin{figure*}[!t]
+\centering
+\begin{minipage}[t]{0.47\textwidth}
+\centering
+\resizebox{0.95\linewidth}{!}{%
+\begin{tikzpicture}[x=0.019cm,y=0.45cm,font=\footnotesize,every node/.style={text=figgraytext}]
+  \path[use as bounding box] (-100,-0.25) rectangle (275,4.35);
+  \def\Wbar{242}
+  \def\bh{0.24}
+  \foreach \x in {0,50,100,150,200,242}{
+    \draw[figgrid] (\x,0.45) -- (\x,4.10);
+  }
+  \foreach \y/\v/\p/\fillc/\linec/\lab in {%
+    3.75/116/47.9/figcontractfill/figcontractstroke/{\toolname\ stronger},%
+    2.80/76/31.4/figgrayfill/figgrayframe/{\autospec\ stronger},%
+    1.85/26/10.7/figloopfill/figloopstroke/{Equal},%
+    0.90/24/9.9/figgray!10/figgrayframe/{Incomparable}%
+  }{
+    \node[anchor=east] at (-3,\y) {\lab};
+    \path[figbar,fill=\fillc] (0,\y-\bh) rectangle (\v,\y+\bh);
+    \draw[figbarframe,draw=\linec] (0,\y-\bh) rectangle (\v,\y+\bh);
+    \node[anchor=west] at ({\v+3},\y) {\v\ (\p\%)};
+  }
+  \draw[figaxis] (0,0.45) -- (\Wbar,0.45);
+  \foreach \x in {0,50,100,150,200,242}{
+    \draw[figaxis] (\x,0.45) -- (\x,0.30);
+    \node[anchor=north] at (\x,0.25) {\x};
+  }
+\end{tikzpicture}
+}%
+\par\smallskip{\footnotesize\normalfont (a) LLM judge.}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.47\textwidth}
+\centering
+\resizebox{0.95\linewidth}{!}{%
+\begin{tikzpicture}[x=0.019cm,y=0.45cm,font=\footnotesize,every node/.style={text=figgraytext}]
+  \path[use as bounding box] (-100,-0.25) rectangle (275,4.35);
+  \def\Wbar{242}
+  \def\bh{0.24}
+  \foreach \x in {0,50,100,150,200,242}{
+    \draw[figgrid] (\x,0.45) -- (\x,4.10);
+  }
+  \foreach \y/\v/\p/\fillc/\linec/\lab in {%
+    3.75/33/13.6/figcontractfill/figcontractstroke/{\toolname\ stronger},%
+    2.80/10/4.1/figgrayfill/figgrayframe/{\autospec\ stronger},%
+    1.85/8/3.3/figloopfill/figloopstroke/{Equal},%
+    0.90/191/78.9/figgray!10/figgrayframe/{Incomparable}%
+  }{
+    \node[anchor=east] at (-3,\y) {\lab};
+    \path[figbar,fill=\fillc] (0,\y-\bh) rectangle (\v,\y+\bh);
+    \draw[figbarframe,draw=\linec] (0,\y-\bh) rectangle (\v,\y+\bh);
+    \node[anchor=west] at ({\v+3},\y) {\v\ (\p\%)};
+  }
+  \draw[figaxis] (0,0.45) -- (\Wbar,0.45);
+  \foreach \x in {0,50,100,150,200,242}{
+    \draw[figaxis] (\x,0.45) -- (\x,0.30);
+    \node[anchor=north] at (\x,0.25) {\x};
+  }
+\end{tikzpicture}
+}%
+\par\smallskip{\footnotesize\normalfont (b) Frama-C/WP implication check.}
+\end{minipage}
+\caption{Pairwise strength distribution on the \(242\) both-valid \texttt{gpt-5.4-mini} pairs against \autospec, comparing the LLM judge with a Frama-C/WP implication check.}
+\label{fig:fc_vs_judge_strength}
+\end{figure*}
+
+\begin{finding}
+\textbf{Finding (RQ6).} \toolname's specifications are judged stronger than \autospec's ($50.0\%$ vs.\ $31.5\%$) and on par with \specgen's; its strength advantage over \autospec\ grows with model capability.
+\end{finding}

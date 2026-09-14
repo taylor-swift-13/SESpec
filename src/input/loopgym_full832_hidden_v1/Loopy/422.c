@@ -1,0 +1,19 @@
+                                                                            
+extern int unknown_int(void);
+extern int unknown_bool(void);
+/*@
+  requires x == y && y == 0;
+*/
+void loopy_422(int x, int y) {
+  
+  
+  
+  while (unknown_bool()) {
+    x++;y++;
+  }
+  {;
+
+}
+
+  return;
+}

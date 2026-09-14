@@ -1,0 +1,71 @@
+                                                                                                                              
+extern int unknown_int(void);
+
+/*@
+  requires bufferlen >1;
+  requires inlen > 0;
+  requires bufferlen < inlen;
+*/
+void loopy_49(int inlen, int bufferlen)
+{
+  int in;
+  
+  
+  int buf;
+  int buflim;
+
+  
+  
+  
+
+  buf = 0;
+  in = 0;
+  buflim = bufferlen - 2;
+
+  while (unknown_int())
+  {
+    if (buf == buflim)
+      break;
+    {;
+
+}
+
+    {;
+
+}
+ 
+    buf++;
+out:
+    in++;
+    {;
+
+}
+
+    {;
+
+}
+
+  }
+
+    {;
+
+}
+
+    {;
+
+}
+
+    buf++;
+
+  {;
+
+}
+
+  {;
+
+}
+
+  buf++;
+
+ END:  return;
+}

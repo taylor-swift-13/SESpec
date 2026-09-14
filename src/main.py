@@ -53,7 +53,7 @@ def run_from_config(config_path: str, function_name: str = None, root_dir: str =
     """
     try:
         # Load configuration file
-        main_config,preconditions, model_name = load_config_from_file(config_path)
+        main_config,preconditions, llm_config = load_config_from_file(config_path)
         
         # Apply command line argument overrides
         if function_name:
@@ -72,10 +72,10 @@ def run_from_config(config_path: str, function_name: str = None, root_dir: str =
         print(f"🚀 Starting specification generation for function: {main_config.function_name}")
         print(f"📁 Project directory: {main_config.root_dir}")
         print(f"📄 Configuration file: {config_path}")
-        print(f"🤖 Using model: {model_name}")
+        print(f"🤖 Using model: {llm_config.api_model}")
         
         # Create processor and run analysis
-        processor = FunctionProcessor(main_config, preconditions, model_name)
+        processor = FunctionProcessor(main_config, preconditions, llm_config)
         processor.run_analysis()
         
         print("✅ Generation completed!")
@@ -137,7 +137,7 @@ def _setup_analysis_logger(function_name: str, log_dir: str,  debug: bool = Fals
 class FunctionProcessor:
     """Main function processing class"""
     
-    def __init__(self, config: MainConfig,preconditions: Dict[str, Union[str, Tuple[str, Optional[str]]]] = None, model_name:str = 'gpt-4o') -> None:
+    def __init__(self, config: MainConfig,preconditions: Dict[str, Union[str, Tuple[str, Optional[str]]]] = None, model_name:Union[str, LLMConfig] = 'gpt-4o') -> None:
         """Main processor constructor
         
         Args:
@@ -155,7 +155,10 @@ class FunctionProcessor:
         self.file_cache: Dict = {}
         self.conds : List[str] = []
         self.function_info_list: List[FunctionInfo] = []
-        self.llm_config = LLMConfig(api_model=model_name)
+        self.llm_config = (
+            model_name if isinstance(model_name, LLMConfig)
+            else LLMConfig(api_model=model_name)
+        )
         self.pending_functions: List[str] = []
         self.first_pass = None
         self._last_pass_result = None

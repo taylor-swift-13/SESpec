@@ -3,13 +3,32 @@ import re
 from tree_sitter import Language, Parser
 import tree_sitter_c
 
-from check_preconditions import annotation_body, c_function_declarator
-
-ROUTING_VERSION = 'target_annotations_literal_true_v1'
+ROUTING_VERSION = 'independent_pre_post_invariant_v3'
 LEXICAL = re.compile(r'/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\])*"|\x27(?:\\.|[^\x27\\])*\x27', re.S)
-CONTRACT_CLAUSE = re.compile(r'(?<![\w\\])(?:requires(?:_redundantly)?|ensures(?:_redundantly)?)\b')
-JAVA_CONTRACT_CLAUSE = re.compile(r'(?<![\w\\])(?:requires(?:_redundantly)?|ensures(?:_redundantly)?|pre|post)\b')
+REQUIRES_CLAUSE = re.compile(r'(?<![\w\\])requires(?:_redundantly)?\b')
+ENSURES_CLAUSE = re.compile(r'(?<![\w\\])ensures(?:_redundantly)?\b')
+JAVA_REQUIRES_CLAUSE = re.compile(r'(?<![\w\\])(?:requires(?:_redundantly)?|pre)\b')
+JAVA_ENSURES_CLAUSE = re.compile(r'(?<![\w\\])(?:ensures(?:_redundantly)?|post)\b')
 INVARIANT_CLAUSE = re.compile(r'(?<![\w\\])(?:loop\s+invariant|loop_invariant|maintaining)(?:_redundantly)?\b')
+
+
+def annotation_body(comment):
+    if comment.startswith('/*@'):
+        body = comment[3:-2]
+    elif comment.startswith('//@'):
+        body = comment[3:]
+    else:
+        return None
+    body = re.sub(r'(?m)^\s*@', '', body)
+    return re.sub(r'//[^\n]*', '', body).strip().rstrip('@').strip()
+
+
+def c_function_declarator(node):
+    while node is not None:
+        if node.type == 'function_declarator':
+            return node
+        node = node.child_by_field_name('declarator')
+    return None
 
 
 def _walk(node):
@@ -123,15 +142,44 @@ def _count(bodies, pattern):
 def inspect_spec(source, language, target=None, expected_arity=None):
     contracts, body, arity = (_java_annotations(source, target, expected_arity) if language == 'java'
                               else _c_annotations(source, target))
-    clauses, substantive = _count(contracts, JAVA_CONTRACT_CLAUSE if language == 'java' else CONTRACT_CLAUSE)
+    requires, substantive_requires = _count(
+        contracts, JAVA_REQUIRES_CLAUSE if language == 'java' else REQUIRES_CLAUSE)
+    ensures, substantive_ensures = _count(
+        contracts, JAVA_ENSURES_CLAUSE if language == 'java' else ENSURES_CLAUSE)
     invariants, substantive_invariants = _count(body, INVARIANT_CLAUSE)
-    return dict(parameter_count=arity, contract_clause_count=clauses, nontrivial_contract_clause_count=substantive,
+    return dict(parameter_count=arity,
+                requires_count=requires, nontrivial_requires_count=substantive_requires,
+                ensures_count=ensures, nontrivial_ensures_count=substantive_ensures,
                 invariant_count=invariants, nontrivial_invariant_count=substantive_invariants)
+
+
+def comparison_view(source, language, target, basis, expected_arity=None):
+    """Return annotations relevant to one judge, excluding the function body."""
+    contracts, body, arity = (_java_annotations(source, target, expected_arity) if language == 'java'
+                              else _c_annotations(source, target))
+    if basis in {'preconditions', 'postconditions'}:
+        annotations = contracts
+        label = 'target function contract'
+    elif basis == 'loop_invariants':
+        annotations = [text for text in body if INVARIANT_CLAUSE.search(text)]
+        label = 'loop-invariant annotation blocks in source order'
+    else:
+        raise ValueError('Unknown comparison basis: ' + basis)
+    rendered = '\n\n'.join(f'annotation block {i}:\n{text}'
+                             for i, text in enumerate(annotations, 1))
+    if not rendered:
+        rendered = '(none; the corresponding predicate is true)'
+    return f'target={target}; parameter_count={arity}\n{label}:\n{rendered}'
 
 
 def route_pair(spec_a, spec_b, lang_a, target_a=None, target_b=None):
     b = inspect_spec(spec_b, 'c', target_b)
     a = inspect_spec(spec_a, lang_a, target_a, expected_arity=b['parameter_count'])
-    basis = ('loop_invariants' if not (a['nontrivial_contract_clause_count'] or b['nontrivial_contract_clause_count'])
-             and (a['nontrivial_invariant_count'] or b['nontrivial_invariant_count']) else 'contract')
-    return dict(comparison_basis=basis, A=a, B=b)
+    bases = []
+    if a['nontrivial_requires_count'] or b['nontrivial_requires_count']:
+        bases.append('preconditions')
+    if a['nontrivial_ensures_count'] or b['nontrivial_ensures_count']:
+        bases.append('postconditions')
+    if a['invariant_count'] and b['invariant_count']:
+        bases.append('loop_invariants')
+    return dict(comparison_bases=bases, A=a, B=b)

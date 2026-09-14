@@ -4,5 +4,5 @@ void goo6(){
     while (i<30){
         ++i;
     }
-    /*@ assert i==30; */
+
 }

@@ -59,13 +59,28 @@ class ConfigLoader:
         """Get preconditions configuration"""
         return self.config_data.get('preconditions', {})
     
-    def get_model_name(self) -> str:
-        """Get model name"""
+    def get_llm_config(self) -> LLMConfig:
+        """Load provider/model decoding controls from the ``llm`` block."""
         llm_config = self.config_data.get('llm', {})
-        return llm_config.get('api_model', 'gpt-4o')
+        config = LLMConfig()
+        for field in (
+            'api_model', 'base_url', 'api_temperature', 'api_top_p',
+            'max_completion_tokens', 'postcondition_samples',
+            'think_mode_enabled',
+            'reasoning_effort',
+        ):
+            if field in llm_config:
+                setattr(config, field, llm_config[field])
+        try:
+            config.postcondition_samples = int(config.postcondition_samples)
+        except (TypeError, ValueError) as exc:
+            raise ValueError('llm.postcondition_samples must be an integer') from exc
+        if config.postcondition_samples < 1:
+            raise ValueError('llm.postcondition_samples must be at least 1')
+        return config
 
 
-def load_config_from_file(config_path: str) -> Tuple[MainConfig, LLMConfig, Dict[str, str], str]:
+def load_config_from_file(config_path: str) -> Tuple[MainConfig, Dict[str, str], LLMConfig]:
     """
     Load all configurations from configuration file
     
@@ -73,12 +88,12 @@ def load_config_from_file(config_path: str) -> Tuple[MainConfig, LLMConfig, Dict
         config_path (str): Configuration file path
         
     Returns:
-        tuple: (MainConfig, preconditions, model_name)
+        tuple: (MainConfig, preconditions, LLMConfig)
     """
     loader = ConfigLoader(config_path)
     
     main_config = loader.get_main_config()
     preconditions = loader.get_preconditions()
-    model_name = loader.get_model_name()
-    
-    return main_config, preconditions, model_name
+    llm_config = loader.get_llm_config()
+
+    return main_config, preconditions, llm_config

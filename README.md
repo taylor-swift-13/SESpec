@@ -128,6 +128,7 @@ This section holds settings for the Large Language Model (LLM) integration.
 ```yml
 llm:
   api_model: "gpt-4o"                 # API model name
+  postcondition_samples: 1             # Same postcondition prompt called concurrently m times, then merged
 ```
 
 ##### 3. Precondition Configuration
@@ -189,4 +190,3 @@ Display the help message for a list of available options:
 ```bash
 python main.py --help
 ```
-

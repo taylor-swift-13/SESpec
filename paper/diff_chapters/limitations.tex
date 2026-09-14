@@ -1,0 +1,102 @@
+% \label{sec:limitations}
+% \label{sec:why-difficult}
+
+% \paragraph{Scope of the strongest-postcondition guarantee.}
+% \toolname's strongest-postcondition claim is the conditional guarantee formalized in Proposition~\ref{thm:sp-sound-complete}: it only holds on loop-free fragments handled by path-complete symbolic execution under the flattened memory model. Everything else --- loops, callee summaries, LLM-generated annotations, external calls, heap allocation, and recursive predicates --- is verifier-checked but only a best-effort over-approximation. A side effect we observed across the supplementary study is that gains from upgrading the LLM diminish quickly once the symbolic scaffolding has already done the heavy lifting: on programs that fall inside the strongest-postcondition slice, a weaker model already extracts most of the signal, so swapping in a stronger model yields a smaller delta than on programs where the LLM has to invent the relation from scratch.
+
+% \paragraph{Scalability of symbolic execution.}
+% Symbolic execution does not scale to large programs: path explosion, complex aliasing across module boundaries, and the cost of carrying full symbolic stores all limit it in practice. We do not claim to lift this barrier. Instead, when the executor reaches its boundary, the framework instructs the LLM to continue \emph{in symbolic-execution order} --- carrying the most recent symbolic state forward, tracking modified and unchanged variables, and proposing a strong postcondition or loop invariant consistent with that state. This lets the system produce stronger specifications than an unguided LLM prompt would, but it does not turn LLM-extrapolated summaries into a sound replacement for symbolic execution past the supported fragment.
+
+% \paragraph{Runtime-error obligations.}
+% \toolname\ is not optimized for proving runtime-error (RTE) freeness as a primary objective. The default preconditions (Section~\ref{sec:default-pre}) cover validity, bounds, and separation but do not rule out every arithmetic, pointer, or other verifier-generated RTE obligation. In the Frama-C validation stage, remaining potential RTE reports are recorded as warnings rather than as the main success measure. In QCP symbolic execution, however, an RTE may prevent path exploration and cause the symbolic summary to fail; the refinement loop can ask the LLM to strengthen preconditions when such failures are visible, but this precondition strengthening is best-effort and subordinate to the paper's main goal of generating functional and behavioral specifications.
+
+% \paragraph{Expressiveness of ACSL and the verifier backend.}
+% Even when the generated specification is semantically correct, two upstream limits cap what gets accepted. First, ACSL's surface language cannot directly express some behaviors --- lexicographic termination measures, certain higher-order quantified properties, and separation-logic-style abstractions over inductive heaps --- so specifications on programs that depend on these features must be approximated or split, and the approximation may then fail to capture full program behavior. Recursive data structures are the sharpest instance: ACSL has no built-in separation-logic heap abstraction, so even a singly linked list traversal requires user-defined predicates such as \texttt{lseg} / \texttt{listrep} plus inductive helpers, and these helpers must be both semantically faithful and SMT-friendly. Second, even a correct specification may not be discharged: the ATP backend (Z3 under WP) cannot automate the inductive equality reasoning that recursive logic functions (\texttt{Pow}, \texttt{Fib}, \texttt{ackermann}, etc.) require, and a 10-second per-query timeout closes the gap for some quantified obligations only when an auxiliary rewrite lemma is in scope. Because the refinement loop cannot distinguish ``the prover timed out'' from ``the clause is false,'' it treats both as failures and weakens or drops the clause --- so a correct but hard-to-prove invariant can be silently lost.
+
+% \paragraph{Semantic completeness only within the symbolic-execution envelope.}
+% Even when an ACSL specification passes Frama-C/WP, validity rules out false clauses but does not rule out under-specification: the verifier does not certify that the annotations capture every semantically relevant behavior of the implementation. Outside the strongest-postcondition envelope above, \toolname\ may emit specifications that are sound and useful but omit relations that require unavailable symbolic states, unsupported heap abstractions, auxiliary lemmas, induction principles, library models, or solver reasoning beyond the configured backend.
+
+% \paragraph{Benchmark headroom.}
+% The combination of the two limits above means that \textbf{FormalBench}~\cite{le2025can} (the largest component of \textbf{SESpec-400}) is, in practice, close to the ceiling of what Frama-C/WP can accept under the supported ACSL fragment and the configured backend. Further gains on this benchmark therefore depend less on better prompting and more on widening the verifier surface itself --- moving to a stronger verifier, or pairing the pipeline with ITP-based theorem proving for the inductive obligations that current ATP backends do not discharge. We treat these as future work rather than as residual prompt-engineering gaps.
+\label{sec:limitations}
+\DIFaddbegin
+\smallskip
+\noindent\textbf{Scope and guarantees.}
+\toolname\ targets self-contained programs and does not model external or system
+calls, in particular dynamic memory allocation performed through library calls
+such as \texttt{malloc}/\texttt{free}. Programs that rely on such calls fall outside its scope: symbolic
+execution stops at such a call site and the affected segment is handled by LLM fallback rather than summarized exactly. 
+\DIFaddend
+%Extending the flattened memory model
+%with an allocation model and reusable library-call summaries is left to future
+%work. 
+\DIFaddbegin
+Furthermore, 
+\toolname's strongest-postcondition guarantee, as stated in
+Section~\ref{sec:summarygeneration} and Proposition~\ref{thm:sp-sound-complete}, 
+holds only on covered loop-free segments under path-complete and precise symbolic execution
+in the flattened memory model. All other cases, including loops, recursive
+functions and data structures, are handled by verifier-checked best-effort specification
+generation, rather than exact symbolic summary computation. Crucially, verifier
+validity does not certify semantic
+completeness: a discharged specification may omit relevant functional behavior,
+especially when the required relations depend on
+unavailable symbolic states, unsupported heap abstractions, auxiliary lemmas,
+or reasoning beyond the configured backend.
+Extending the flattened memory model with allocation modeling and reusable library summaries is left to future work.
+\DIFaddend
+
+\DIFaddbegin
+\smallskip
+\noindent\textbf{Scalability of symbolic execution.}
+Symbolic execution remains difficult to scale to large programs: path explosion
+and the cost of carrying full symbolic stores both limit it in practice. Many symbolic executors mitigate this: separation
+logic and shape analysis let them reason about a class of heap-manipulating
+programs and recursive data structures such as lists and
+trees~\cite{calcagno2009compositional}, while path abstraction
+and state merging curb path explosion~\cite{kuznetsov2012merging,avgerinos2014veritesting}.
+We deliberately choose a basic symbolic executor instead, with the aim of
+obtaining precise symbolic states reusable for specification synthesis rather
+than scaling to larger programs. For what this basic executor cannot cover, we
+fully leverage the LLM: when the executor reaches a boundary, the framework asks
+the LLM to continue \emph{in symbolic-execution order}, carrying the latest
+symbolic state forward and proposing a postcondition or loop invariant
+consistent with it. This yields stronger specifications than an unguided prompt,
+but it does not make LLM-generated summaries a sound replacement for symbolic
+execution beyond the supported fragment.
+\DIFaddend
+
+
+\DIFaddbegin
+\smallskip
+\noindent\textbf{Verifier-backend ceiling.}
+Two upstream limits cap what can be accepted even when the intended
+specification is semantically correct. First, some behaviors are cumbersome or
+unsupported in the ACSL fragment we use, such as lexicographic measures,
+higher-order quantified properties, and separation-logic-style abstractions
+over inductive heaps. Even a singly linked-list traversal may require
+user-defined \texttt{lseg}/\texttt{listrep} helpers that must be both faithful
+and SMT-friendly. Second, the ATP backend used by Frama-C/WP cannot reliably
+automate all quantified, inductive, and memory-heavy obligations generated by
+these specifications. 
+\DIFaddend
+%The prover-event view in
+%Table~\ref{tab:gpt54mini_failure_summary} gives a lower-level diagnosis:
+\DIFaddbegin
+\emph{Timeout} events observed in our experiments are dominated by loop-invariant obligations, especially
+preservation and establishment goals over arrays or heap-backed arrays. 
+WP often translates these obligations into
+quantified formulas over typed-memory stores, address shifts, integer casts, and
+occasionally recursive logic helpers such as counting functions, so even
+plausible invariants can exceed the configured per-query solver budget.
+\emph{Unknown} and \emph{Failed} events observed in our experiments mostly occur
+in verifier/modeling regions where the backend returns no definitive
+counterexample: whether the remaining obligations come from specification
+errors or verifier/modeling limitations remains unresolved.
+\DIFaddend
+
+\DIFaddbegin
+Together with the program-feature breakdown in
+Fig.~\ref{fig:failure_root_causes}, this identifies \emph{the SMT solving capacity of
+the ATP backend} as the dominant limit on our validation pass rate. Migrating to an interactive theorem prover can make residual obligations dischargeable by allowing explicit proof scripts, and in our manual inspection the remaining obligations become reachable once the LLM writes such scripts under human guidance. This does not eliminate the scalability problem: it shifts the bottleneck from ATP automation to proof construction and proof search. We therefore view ITP integration as a promising future direction for \toolname, especially as LLMs become better at generating and searching proof scripts, but not as an already solved route to large-scale verification.
+\DIFaddend

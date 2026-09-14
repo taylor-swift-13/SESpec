@@ -315,11 +315,7 @@ def majority_verdict(verdicts):
 
 
 def remap_path(p):
-    """Map paper_data_final/* to RESULTS/paper_data/* if needed."""
-    if Path(p).exists():
-        return Path(p)
-    alt = Path(str(p).replace("/paper_data_final/", "/paper_data/"))
-    return alt
+    return Path(p)
 
 
 def process_case(case_id, rows, timeout_per_dir):

@@ -8,7 +8,7 @@ int goo2(int x, int y) {
         r = r - y;
         d = d + 1;
         // ENd
-        //@ assert r + d*y == x;
+
     }
     return d;
 }

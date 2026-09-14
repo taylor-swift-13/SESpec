@@ -1,0 +1,142 @@
+% \label{sec:threats}
+
+% We discuss threats to validity along the standard construct, internal, and external dimensions.
+
+% \paragraph{Construct validity.}
+% Our primary metrics are syntactic correctness (\emph{Syn.}), validity under Frama-C/WP (\emph{Val.}), and accuracy with respect to the verification goal (\emph{Acc.}). These metrics measure proof acceptance under a specific verifier configuration; they do not measure semantic adequacy in absolute terms. A specification that is verifier-checked is not necessarily as informative as a hand-written one, and a specification that is not verifier-checked is not necessarily semantically wrong; it may be unprovable under the ACSL fragment, memory model, or ATP backend discussed in Section~\ref{sec:limitations}. Specification quality is also difficult to evaluate when two verifier-checked specifications differ in strength, readability, framing precision, or functional coverage. To partially mitigate this gap, the supplementary experiment in Section~\ref{sec:large-scale-experiment} adds an LLM-as-judge pairwise strength comparison on the both-valid intersection. This procedure is still approximate: the judge is itself an LLM, it may miss subtle semantic gaps or weight informativeness differently than a human would, and it does not provide a complete oracle for specification quality. Reported gains should therefore be read as evidence under the chosen metrics rather than as a complete characterization of specification quality.
+
+% \paragraph{Internal validity: LLM nondeterminism and Pass@k.}
+% LLM completions are stochastic: we use a fixed sampling temperature of $0.7$ throughout, with OpenAI's \texttt{reasoning\_effort=low} set on the reasoning-tier models (\texttt{gpt-5.4-mini}, \texttt{gpt-5}) across all benchmark experiments. The sole exception is the industrial case study in Section~\ref{subsec:case9-ip}, which uses \texttt{reasoning\_effort=high}. Effort settings below \texttt{low} produced noticeably weaker postconditions in our pipeline, while raising the benchmark-wide effort to \texttt{high} was not cost-justified at this scale. Single-shot results can therefore vary across runs, which is one reason we report Pass@1, Pass@3, and Pass@5 separately for the goal-dependent benchmarks in Table~\ref{tab:performance_rates_model}; the large-scale goal-independent experiment in Section~\ref{sec:large-scale-experiment} reports Pass@1 only, as its per-attempt cost is substantially higher. The Pass@1$\to$Pass@5 gap on several benchmarks (e.g., \textbf{OOPSLA}, \textbf{Frama-C}, \textbf{list-S}) shows that additional attempts can recover some hard cases, while on others (e.g., \textbf{NLA}, \textbf{numer-S}, \textbf{pIp}) the gain is already marginal by Pass@3. We use Pass@1 as a representative single-attempt, budget-normalized measure, consistent with the budget-normalized view used in our cost analysis, and report Pass@$k$ for $k\in\{1,3,5\}$ to expose the remaining sampling headroom. Pass@$k$ characterizes the success rate under up to $k$ attempts; it is not a substitute for repeated independent reruns of the full pipeline, which we leave to future work. Absolute numbers should therefore be read within the LLM's natural variance under the studied configuration.
+
+% \paragraph{Internal validity: data leakage.}
+% A second internal threat is unintended bias and data leakage from the LLM's pretraining corpus, especially in program verification, where domain-specific data are scarce. Training-based methods and benchmark-specific retrieval pipelines are particularly vulnerable, since benchmark-adjacent corpora, curated examples, or synthetically generated programs may implicitly encode benchmark-specific patterns. We mitigate this by avoiding benchmark-specific training and dataset-dependent demonstrations: \toolname\ does not fine-tune the model or train auxiliary components on the evaluation benchmarks, and uses fixed implementation prompts whose runtime content comes from the target program's symbolic facts and static program features rather than from labels or expected specifications. This reduces, but cannot eliminate, the risk of bias from pretraining data or benchmark familiarity in general-purpose LLMs. The observed gains are therefore evidence for the effectiveness of symbolic execution-guided prompting under the studied settings, not a guarantee that no benchmark-related knowledge is present in the underlying models.
+
+% \paragraph{External validity: benchmark and baseline selection.}
+% We selected benchmarks aligned with the current state of specification and invariant generation research, including the AutoSpec benchmark and external datasets from LIPuS and CLAUSE2INV. The \textbf{SV-COMP} subset in Section~\ref{sec:experiments} is the AutoSpec-curated 21-program slice, not a uniform sample of the full SV-COMP suite, and the average lines of code across these families is small. These benchmarks therefore provide comparable settings for small and medium-size verification tasks but do not represent the full diversity of real-world C systems. To stress-test \toolname\ within this scope we introduced \textbf{pIp}, an industrial-derived benchmark with pointer, struct, and branch-heavy code, and the larger 400-case \textbf{SESpec-400}. We have not evaluated \toolname\ on industrial codebases of hundreds of thousands of lines or on programs that depend on extensive external library calls; scaling to such settings is left as future work.
+
+% \paragraph{External validity: memory model and verifier soundness.}
+% The verification claim in this paper is conditional. \toolname\ generates ACSL annotations checked by Frama-C/WP under the \emph{Typed} memory model with Z3 as the SMT backend, a 10-second per-query timeout, and the symbolic memory model implemented by QCP. ``Verifier-checked'' should therefore be read as ``proved valid by Frama-C/WP within these assumptions, modulo SMT solver soundness and timeout.'' The Typed memory model is known to be unsound for several C idioms, including pointer-to-pointer casts that violate effective types, accesses that reinterpret memory between different scalar types, reads or writes through unions that mix the active variant, and overlapping or misaligned accesses to the same region. We do not introduce or rely on any of these idioms in the evaluated benchmarks: \textbf{SyGuS}, \textbf{OOPSLA}, \textbf{NLA}, \textbf{numer-S}, and \textbf{SV-COMP} are numerical loops without unions or type punning; \textbf{Frama-C}, \textbf{pIp}, and \textbf{list-S} use structs, pointers, and singly linked lists but do not cast pointers across incompatible types or access overlapping union variants. Heap allocation through \texttt{malloc} is outside the modeling scope. The second source of incompleteness --- QCP falling back to verifier-checked over-approximations when it cannot enumerate all feasible paths --- is the strongest-postcondition boundary already characterized in Section~\ref{sec:limitations}, and we do not restate it here. Programs outside the Typed memory model or the QCP fragment are explicitly outside the soundness envelope of this evaluation.
+
+
+\label{sec:threats}
+
+\DIFaddbegin
+We discuss threats to validity along the standard construct, internal, and
+external dimensions.
+\DIFaddend
+
+\DIFaddbegin
+\smallskip
+\noindent\textbf{Construct validity.}
+Our metrics --- syntactic correctness (\emph{Syn.}), validity under Frama-C/WP
+(\emph{Val.}), and goal accuracy (\emph{Acc.}) --- measure proof acceptance
+under a specific verifier configuration, not semantic adequacy in absolute
+terms. A verifier-checked specification is not necessarily as informative as a
+hand-written one, and an unchecked one is not necessarily semantically wrong: it
+may be unprovable under the ACSL fragment, memory model, or ATP backend
+discussed in Section~\ref{sec:limitations}. Quality is also hard to compare when
+two valid specifications differ in strength, readability, framing precision, or
+coverage. To partially address this, the experiment in
+Section~\ref{sec:large-scale-experiment} adds an LLM-as-judge pairwise strength
+comparison on the both-valid intersection. This comparison is itself
+approximate: the judge is an LLM, may weight informativeness differently from a
+human expert, and offers no complete oracle for specification quality. Reported
+gains should therefore be read as evidence under the chosen metrics, rather than
+as a complete characterization of specification quality. Indeed, how to
+formally evaluate the quality of a specification beyond mere verifier
+acceptance remains an open problem, as recent efforts to benchmark and assess
+LLM-generated formal specifications make
+clear~\cite{yang2026how,thakur2025clever}.
+\DIFaddend
+
+\DIFaddbegin
+\smallskip
+\noindent\textbf{Internal validity: LLM nondeterminism and Pass@k.}
+LLM completions are stochastic. We fix the sampling temperature at $0.7$
+throughout, with OpenAI's \texttt{reasoning\_effort=low} on the reasoning-tier
+models (\texttt{gpt-5.4-mini}, \texttt{gpt-5}); the sole exception is the
+industrial case study in Section~\ref{subsec:case9-ip}, which uses
+\texttt{reasoning\_effort=high}.
+\DIFaddend
+%Effort below \texttt{low} produced noticeably
+%weaker postconditions, while benchmark-wide \texttt{high} was not cost-justified
+%at this scale. 
+\DIFaddbegin
+Because single-shot results vary across runs, we report Pass@1,
+Pass@3, and Pass@5 separately for the goal-dependent benchmarks
+(Table~\ref{tab:performance_rates_model}); the goal-independent
+experiment in Section~\ref{sec:large-scale-experiment} reports Pass@1 only, as
+its per-attempt cost is substantially higher. The Pass@1$\to$Pass@5 gap recovers
+some hard cases on \textbf{OOPSLA}, \textbf{Frama-C}, and \textbf{list-S}, but is
+already marginal by Pass@3 on \textbf{NLA}, \textbf{numer-S}, and \textbf{pIp}.
+Absolute numbers
+should therefore be read within the LLM's natural variance under the studied
+configuration.
+\DIFaddend
+
+\DIFaddbegin
+\smallskip
+\noindent\textbf{Internal validity: data leakage.}
+Bias and data leakage from the LLM's pretraining corpus are a concern,
+especially in program verification, where domain-specific data are scarce.
+Training-based methods and benchmark-specific retrieval pipelines are most
+vulnerable, since benchmark-adjacent corpora, curated examples, or synthetically
+generated programs may implicitly encode benchmark-specific patterns.
+\toolname\ mitigates this by avoiding benchmark-specific training and
+dataset-dependent demonstrations: it does not fine-tune the model or train
+auxiliary components on the evaluation benchmarks, and its fixed prompts draw
+runtime content from the target program's symbolic facts and static features
+rather than from labels or expected specifications. This reduces but cannot
+eliminate the risk of bias from pretraining data or benchmark familiarity in
+general-purpose LLMs. The observed gains are therefore evidence for
+symbolic-execution-guided prompting under the studied settings, not a guarantee
+that no benchmark-related knowledge resides in the underlying models.
+\DIFaddend
+
+\DIFaddbegin
+\smallskip
+\noindent\textbf{External validity: benchmark and baseline selection.}
+Our benchmarks --- the \autospec\ suite and external datasets from LIPuS and
+CLAUSE2INV --- align with current specification- and invariant-generation
+research, but their small average size makes them representative of small and
+medium-size verification tasks rather than the full diversity of real-world C
+systems. The \textbf{SV-COMP} subset in Section~\ref{sec:experiments} is the
+\autospec-curated 21-program slice, not a uniform sample of the full SV-COMP
+suite. To stress-test \toolname\ within this scope, we introduced \textbf{pIp},
+an industrial-derived benchmark with pointer-, struct-, and branch-heavy code,
+and the larger 400-case \textbf{\toolname-400}. We have not evaluated \toolname\ on
+industrial codebases of hundreds of thousands of lines or on programs that
+depend on extensive external library calls; scaling to such settings is left as
+future work. This boundary is not specific to \toolname: fully automatic
+verification of \emph{functional} correctness still operates at the scale of
+small, self-contained programs, because the underlying problem is intrinsically
+hard. The first wall is the reach of automated theorem provers (ATPs), which
+timeout or return \emph{Unknown} on the nonlinear, quantified, and recursively
+defined obligations that realistic code induces, as our own Frama-C/WP runs
+repeatedly show (Section~\ref{sec:limitations}). Migrating these obligations to
+an interactive theorem prover (ITP) changes this boundary rather than removing
+it: an ITP offers a richer proof surface for obligations that ATP backends fail
+to discharge, but it also shifts the burden to proof construction and proof
+search. Recent LLM-driven ITP efforts therefore remain evaluated on relatively
+small programs, while also suggesting that this route may become more scalable
+as LLM proof-script generation and proof search improve~\cite{yang2026how,thakur2025clever,ye2026verina,li2026goedelcodeproverhierarchicalproofsearch}.
+\DIFaddend
+
+\DIFaddbegin
+\smallskip
+\noindent\textbf{External validity: memory model and verifier soundness.}
+The verifier-backend completeness limits are discussed in
+Section~\ref{sec:limitations}; here we isolate the soundness assumptions behind
+the reported verification results. We use Frama-C/WP's \emph{Typed} memory model,
+which is known to be unsound for several C idioms, including pointer-to-pointer
+casts that violate effective types, accesses that reinterpret memory between
+different scalar types, reads or writes through unions that mix the active
+variant, and overlapping or misaligned accesses to the same region. The evaluated
+benchmarks use none of them: \textbf{SyGuS}, \textbf{OOPSLA}, \textbf{NLA},
+\textbf{numer-S}, and \textbf{SV-COMP} are numerical loops without unions or type
+punning, while \textbf{Frama-C}, \textbf{pIp}, and \textbf{list-S} use structs,
+pointers, and singly linked lists but do not cast pointers across incompatible
+types or access overlapping union variants. Dynamic allocation through
+\texttt{malloc} is outside the modeling scope. Programs outside these memory-model
+assumptions are outside the soundness envelope of this evaluation.
+\DIFaddend

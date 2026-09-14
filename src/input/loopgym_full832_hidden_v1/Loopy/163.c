@@ -1,0 +1,44 @@
+                                                                                    
+
+void loopy_163(unsigned int y) {
+  unsigned int x = 0;
+  
+
+  while (x < 99) {
+    
+    if (y % 2 == 0) x += 2;
+    else x++;
+
+    if (y % 2 == 0) x += 2;
+    else x -= 2;
+
+    if (y % 2 == 0) x += 2;
+    else x += 2;
+
+    if (y % 2 == 0) x += 2;
+    else x -= 2;
+
+    if (y % 2 == 0) x += 2;
+    else x += 2;
+
+    if (y % 2 == 0) x += 2;
+    else x -= 4;
+
+    if (y % 2 == 0) x += 2;
+    else x += 4;
+
+    if (y % 2 == 0) x += 2;
+    else x += 2;
+
+    if (y % 2 == 0) x += 2;
+    else x -= 4;
+
+    if (y % 2 == 0) x += 2;
+    else x -= 4;
+  }
+
+  {;
+
+}
+
+}

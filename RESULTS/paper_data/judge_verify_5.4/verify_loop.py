@@ -165,9 +165,7 @@ def classify_vars(invariants):
 
 def remap_path(p):
     pp = Path(p)
-    if pp.exists():
-        return pp
-    return Path(str(p).replace("/paper_data_final/", "/paper_data/"))
+    return pp
 
 
 def build_loop_harness(A_path, B_path):

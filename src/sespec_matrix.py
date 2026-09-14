@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 SRC = Path(__file__).resolve().parent
-INPUT_ROOT = SRC / "input"
+INPUT_ROOT = Path(os.environ.get("SESPEC_INPUT_ROOT", str(SRC / "input")))
 RESULTS_ROOT = SRC / "results"
 TMP_DIR = RESULTS_ROOT / "tmp"
 MATRIX_ROOT_DEFAULT = RESULTS_ROOT / "matrix_runs"
@@ -88,14 +88,22 @@ def make_run_id() -> str:
 
 def make_per_run_config(label: str, bench: str, case_id: str, model: str,
                         function_name: str, run_id: str,
-                        label_settings: Dict) -> Path:
+                        label_settings: Dict,
+                        postcondition_samples: int = 1,
+                        base_url: Optional[str] = None) -> Path:
+    llm = {
+        "api_model": model,
+        "postcondition_samples": postcondition_samples,
+    }
+    if base_url:
+        llm["base_url"] = base_url
     cfg = {
         "main": {
             "root_dir": bench,
             "function_name": function_name,
             **label_settings,
         },
-        "llm": {"api_model": model},
+        "llm": llm,
         "preconditions": {function_name: "emp"},
     }
     TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -188,14 +196,33 @@ def run_one(task: Dict) -> Dict:
 
     run_id = make_run_id()
     cfg_path = make_per_run_config(label, bench, case_id, model,
-                                   function_name, run_id, label_settings)
+                                   function_name, run_id, label_settings,
+                                   task.get("postcondition_samples", 1),
+                                   task.get("base_url"))
 
     out_dir = matrix_root / label / bench / model / case_id / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [str(python_exe), "main.py", "--config", str(cfg_path)]
+    # Hide assertion predicates from the generator while retaining the
+    # original source for post-generation verification.
+    original_source = src_c.read_text(encoding="utf-8", errors="ignore")
+    hidden_source = re.sub(r"^[ \t]*(?:/\*@\s*assert\b.*?\*/|//@\s*assert\b.*)$", "", original_source, flags=re.MULTILINE)
+    hidden_source = re.sub(r"^[ \t]*.*(?:assert\s*\(.*|__VERIFIER_assert\s*\(.*)$", "", hidden_source, flags=re.MULTILINE)
+    src_c.write_text(hidden_source, encoding="utf-8")
     started = time.time()
-    proc = subprocess.run(cmd, cwd=str(SRC), capture_output=True, text=True)
+    timeout_seconds = int(task.get("timeout_seconds", 7200))
+    timed_out = False
+    try:
+        try:
+            proc = subprocess.run(cmd, cwd=str(SRC), capture_output=True, text=True,
+                                  timeout=timeout_seconds)
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            proc = subprocess.CompletedProcess(cmd, returncode=None,
+                                               stdout=exc.stdout or "", stderr=exc.stderr or "")
+    finally:
+        src_c.write_text(original_source, encoding="utf-8")
     wall_seconds = time.time() - started
 
     (out_dir / "command.log").write_text(
@@ -246,6 +273,8 @@ def run_one(task: Dict) -> Dict:
         "function_name": function_name,
         "source_path": str(src_c),
         "returncode": proc.returncode,
+        "timeout": timed_out,
+        "timeout_seconds": timeout_seconds,
         "command": cmd,
         "run_id": run_id,
         "workspace_root": workspace_root,
@@ -265,7 +294,7 @@ def run_one(task: Dict) -> Dict:
         "syntax_status": "pass" if syntax_pass else "fail",
         "validity_status": "pass" if valid_pass else "fail",
         "satisfy_status": "pass" if satisfy_pass else "fail",
-        "failure_reason": failure_reason,
+        "failure_reason": "timeout" if timed_out else failure_reason,
         "total_seconds": metrics["total_seconds"] if metrics["total_seconds"] is not None else wall_seconds,
         "prompt_tokens": metrics["prompt_tokens"],
         "completion_tokens": metrics["completion_tokens"],
@@ -342,11 +371,17 @@ def parse_args() -> argparse.Namespace:
                    help="Force-disable example loading; useful for ablation")
     p.add_argument("--refine-count", type=int, default=None,
                    help="Override main.refine_count for every selected preset")
+    p.add_argument("--postcondition-samples", type=int, default=1,
+                   help="Concurrent calls per postcondition prompt (default: 1)")
+    p.add_argument("--base-url", default=None,
+                   help="Override llm.base_url for every run")
     return p.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.postcondition_samples < 1:
+        raise SystemExit('--postcondition-samples must be at least 1')
 
     if args.matrix_root:
         matrix_root = Path(args.matrix_root)
@@ -377,6 +412,9 @@ def main() -> int:
                         "label_settings": settings,
                         "matrix_root": matrix_root,
                         "python_exe": args.python_exe,
+                        "timeout_seconds": 7200,
+                        "postcondition_samples": args.postcondition_samples,
+                        "base_url": args.base_url,
                     })
 
     print(f"📋 Matrix: {len(tasks)} run(s) → {matrix_root}", flush=True)

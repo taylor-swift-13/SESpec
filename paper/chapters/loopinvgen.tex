@@ -1,0 +1,79 @@
+
+\begin{algorithm}[htbp]
+\caption{Loop Invariant Generation $\mathrm{LoopInvGen}$}
+\label{alg:loopinv-gen}
+\small
+\KwIn{function $\mathcal{F}$, loop entry $p_{\textit{loop}}$, loop stack $\textit{lS}$, call stack $\textit{cS}$, annotated functions $\textit{aF}$, loop precondition $P$, LLM}
+\KwOut{function $\mathcal{F}$ annotated with loop invariant $\mathcal{I}$ for the loop $\mathcal{F}_{\textit{loop}}$ at $p_{\textit{loop}}$}
+
+\tcp{\small \textit{$\mathcal{F}_{\textit{loop}}$ is the loop body at $p_{\textit{loop}}$ in $\mathcal{F}$}}
+$\mathrm{ThinkInNaturalLanguage}(\mathcal{F}_{\textit{loop}},\textit{LLM})$\;
+$\textit{lS}.\mathrm{push}(\mathcal{F}_{\textit{loop}})$\;
+$\mathcal{F}_{\textit{loop}}, \textit{uV}, \textit{nV} \gets \mathrm{LoopAnalysis}(\mathcal{F}_{\textit{loop}},P,\textit{lS},\textit{cS},\textit{aF},\textit{LLM})$\;
+$\textit{lS}.\mathrm{pop}()$\tcp*{\small \textit{$\textit{lS}$ depth is unchanged across this call}}
+$\mathcal{T} \gets \mathrm{LoopInvTemGen}(\mathcal{F}_{\textit{loop}},P,\textit{uV},\textit{nV})$\;
+$\mathcal{I} \gets \mathrm{OuterLoopLLMCall}(\mathcal{F},\mathcal{F}_{\textit{loop}},P,\mathcal{T},\textit{LLM})$\;
+$\mathcal{F} \gets (\mathcal{F},\mathcal{I})$\;
+
+\If{$\neg \mathrm{Verify}(\mathcal{F})$}{
+    $\mathcal{F} \gets \mathrm{Refine}(\mathcal{F},\mathcal{I},P,\textit{loop},\textit{LLM})$\;
+}
+
+\Return $\mathcal{F}$\;
+\end{algorithm}
+
+\subsection{Invariant Generation for Loops}
+Algorithm~\ref{alg:loopinv-gen} presents the invariant-generation procedure for a loop in $\mathcal{F}$. Among the inputs, $p_{\textit{loop}}$ denotes the loop entry in $\mathcal{F}$, $P$ is the loop precondition obtained from previous symbolic execution, and the LLM serves as the synthesis component. Other parameters remain as previously defined.
+
+The procedure separates three concerns.
+First (Line~1), the original outermost loop body $\mathcal{F}_{\textit{loop}}$ is sent to the LLM for a chain-of-thought reading in natural language, in which the LLM is asked a few guiding questions to build a comprehensive understanding of the loop; this reading is used only as semantic support for later template filling and is never emitted as an annotation.
+Second (Lines~2--4), $\mathcal{F}_{\textit{loop}}$ is pushed onto the loop stack and analyzed by $\mathrm{LoopAnalysis}$, which symbolically executes the loop body, recursively handles all inner loops and annotates them with their invariants, and returns the sets of unchanged variables $\textit{uV}$ and non-inductive variables $\textit{nV}$; the outermost loop is then popped, so the stack depth is unchanged across the call.
+Third (Lines~5--9), the invariant for the outermost loop is synthesized: the results of $\mathrm{LoopAnalysis}$ feed $\mathrm{LoopInvTemGen}$ (Line~5), which emits the template family for the current loop; the LLM then completes these templates through a single $\mathrm{OuterLoopLLMCall}$ (Line~6); and if the resulting annotation fails verification, a single call to the unified verifier-guided refinement procedure $\mathrm{Refine}$ (Section~\ref{sec:refinement}, Lines~8--9) refines the candidate until it passes verification.
+
+ 
+
+    
+    
+    
+   
+
+    
+
+\begin{algorithm}[htbp]
+\caption{Loop Analysis $\mathrm{LoopAnalysis}$}
+\label{alg:loop-analysis}
+\small
+\KwIn{loop body $\mathcal{F}_{\textit{loop}}$, precondition $\textit{Pre}$, loop stack $\textit{lS}$, call stack $\textit{cS}$, annotated functions $\textit{aF}$, LLM}
+\KwOut{annotated $\mathcal{F}_{\textit{loop}}$, sets of unchanged variables $\textit{uV}$ and non-inductive variables $\textit{nV}$}
+
+$\mathcal{F}_{\textit{unfolded}} \gets \mathrm{UnfoldLoop}(\mathcal{F}_{\textit{loop}})$\;
+$P \gets \textit{Pre}$\;
+$p_{\textit{start}} \gets p_{\textit{unfolded}\_0}$\;
+$p \gets \mathrm{SEStart}(\mathcal{F}_{\textit{unfolded}},P, p_{\textit{start}})$\;
+
+\While{$p \neq p_{\textit{unfolded}\_{-1}}$}{
+    $P \gets \textit{SP}(\mathcal{F}_{\textit{unfolded}},P,p_{\textit{start}},p)$\tcp*{\small Same as $\mathrm{FuncSpec}$}
+    $p_{\textit{start}} \gets p$\;
+    \If{$p = p_{\textit{nestedLoopEntry}}$}{
+        $\textit{lS}.\mathrm{push}(\mathcal{F}_{\textit{nested}})$\;
+    }
+    \If{$p = p_{\textit{nestedLoopExit}}$}{
+        $\mathcal{F}_{\textit{nested}} \gets \textit{lS}.\mathrm{pop}()$\;
+        $\mathcal{F}_{\textit{loop}} \gets \mathrm{NestedLoopLLMCall}(\mathcal{F}_{\textit{loop}},\mathcal{F}_{\textit{nested}},\textit{LLM})$\;
+    }
+    \If{$p = p_{\textit{callee}}$}{
+        $\mathcal{F}_{\textit{callee}} \gets \mathrm{FuncSpec}(\mathcal{F}_{\textit{callee}},\textit{cS},\textit{aF})$\;
+    }
+    $p \gets \mathrm{SEStart}(\mathcal{F}_{\textit{unfolded}},P, p_{\textit{start}})$\;
+}
+
+$\ldots$\tcp*{\small Same as $\mathrm{FuncSpec}$, construct the final postcondition $\mathcal{S}$}
+
+$\textit{uV} \gets \mathrm{FetchUnchangedVars}(\mathcal{S})$\;
+$\textit{nV} \gets \mathrm{FetchNonInductiveVars}(\mathcal{S})$\;
+
+\Return $\mathcal{F}_{\textit{loop}},\textit{uV},\textit{nV}$\;
+\end{algorithm}
+
+\subsection{Loop Analysis}
+$\mathrm{LoopAnalysis}$ (Algorithm~\ref{alg:loop-analysis}) symbolically executes a single-iteration unfolding $\mathcal{F}_{\textit{unfolded}}$ of the loop body (Lines~1--4) and then advances through it one program point at a time (Lines~5--15), exposing the update and frame facts of one iteration. The key difference from $\mathrm{FuncSpec}$ lies in the handling of nested loops: whereas the outer loop uses symbolic-execution-derived preconditions and templates to guide LLM synthesis ($\mathrm{OuterLoopLLMCall}$), an inner loop is processed purely through $\mathrm{NestedLoopLLMCall}$ (Lines~10--12), which infers its invariant directly from the code context without preconditions or templates, because a well-defined precondition is not available at the enclosing loop boundary. Nested loops are thus discharged bottom-up using the loop stack $\textit{lS}$, while function calls are handled consistently with $\mathrm{FuncSpec}$ through the call stack $\textit{cS}$ (Lines~13--14): the callee is summarized before symbolic execution of the unfolded body resumes. Once the unfolded body has been fully executed, its final postcondition is constructed and all nested loops are annotated with the invariants generated for them; this postcondition is then used to classify the unchanged variables $\textit{uV}$ and non-inductive variables $\textit{nV}$ of the outer loop (Lines~16--18).

@@ -1,0 +1,80 @@
+\DIFbluesubsection{RQ5: How often does \toolname\ produce a \emph{Valid} specification?}
+\label{subsec:rq5-valid}
+
+\input{diff_chapters/large_experiment_table}
+
+\DIFaddbegin
+Table~\ref{tab:large_experiment_summary} reports the per-model results. Within the C/ACSL workflows, the full \toolname\ pipeline achieves the highest \emph{Valid} rate on every model: \(68.0\%\) on gpt-4o, \(83.3\%\) on gpt-5-mini, \(93.3\%\) on gpt-5.4-mini, and \(93.0\%\) on gpt-5. These correspond to absolute gains of \(+55.0\), \(+64.3\), \(+66.8\), and \(+79.2\)\,pp over Pure LLM, and \(+39.2\), \(+57.3\), \(+29.5\), and \(+21.0\)\,pp over \autospec.
+The ablations show two different sources of improvement. Refinement is the dominant source of validity gain, but it is also the most expensive component: enabling refinement lifts \emph{Valid} by \(+36.5\), \(+56.5\), \(+60.3\), and \(+57.0\)\,pp across the four models, while requiring repeated LLM calls and verifier-feedback rounds. This confirms that iterative repair is highly effective, but its gain comes with substantial LLM-iteration cost.
+\DIFaddend
+
+\DIFaddbegin
+By contrast, symbolic-execution guidance provides a more cost-effective source of improvement. Even without refinement, adding symbolic-execution information raises \emph{Valid} over Pure LLM on every model: from \(13.0\%\) to \(31.5\%\) on gpt-4o, \(19.0\%\) to \(26.8\%\) on gpt-5-mini, \(26.5\%\) to \(33.0\%\) on gpt-5.4-mini, and \(13.8\%\) to \(36.0\%\) on gpt-5, whose unusually low \(13.8\%\) baseline is syntactic rather than semantic---it favors advanced ACSL constructs (behaviors, axiomatics) but often violates their surface syntax, triggering fatal whole-file parse errors that the symbolic-execution context helps avoid. Unlike refinement, this gain does not rely on repeated LLM sampling; it comes from exposing the local symbolic context before synthesis. Moreover, for loop-free programs fully supported by the flattened memory model, symbolic execution can directly compute the path-sensitive postcondition, so the core functional summary can be produced without an LLM call.
+\DIFaddend
+
+\DIFaddbegin
+Fig.~\ref{fig:refine-ablation} isolates the effect of refinement budget on gpt-5.4-mini. The cumulative \emph{Valid} rate rises from \(24.2\%\) at \(k{=}0\) to \(60.2\%\) at \(k{=}3\), \(73.0\%\) at \(k{=}5\), and \(79.2\%\) at \(k{=}10\), and then reaches \(93.3\%\) after the final Houdini pass. The marginal gain after \(k{=}5\) is smaller, while Houdini contributes a final \(+14.1\)\,pp by pruning failing clauses from the best refinement snapshots. In contrast, the \emph{trivial refine} ablation, which uses only a plain error-plus-code prompt, reaches \(70.0\%\) under the same 10-iteration budget and final Houdini pass. This shows that differential refinement prompts and best rollback together account for roughly 23\,pp of additional validity.
+\DIFaddend
+
+\begin{figure}[!htbp]
+\centering
+\resizebox{0.90\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm,y=0.10cm,font=\LARGE,every node/.style={text=figgraytext}]
+  % Ours: full \toolname\ refine pipeline (SE-driven context, structured prompts,
+  % rollback, ACSL fixer); trivial: minimal "fix-it" prompt, no rollback,
+  % no ACSL fixer, no SE context. Both run with refine budget 10 + final Houdini.
+  \def\za{24.2}  \def\zb{60.2}  \def\zc{73.0}  \def\zd{79.2}  \def\ze{93.3}
+  \def\ta{5.8}   \def\tb{31.0}  \def\tc{40.5}  \def\td{47.0}  \def\te{70.0}
+  \def\xH{12.5}
+  % horizontal gridlines (faint)
+  \foreach \y in {0,20,40,60,80,100} {
+    \draw[figgrid] (0,\y) -- (\xH+0.5,\y);
+  }
+  % axes
+  \draw[->,figaxis] (0,0) -- (\xH+0.7,0);
+  \draw[->,figaxis] (0,0) -- (0,108);
+  \node[anchor=west] at (\xH+0.8,4) {$k$};
+  \node[anchor=south] at (0,108) {Valid (\%)};
+  % y ticks (skip "0" to avoid colliding with the x=0 tick label)
+  \foreach \y in {20,40,60,80,100} {
+    \draw[figaxis] (-0.1,\y) -- (0,\y) node[left,xshift=-1pt] {\y};
+  }
+  % x ticks
+  \foreach \x/\lab in {0/0,3/3,5/5,10/10,\xH/{+Houdini}} {
+    \draw[figaxis] (\x,-2) -- (\x,0) node[below,yshift=-1pt] {\lab};
+  }
+  % Ours curve
+  \draw[figcontractstroke,ultra thick] (0,\za) -- (3,\zb) -- (5,\zc) -- (10,\zd) -- (\xH,\ze);
+  \foreach \x/\y in {0/\za,3/\zb,5/\zc,10/\zd,\xH/\ze} {
+    \fill[figcontractstroke] (\x,\y) circle (4.6pt);
+    \draw[figcontractstroke,line width=1.1pt] (\x,\y) circle (4.6pt);
+    \node[anchor=south] at (\x,\y+3.2) {\y};
+  }
+  % trivial refine curve
+  \draw[figloopstroke,ultra thick,dashed] (0,\ta) -- (3,\tb) -- (5,\tc) -- (10,\td) -- (\xH,\te);
+  % all trivial labels above each point with consistent offset
+  \foreach \x/\y in {0/\ta,3/\tb,5/\tc,10/\td,\xH/\te} {
+    \fill[figloopstroke] (\x,\y) circle (4.2pt);
+    \draw[figloopstroke,line width=1pt] (\x,\y) circle (4.2pt);
+    \node[anchor=south] at (\x,\y+3.8) {\y};
+  }
+  % legend (lower-right, framed)
+  \draw[figaxis,fill=white] (7.0,6) rectangle (12.4,24);
+  \draw[figcontractstroke,ultra thick] (7.3,19) -- (8.3,19);
+  \fill[figcontractstroke] (7.8,19) circle (4pt);
+  \draw[figcontractstroke,line width=1pt] (7.8,19) circle (4pt);
+  \node[anchor=west] at (8.5,19) {Ours};
+  \draw[figloopstroke,ultra thick,dashed] (7.3,11) -- (8.3,11);
+  \fill[figloopstroke] (7.8,11) circle (4pt);
+  \draw[figloopstroke,line width=1pt] (7.8,11) circle (4pt);
+  \node[anchor=west] at (8.5,11) {trivial refine};
+\end{tikzpicture}
+}%
+\caption{Cumulative \emph{Valid} rate on gpt-5.4-mini over 400 cases as the refinement budget \(k\) increases, for the full \toolname\ pipeline (\emph{Ours}) versus a \emph{trivial refine} baseline.}
+
+\label{fig:refine-ablation}
+\end{figure}
+
+\begin{finding}
+\textbf{Finding (RQ5).} On \textbf{\toolname-400} the full pipeline reaches $68$--$93\%$ \emph{Valid}; refinement is the dominant but most expensive source of gain, whereas symbolic-execution guidance is a cheaper one that needs no repeated LLM sampling.
+\end{finding}

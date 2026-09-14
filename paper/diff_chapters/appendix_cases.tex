@@ -1,0 +1,270 @@
+\section{Supplementary Case Studies}
+\label{app:supp-cases}
+\suppressfloats[t]
+
+\DIFaddbegin
+This appendix retains five compact cases that support Section~\ref{sec:case} without interrupting the main narrative. The factorial and GCD cases show successful inductive-helper synthesis; MulLoop shows sign-sensitive invariant synthesis; Ackermann marks a recursion pattern beyond the current ACSL/SMT automation envelope; and matrix multiplication shows a verifier-timeout boundary rather than a generation failure.
+\DIFaddend
+
+\Needspace*{10\baselineskip}
+\DIFblueparagraph{Factorial: Guarded Inductive Helper.}{app:case-factorial}
+
+\begin{figure}[!b]
+    \centering
+    \begin{tcolorbox}[casebox, title={Supplementary Case: guarded factorial helper}, width=\linewidth]
+\begin{lstlisting}[style=casecompactinnerstyle]
+int unknown();
+
+/*@
+  logic integer product(integer begin, integer end) =
+    (end < begin) ? 1 : product(begin, end - 1) * end;
+*/
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures (n < 1) ==> \result == 1;
+  ensures (n >= 1) ==> \result == product(1, n);
+*/
+int factorial9(int n) {
+  int i = 1;
+  int f = 1;
+
+  /*@
+    loop invariant (1 <= \at(n,Pre)) ==> (1 <= i <= n + 1);
+    loop invariant (1 <= \at(n,Pre)) ==> (f == product(1, i - 1));
+    loop invariant (!(1 <= \at(n,Pre))) ==> ((f == 1)&&(i == 1)&&(n == \at(n,Pre)));
+    loop invariant n == \at(n,Pre);
+    loop assigns f, i;
+  */
+  while (i <= n) {
+    f = f * i;
+    i = i + 1;
+  }
+
+  return f;
+}
+
+void goo9() {
+  int t = factorial9(5);
+  //@ assert t == 120;
+}
+\end{lstlisting}
+    \end{tcolorbox}
+    \caption{Supplementary factorial case: a guarded loop invariant with a recursive \texttt{product} helper.}
+    \label{fig:case2}
+\end{figure}
+
+%\DIFaddbegin
+Fig.~\ref{fig:case2} complements the phase-split loop case in Section~\ref{sec:case}: the loop may be skipped when \texttt{n < 1}, and the entered region requires the inductive relation \texttt{f == product(1, i - 1)}. Symbolic execution provides the entered/unentered guard, while the static route selects the inductive-helper template that supplies the ACSL \texttt{product} definition used by both the invariant and the postcondition.
+%\DIFaddend
+
+\Needspace*{10\baselineskip}
+\DIFblueparagraph{GCD: Recursive Summary with a Simple Measure.}{app:case-gcd}
+
+\begin{figure}[!b]
+    \centering
+    \begin{tcolorbox}[casebox, title={Supplementary Case: recursive GCD summary}]
+\begin{lstlisting}[style=casecompactinnerstyle]
+/*@ 
+  logic integer gcd_logic(integer a, integer b) =
+    (a == 0) ? b :
+    (b == 0) ? a :
+    (a == b) ? a :
+    (a > b) ? gcd_logic(a - b, b) :
+               gcd_logic(a, b - a);
+*/
+
+/*@
+requires \true;
+decreases a + b;
+assigns \nothing;
+ensures \result == gcd_logic(a, b);
+*/
+int gcd(int a, int b) 
+{
+    if (a == 0)
+       return b;
+
+    if (b == 0)
+       return a;
+
+    if (a == b)
+        return a;
+
+    if (a > b)
+        return gcd(a-b, b);
+    return gcd(a, b-a);
+}
+
+int main2()
+{
+    int a = 98, b = 56;
+    int c = gcd(a, b);
+    //@ assert c == 14;
+    return 0;
+}
+\end{lstlisting}
+    \end{tcolorbox}
+    \caption{Supplementary recursive GCD case: a recursive logic summary with a single arithmetic termination measure.}
+    \label{fig:case5}
+\end{figure}
+
+\DIFaddbegin
+Fig.~\ref{fig:case5} shows the recursion case where the current workflow succeeds cleanly. When symbolic execution reaches a recursive call, \toolname\ switches to the recursion template, emits \texttt{gcd\_logic} branch-by-branch, and uses \texttt{decreases a + b}. This case is useful mainly as a contrast to Ackermann in Appendix~\ref{app:case-ackermann}: GCD needs only a single-measure descent and a single-unfold style of reasoning.
+\DIFaddend
+
+\Needspace*{10\baselineskip}
+\DIFblueparagraph{MulLoop: Signed Multiplication Loop.}{app:case-mulloop}
+
+\begin{figure}[!b]
+    \centering
+    \begin{tcolorbox}[casebox, title={Supplementary Case: signed multiplication loop}]
+\begin{lstlisting}[style=casecompactinnerstyle]
+int foo57(int a, int b);
+
+/*@
+  requires \true;
+  assigns \nothing;
+  ensures \result == a * b;
+*/
+int foo57(int a, int b) {
+    int res = 0;
+    if (b >= 0) {
+        /*@
+          loop invariant 0 <= i <= b;
+          loop invariant res == i * a;
+          loop assigns i, res;
+          loop variant b - i;
+        */
+        for (int i = 0; i < b; i++) {
+            res = res + a;
+        }
+    } else {
+        /*@
+          loop invariant 0 <= i <= -b;
+          loop invariant res == -i * a;
+          loop assigns i, res;
+          loop variant -b - i;
+        */
+        for (int i = 0; i < -b; i++) {
+            res = res - a;
+        }
+    }
+    return res;
+}
+\end{lstlisting}
+    \end{tcolorbox}
+    \caption{Supplementary MulLoop case from \textbf{SpecGenBench}.}
+    \label{fig:case6}
+\end{figure}
+
+\DIFaddbegin
+Fig.~\ref{fig:case6} computes $a \cdot b$ by addition or subtraction depending on the sign of \texttt{b}. The negative branch requires the asymmetric invariant \texttt{res == -i * a}; reusing the positive-branch form would make the functional postcondition fail. In our run, \toolname\ retains \texttt{ensures \textbackslash result == a * b} because the branch condition selects the correct invariant template.
+\DIFaddend
+
+\Needspace*{10\baselineskip}
+\DIFblueparagraph{Ackermann: Recursion Beyond ACSL/SMT Automation.}{app:case-ackermann}
+
+\begin{figure}[!b]
+    \centering
+    \begin{tcolorbox}[casebox, title={Supplementary Case: Ackermann recursion boundary}]
+\begin{lstlisting}[style=casecompactinnerstyle]
+int foo1(int m, int n);
+
+/*@
+  logic integer ackermann(integer m, integer n) =
+    (m == 0) ? n + 1 :
+    (n == 0) ? ackermann(m - 1, 1) :
+               ackermann(m - 1, ackermann(m, n - 1));
+*/
+
+/*@
+  requires m >= 0 && n >= 0;
+  decreases m * 1000 + n;
+  assigns \nothing;
+  ensures \result == ackermann(m, n);
+*/
+int foo1(int m, int n) {
+    if (m == 0) {
+        return n + 1;
+    }
+    if (n == 0) {
+        return foo1(m - 1, 1);
+    }
+    return foo1(m - 1, foo1(m, n - 1));
+}
+\end{lstlisting}
+    \end{tcolorbox}
+    \caption{Supplementary Ackermann case. The candidate specification is syntactically clean but not discharged by Frama-C/WP under the current ACSL/SMT backend.}
+    \label{fig:case8}
+\end{figure}
+
+\DIFaddbegin
+Fig.~\ref{fig:case8} marks a boundary rather than a prompt failure. The generated helper follows the C branch structure, but Ackermann needs a lexicographic termination argument and nested induction that are not handled well by the current ACSL/SMT stack. A scalar \texttt{decreases m * 1000 + n} is not a sound substitute for the true lexicographic descent once \texttt{n} grows, and the functional postcondition would require proof support beyond the single-unfold reasoning that succeeds for GCD.
+\DIFaddend
+
+\Needspace*{10\baselineskip}
+\DIFblueparagraph{Matrix Multiplication: Triple-Nested Loops Beyond Per-Loop Symbolic Context.}{app:case-matmul}
+
+\begin{figure}[!b]
+    \centering
+    \begin{tcolorbox}[casebox, title={Supplementary Case: matrix-multiplication proof boundary}, width=\linewidth]
+\begin{lstlisting}[style=casecompactinnerstyle]
+/*@
+  logic integer mat_sum(int *A, int *B, integer ca_rb, integer cb,
+                        integer i, integer j, integer k) =
+    k <= 0 ? 0 :
+    mat_sum(A, B, ca_rb, cb, i, j, k - 1) +
+    A[i * ca_rb + (k - 1)] * B[(k - 1) * cb + j];
+*/
+
+/*@
+  requires \valid(out + (0 .. ra*cb - 1));
+  requires \valid(A   + (0 .. ra*ca_rb - 1));
+  requires \valid(B   + (0 .. ca_rb*cb - 1));
+  requires \separated(out + (0..ra*cb-1), A + (0..ra*ca_rb-1));
+  requires \separated(out + (0..ra*cb-1), B + (0..ca_rb*cb-1));
+  // default precondition also bounds every cell to [0,100] and each
+  // dimension product to (0,100), keeping the arithmetic overflow-free
+  assigns out[0 .. ra*cb - 1];
+  ensures \forall integer i, j; 0 <= i < ra && 0 <= j < cb ==>
+      out[i*cb + j] == mat_sum(A, B, ca_rb, cb, i, j, ca_rb); // Z3 TIMEOUT (10s)
+*/
+void mat_mul(int *out, int *A, int *B, int ra, int ca_rb, int cb) {
+  /*@
+    loop invariant 0 <= i <= ra;
+    loop invariant \forall integer ii, jj; 0 <= ii < i && 0 <= jj < cb ==>
+        out[ii*cb + jj] == mat_sum(A, B, ca_rb, cb, ii, jj, ca_rb); // Z3 TIMEOUT (10s)
+    loop invariant \forall integer p; i*cb <= p < ra*cb ==> out[p] == \at(out[p],Pre); // Z3 TIMEOUT
+    loop assigns i, out[0 .. ra*cb - 1];
+  */
+  for (int i = 0; i < ra; i++) {
+    /*@
+      loop invariant 0 <= j <= cb;
+      loop invariant \forall integer jj; 0 <= jj < j ==>
+          out[i*cb + jj] == mat_sum(A, B, ca_rb, cb, i, jj, ca_rb); // Z3 TIMEOUT (10s)
+      loop assigns j, out[i*cb .. i*cb + cb - 1];
+    */
+    for (int j = 0; j < cb; j++) {
+      int s = 0;
+      /*@
+        loop invariant 0 <= k <= ca_rb;
+        loop invariant s == mat_sum(A, B, ca_rb, cb, i, j, k); // DISCHARGED (one-step induction)
+        loop assigns k, s;
+      */
+      for (int k = 0; k < ca_rb; k++)
+        s = s + A[i*ca_rb + k] * B[k*cb + j];
+      out[i*cb + j] = s;
+    }
+  }
+}
+\end{lstlisting}
+    \end{tcolorbox}
+    \caption{Supplementary matrix-multiplication case ($\mathit{ra}\times\mathit{ca\_rb}$ by $\mathit{ca\_rb}\times\mathit{cb}$ product). \toolname\ generates the correct quantified specification, but Frama-C/WP$\rightarrow$Z3 times out on the outer invariants and postcondition, so the accepted specification degrades to \texttt{ensures \textbackslash true}.}
+    \label{fig:case-matmul}
+\end{figure}
+
+\DIFaddbegin
+Fig.~\ref{fig:case-matmul} is the multi-loop boundary that Reviewer~2's failure-case question targets. \toolname\ emits the intended quantified postcondition and the matching outer-loop invariants, while the innermost \texttt{s == mat\_sum(\dots,k)} invariant is discharged by one-step induction. The remaining quantified obligations time out in Z3 because they combine recursive logic unfolding, havoc-updated array memory, and non-linear index arithmetic; refinement therefore strips the unproved clauses and the accepted specification collapses to verifier-valid but vacuous \texttt{ensures \textbackslash true}. This case illustrates a proof-automation limit rather than a generation failure.
+\DIFaddend

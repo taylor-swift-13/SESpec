@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import openai
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from Utils.main_class import *
 from config import LLMConfig
 from collections import Counter
@@ -2208,34 +2209,185 @@ ensures {result};
 
             
     def specgen_annotations(self, annotations):
+        """Generate and merge independent postcondition candidates.
 
-            llm = Chatbot(self.llm_config)
+        Every branch receives the exact same prompt and owns an independent
+        chat session.  The first valid response supplies the target function's
+        structure and function-level clauses other than ``ensures``; unique
+        ``ensures`` clauses and required top-level logic declarations from all
+        valid responses are then unioned deterministically.
+        """
+        prompt = self.get_specgen_prompt(annotations)
+        try:
+            responses = self._parallel_postcondition_responses(prompt)
+            cleaned = [self._clean_specgen_response(text) for text in responses]
+            return self._merge_postcondition_candidates(cleaned)
+        except Exception as e:
+            print(f"API调用失败: {e}")
+            return None
 
-            """调用Model生成ACSL规约"""
+    def _new_postcondition_chatbot(self):
+        factory = getattr(self, '_postcondition_chatbot_factory', None)
+        return factory() if factory is not None else Chatbot(self.llm_config)
 
-            prompt =  self.get_specgen_prompt(annotations)
+    def _parallel_postcondition_responses(self, prompt):
+        count = int(getattr(self.llm_config, 'postcondition_samples', 1))
+        if count < 1:
+            raise ValueError('postcondition_samples must be at least 1')
+        if count == 1:
+            return [self._new_postcondition_chatbot().chat(prompt)]
 
+        results = [None] * count
+
+        def generate(index):
             try:
-                """调用 OpenAI API 获取 ACSL 注释"""
-                
+                return index, self._new_postcondition_chatbot().chat(prompt)
+            except Exception as exc:
+                print(f"postcondition candidate {index + 1} failed: {exc}")
+                return index, None
 
-                def extract_last_c_code(text):
-                    # 匹配 C 代码块（Markdown 代码块 或 以 #include 开头的代码）
-                    code_blocks = re.findall(r'```c(.*?)```', text, re.DOTALL)  # Markdown 代码块
+        with ThreadPoolExecutor(max_workers=count) as pool:
+            futures = [pool.submit(generate, index) for index in range(count)]
+            for future in as_completed(futures):
+                index, response = future.result()
+                results[index] = response
+        return results
 
-                    return code_blocks[-1] if code_blocks else text  # 返回最后一个 C 代码块
+    @staticmethod
+    def _clean_specgen_response(response):
+        if not response:
+            return ''
+        response = re.sub(
+            r'>\s*Reasoning\s*[\s\S]*?(?=\n\n|$)', '', response,
+            flags=re.IGNORECASE,
+        )
+        response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
+        code_blocks = re.findall(r'```c(.*?)```', response, re.DOTALL)
+        return code_blocks[-1] if code_blocks else response
 
-                # 处理响应
-                assistant_response = llm.chat(prompt)
-                assistant_response = re.sub(r'>\s*Reasoning\s*[\s\S]*?(?=\n\n|$)', '', assistant_response, flags=re.IGNORECASE)
-                assistant_response = re.sub(r'<think>.*?</think>', '', assistant_response, flags=re.DOTALL)
-                assistant_response = extract_last_c_code(assistant_response)
+    def _target_contract_span(self, text):
+        """Return the attached ACSL contract span for the target function."""
+        name = getattr(self.function_info, 'name', '')
+        if not text or not name:
+            return None
+        signature = re.compile(
+            r'(?:^|[\s;}])((?:[A-Za-z_]\w*[\s\*\[\]]+)+'
+            + re.escape(name) + r'\s*\([^;{}]*\)\s*\{)'
+        ).search(text)
+        if not signature:
+            return None
+        sig_start = signature.start(1)
+        prefix = text[:sig_start].rstrip()
+        if not prefix.endswith('*/'):
+            return None
+        start = prefix.rfind('/*@')
+        if start < 0:
+            return None
+        end = prefix.find('*/', start) + 2
+        if end != len(prefix):
+            return None
+        return start, end
 
-                return assistant_response
+    @staticmethod
+    def _ensures_clauses(contract):
+        """Extract complete ensures clauses, including quantified clauses."""
+        clauses = []
+        cursor = 0
+        start_re = re.compile(r'\bensures\b')
+        quant_re = re.compile(r'\\(?:forall|exists|let)\b')
+        while True:
+            match = start_re.search(contract, cursor)
+            if not match:
+                break
+            index = match.start()
+            semicolons = 0
+            quantifiers = 0
+            end = None
+            pos = index
+            while pos < len(contract):
+                quant = quant_re.match(contract, pos)
+                if quant:
+                    quantifiers += 1
+                    pos = quant.end()
+                    continue
+                if contract[pos] == ';':
+                    semicolons += 1
+                    if semicolons > quantifiers:
+                        end = pos + 1
+                        break
+                pos += 1
+            if end is None:
+                break
+            clauses.append(contract[index:end].strip())
+            cursor = end
+        return clauses
 
-            except Exception as e:
-                print(f"API调用失败: {e}")
-                return None
+    @staticmethod
+    def _logic_declarations(text, before):
+        declarations = []
+        for match in re.finditer(r'/\*@[\s\S]*?\*/', text[:before]):
+            block = match.group(0)
+            predicate = re.search(r'\bpredicate\s+(\w+)\s*[({]', block)
+            logic = re.search(
+                r'\blogic\s+(?:(?:struct|enum|union)\s+\w+|[\w\\]+)'
+                r'(?:\s*\*)?\s+(\w+)\s*[({]', block
+            )
+            if predicate:
+                declarations.append(('predicate', predicate.group(1), block))
+            elif logic:
+                declarations.append(('logic', logic.group(1), block))
+        return declarations
+
+    def _merge_postcondition_candidates(self, candidates):
+        valid = []
+        for candidate in candidates:
+            span = self._target_contract_span(candidate)
+            if span:
+                valid.append((candidate, span))
+        if not valid:
+            return candidates[0] if candidates else None
+
+        base, (contract_start, contract_end) = valid[0]
+        base_contract = base[contract_start:contract_end]
+        seen = {
+            re.sub(r'\s+', ' ', clause).strip()
+            for clause in self._ensures_clauses(base_contract)
+        }
+        additions = []
+        for candidate, (start, end) in valid[1:]:
+            for clause in self._ensures_clauses(candidate[start:end]):
+                key = re.sub(r'\s+', ' ', clause).strip()
+                if key not in seen:
+                    seen.add(key)
+                    additions.append(clause)
+
+        if additions:
+            insertion = '\n  ' + '\n  '.join(
+                clause.replace('\n', '\n  ') for clause in additions
+            ) + '\n'
+            close = base_contract.rfind('*/')
+            base_contract = base_contract[:close].rstrip() + insertion + base_contract[close:]
+            base = base[:contract_start] + base_contract + base[contract_end:]
+            contract_end += len(base_contract) - (contract_end - contract_start)
+
+        existing = {
+            (kind, name)
+            for kind, name, _ in self._logic_declarations(base, contract_start)
+        }
+        helper_blocks = []
+        for candidate, (start, _end) in valid[1:]:
+            for kind, name, block in self._logic_declarations(candidate, start):
+                key = (kind, name)
+                if key not in existing:
+                    existing.add(key)
+                    helper_blocks.append(block)
+        if helper_blocks:
+            base = (
+                base[:contract_start]
+                + '\n'.join(helper_blocks) + '\n\n'
+                + base[contract_start:]
+            )
+        return base
 
     
     

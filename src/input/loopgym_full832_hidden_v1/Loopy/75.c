@@ -1,0 +1,35 @@
+                                                                                                                         
+extern int unknown_int(void);
+extern int unknown_bool(void);
+
+/*@
+  requires x<100;
+  requires x>-100;
+  requires z<100;
+  requires z>-100;
+*/
+void loopy_75(int x, int y, int z)
+{
+    
+    
+    
+
+
+
+
+    while(x<100 && 100<z)
+    {
+        int  tmp=unknown_bool();
+        if(tmp){
+            x++;
+        } else {
+            x--;
+            z--;
+        }
+    }
+    {;
+
+}
+
+    return;
+}

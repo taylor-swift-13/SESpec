@@ -1,0 +1,191 @@
+This section first introduces symbolic-execution-based specification generation for code segments without loops, and then presents the generation of general function specifications. Loop-invariant generation is deferred to the next section.
+
+\DIFbluesubsection{Symbolic execution and strongest postcondition} %
+%\DIFaddbegin
+%Before stating the proposition, we fix its assumptions. 
+%\DIFaddend
+
+
+%\DIFaddbegin
+We use a \emph{flattened memory model} to explicitly track memory values and aliasing during symbolic execution. At each program point $p$, the \emph{scope} is the set of variables and formal parameters accessible at $p$. Starting from these roots, the model enumerates the finite set of \emph{atomic memory locations} $\mathcal{L}_{p}$ reachable by dereferencing pointers and selecting struct fields and array elements: a struct is flattened field by field, an array of statically known or parameter-bounded length element by element, and each resulting primitive cell (a scalar or a pointer value), is represented by a distinct typed symbolic variable. Aliasing is expressed over these location names: access paths that the model resolves to the same cell denote the same symbolic location, while pairs that can be resolved as distinct are recorded as separated, thus equality, disjointness, and per-cell update facts are all stated over $\mathcal{L}_{p}$. 
+%\DIFaddend
+
+\DIFaddbegin
+The model produces only finite, first-order facts over named cells; it does not use recursive or inductive predicates. These facts serve as preconditions and postconditions for two back-ends: QCP (in QCPL) for symbolic execution, and Frama-C/WP (in ACSL) for verification. What limits the expressiveness of the facts is Frama-C/WP's requirement for automatic SMT discharge: because the verification step must be fully automatic, the facts are confined to first-order and free of recursive/inductive predicates. Hence the model is deliberately finite. It handles scalars, structs, fixed arrays, and pointers with statically resolvable aliasing, but not unbounded or recursive structures (e.g., linked lists, trees), dynamic unbounded allocation, or accesses with a symbolic offset (e.g., pointer arithmetic). These cases fall outside the exact fragment and trigger the LLM fallback described in Section~\ref{sec:llm-fallback}.
+\DIFaddend
+
+
+
+
+
+%Both back-ends consume the resulting precondition and postcondition facts---QCP in QCPL during symbolic execution and Frama-C/WP in ACSL during validation---but it is Frama-C/WP's automatic SMT discharge, not QCP's separation logic, that bounds the usable fragment: keeping the facts first-order and shape-predicate-free is precisely what lets Frama-C/WP discharge them directly, whereas QCP could in principle express more. The model is deliberately finite. It captures scalar, struct, fixed-extent array, and pointer state with statically resolvable aliasing, but it cannot name an unbounded or recursively defined set of cells; dynamically allocated or recursive heap shapes (e.g., linked lists and trees), unbounded allocation, and accesses whose target cannot be resolved to a finite location set (e.g., pointer arithmetic with a symbolic offset) therefore lie outside the exact fragment and trigger the LLM fallback of Section~\ref{sec:llm-fallback}.
+
+% Within this model, the symbolic execution of statements maintains a symbolic state $(PC_\pi, \sigma_\pi)$ for each execution path $\pi$, where
+% \begin{itemize}
+%     \item $PC_\pi$ denotes the path condition, i.e., a logical formula over initial symbolic values of $\mathcal{L}_{p_0}$ and constants, that expresses the conditions required to traverse path $\pi$. $PC_\pi$ is updated when a branch is taken along $\pi$.
+% \end{itemize}
+
+
+Within this model, the symbolic execution of statements maintains a \emph{symbolic state} $(PC_\pi, \sigma_\pi)$ for each execution path $\pi$. 
+At a program point $p$ on path $\pi$, let $\mathcal{L}^{\pi}_{p}$ denote the set of symbolic locations currently tracked by the executor. This set includes the entry-point locations $\mathcal{L}_{p_0}$ reachable from the function parameters, together with the local variables that have entered scope along $\pi$ before reaching $p$ (hence $\mathcal{L}_{p_0}\subseteq\mathcal{L}^{\pi}_{p}$). 
+\begin{itemize}
+\item $PC_\pi$ denotes the path condition, i.e., a logical formula over initial symbolic values and constants that encodes the conditions needed to follow the path $\pi$. 
+%$PC_\pi$ is updated when a condition branch is taken along $\pi$.
+\item $\sigma_\pi$ denotes the symbolic store along path $\pi$, i.e., a mapping from each currently tracked symbolic location in $\mathcal{L}^{\pi}_{p}$ to a symbolic expression over the initial values. 
+%$\sigma_\pi$ is updated when  assignments, or memory updates execute along $\pi$.
+\end{itemize}
+
+
+The symbolic execution of a program is defined as a transformation over sets of symbolic states, branching at conditional control flow points. Formally, execution begins at the function entry point $p_0$ with the initial symbolic state $(PC_0, \sigma_0)$, where $\sigma_0$ assigns an initial symbolic value to each location in the entry point location set $\mathcal{L}_{p_0}$, and $PC_0$ is the precondition constraining those initial values. For a program point $p$, let the set of all symbolic states reachable from $p_0$ be $\{(PC_{\pi_i}, \sigma_{p,\pi_i})\}_{i=1}^m$, where $\pi_i$ ranges over all paths from $p_0$ to $p$. The logical formula that characterizes all possible concrete states at $p$ is $\bigvee_{i=1}^{m} (PC_{\pi_i} \land \sigma_{p, \pi_i})$. At the entry point $p_0$, this formula simplifies to the precondition $PC_0 \wedge\sigma_0$. For any subsequent program point, the corresponding formula represents the postcondition that holds up to that point in execution.
+
+
+%\DIFaddbegin
+We implement a symbolic execution procedure $\mathrm{SEStart}(\mathcal{F}, P, p_{\mathit{start}})$. Given a code segment $\mathcal{F}$ and a precondition $P$ (a formula representing symbolic states) at a starting point $p_{\mathit{start}}$, the procedure executes symbolically from $p_{\mathit{start}}$, exploring the feasible paths until it reaches the next program boundary (i.e. a loop entry, a function call, or the exit of $\mathcal{F}$), and returns the point $p$ at which it pauses. By construction, the segment from $p_{\mathit{start}}$ to $p$ contains no loop and no function call, so its input/output behavior can be summarized exactly.
+%\DIFaddend
+
+  
+\DIFaddbegin
+We first define the notion of a \emph{strongest postcondition} in the Hoare‑logic sense before stating the proposition for loop‑free segments.
+\begin{definition}{(Strongest Postcondition)}
+    For a segment $\mathcal{F}$ and a precondition $P$, a formula $\Phi$ is the strongest postcondition of $\mathcal{F}$ with respect to $P$, if 
+    \begin{itemize}
+        \item $\{P\}\,\mathcal{F}\,\{\Phi\}$ holds, i.e. if an execution of $\mathcal{F}$ from a state satisfying $P$ terminates, then the final state must satisfy $\Phi$.
+
+        \item For any $\Psi$ such that $\{P\}\,\mathcal{F}\,\{\Psi\}$ holds, we have $\Phi \Rightarrow \Psi$. 
+    \end{itemize}
+\end{definition}
+\DIFaddend
+
+\DIFaddbegin
+Let $\mathcal{F}$ be a program segment from $p_{\textit{start}}$ to $p_{\textit{end}}$ and $P$ be a logical formula denoting the precondition. We define
+\[\textit{SP}(\mathcal{F},P,p_{\textit{start}},p_{\textit{end}}) = \bigvee_{\pi\in \textit{Path}(p_{\textit{start}},p_{\textit{end}})} (PC_\pi \land \sigma_{p_{\textit{end}},\pi})\] 
+where $\textit{Path}(p_{\textit{start}},p_{\textit{end}})$ is the set of feasible paths explored from $p_{\textit{start}}$ to $p_{\textit{end}}$ under $P$. Then we state the following proposition.
+\begin{proposition} 
+\label{thm:sp-sound-complete}
+ $\textit{SP}(\mathcal{F},P,p_{\textit{start}},p_{\textit{end}})$ is the \emph{strongest postcondition} of $\mathcal{F}$ with respect to $P$, if the following conditions hold:
+ \begin{itemize}
+     \item[(A1)] Scope conditions: $\mathcal{F}$ contains no external calls (i.e., every called function has a definition), no loops, and every memory access is representable in the flattened model. 
+     \item[(A2)] Symbolic execution conditions: The symbolic execution procedure is path-complete, that is, it enumerates all feasible paths from $p_{\textit{start}}$ to $p_{\textit{end}}$. Furthermore, for each enumerated path $\pi$, the path condition $PC_\pi$ exactly characterizes the inputs that cause the concrete execution to follow $\pi$, and the symbolic store $\sigma_{p_{\textit{end}},\pi}$ exactly expresses the resulting concrete state at $p_{\textit{end}}$ as a function of the initial state, according to the flattened memory semantics. 
+ \end{itemize} 
+\end{proposition}
+\begin{proof}
+    Denote $\textit{SP}(\mathcal{F},P,p_{\textit{start}},p_{\textit{end}})$ by $\Phi$, according to the definition of strongest postcondition, we need to prove: (i) $\{P\}\,\mathcal{F}\,\{\Phi\}$ holds (soundness); (ii) for any $\Psi$ such that $\{P\}\,\mathcal{F}\,\{\Psi\}$ holds, we have $\Phi \Rightarrow \Psi$ (strongest).
+
+    (Soundness): Take any initial state $s_0$ satisfying $P$. Since $\mathcal{F}$ is loop-free and contains no external calls, its concrete execution from $s_0$ follows a single feasible path $\pi$ and terminates at some final state $s$. By (A2) path-completeness, the symbolic execution enumerates $\pi$. By (A1), every memory access is representable, so the flattened-memory semantics applied by the symbolic execution exactly matches the concrete semantics for all operations along $\pi$. Therefore, the path condition $PC_\pi$ exactly characterizes the inputs following $\pi$ and the symbolic store $\sigma_{p_{\textit{end}},\pi}$ exactly expresses the final state yielding $s = \sigma_{p_{\textit{end}},\pi}(s_0)$. Thus $(s_0, s)$ satisfies $PC_\pi \wedge \sigma_{p_{\textit{end}},\pi}$. This establishes $\{P\}\,\mathcal{F}\,\{\Phi\}$.
+
+    (Completeness): Assume $\{P\}\,\mathcal{F}\,\{\Psi\}$ holds. Let $(s_0, s)$ be an arbitrary pair satisfying $\Phi$, then there exists a path $\pi$ with $s_0$ satisfying $PC_\pi$ and $s = \sigma_{p_{\textit{end}},\pi}(s_0)$. By (A1) and (A2), the concrete execution from $s_0$ indeed follows $\pi$ and terminates at $s$. Moreover, the definition of $\textit{Path}(p_{\textit{start}},p_{\textit{end}})$ ensures that every enumerated path is feasible under $P$, hence $s_0$ satisfies $P$. From the assumption $\{P\}\,\mathcal{F}\,\{\Psi\}$ and the execution from $s_0$ terminates at $s$, we have the fact that $s$ satisfies $\Psi$. Thus $(s_0, s)$ satisfies $\Psi$. Because $(s_0, s)$ is arbitrary, this establishes
+    $\Phi \Rightarrow \Psi$.     
+\end{proof}
+\DIFaddend
+
+
+ 
+\DIFaddbegin
+If symbolic execution is unexpectedly interrupted by unsupported program features, $\textit{SP}$ returns $\textit{SymExecFailed}$ and the affected task is handled by the LLM-based fallback layer (Section~\ref{sec:llm-fallback}). The fallback may still produce a verifier-checked specification, but it no longer carries the strongest-postcondition guarantee of Proposition~\ref{thm:sp-sound-complete}.
+\DIFaddend
+
+\oomit{
+\smallskip
+\noindent\emph{Informal statement.}
+For a loop-free segment handled entirely within the flattened memory model,
+the above postcondition defined by $\textit{SP}$ is the strongest postcondition with
+respect to our flattened-memory symbolic execution semantics, under the following two assumptions. 
+
+\smallskip
+\noindent\emph{Assumptions.}
+The proposition is stated for a single $\textit{SP}(\mathcal{F},P,p_{\textit{start}},p)$ call in
+Algorithm~\ref{alg:funspec-gen} that satisfies the assumptions below; the algorithm invokes $\textit{SP}$ multiple times, and the proposition applies independently to each call whose interval satisfies them. Let $\Pi(p_{\textit{start}},p)$ be the
+feasible paths explored by the immediately preceding
+$\mathrm{SEStart}(\mathcal{F},P,p_{\textit{start}})$. We assume:
+\begin{enumerate}[label=(A\arabic*),leftmargin=*]
+  \item \emph{(Scope conditions, enforced by the algorithm.)} \toolname\ targets \emph{self-contained} programs with no external calls. Within this scope, the interval from $p_{\textit{start}}$ to $p$ is loop-free (when $p$ is itself a loop entry, the loop body and back-edge are \emph{not} included), and every accessed memory location and aliasing relation is representable in the flattened memory model. By construction, Algorithm~\ref{alg:funspec-gen} only invokes $\textit{SP}$ on intervals that meet these conditions; intervals failing any of them are diverted to the LLM-fallback layer of Section~\ref{sec:llm-fallback}.
+  \item \emph{(Semantic exactness, the substantive assumption.)} At the semantic level, $\mathrm{SEStart}$ is path-complete on the
+  interval, branch feasibility is exact, and each primitive symbolic transfer
+  is exact with respect to the flattened-memory semantics.
+\end{enumerate}
+We write $\sigma_{p,\pi}$ also for the conjunction of equalities encoding the
+symbolic store at program point $p$ along path $\pi$.
+
+\smallskip
+\noindent\emph{Definitions (standard partial-correctness reading).}
+Let the interval from $p_{\textit{start}}$ to $p$ denote the relation
+$R=\{(s_0,s)\mid s_0\models P,\ s \text{ is reached at } p \text{ by executing the interval from } s_0\}$
+of initial/current state pairs. We write $\{P\}\,\text{interval}\,\{Q\}$ when every
+pair in $R$ satisfies $Q$. An assertion $\Phi$ is the \emph{strongest
+postcondition} $\mathrm{sp}(P,\text{interval})$ when $\{P\}\,\text{interval}\,\{\Phi\}$
+holds and $\Phi\models Q$ for every $Q$ with $\{P\}\,\text{interval}\,\{Q\}$;
+equivalently, the pairs satisfying $\Phi$ are exactly $R$.
+
+\begin{proposition}[Local strongest-postcondition guarantee for covered loop-free intervals]
+\label{thm:sp-sound-complete}
+Under assumptions \textup{(A1)} and \textup{(A2)}, the formula returned by
+$\textit{SP}$,
+\[
+\Phi_{\mathit{SP}} =
+\bigvee_{\pi \in \Pi(p_{\textit{start}},p)}
+   (PC_\pi \land \sigma_{p,\pi}),
+\]
+denotes exactly the reachable pairs at $p$: every pair in $R$ satisfies
+$\Phi_{\mathit{SP}}$, and every pair satisfying $\Phi_{\mathit{SP}}$ lies in $R$.
+The two directions identify the pairs satisfying $\Phi_{\mathit{SP}}$ with $R$, so
+$\Phi_{\mathit{SP}}$ is the strongest postcondition
+$\mathrm{sp}(P,\text{interval})$ for the interval from $p_{\textit{start}}$ to
+$p$: $\Phi_{\mathit{SP}}\models Q$ for every $Q$ with
+$\{P\}\,\text{interval}\,\{Q\}$.
+\end{proposition}
+
+\begin{proof}
+By (A2), $\mathrm{SEStart}$ explores exactly the feasible paths
+$\Pi(p_{\textit{start}},p)$, and we first establish a per-path invariant: for a
+fixed $\pi\in\Pi(p_{\textit{start}},p)$, induction over the statements of $\pi$
+shows that $(s_0,s)\models PC_\pi\land\sigma_{p,\pi}$ \emph{iff} the concrete
+execution from $s_0\models P$ follows $\pi$ and reaches $p$ in state $s$. The
+base case is the initial symbolic state at $p_{\textit{start}}$, namely $P$
+together with the identity store on the locations in scope. In the step,
+assignments and memory updates transform $\sigma$ exactly by the
+primitive-transfer assumption, and a conditional conjoins the taken guard or
+its negation to $PC_\pi$; exact branch feasibility retains every feasible
+branch and discards every infeasible one.
+
+\emph{Every pair in $R$ satisfies $\Phi_{\mathit{SP}}$.} Let $(s_0,s)\in R$. By
+path-completeness (A2) the execution from $s_0$ follows some
+$\pi\in\Pi(p_{\textit{start}},p)$, so the per-path invariant gives
+$(s_0,s)\models PC_\pi\land\sigma_{p,\pi}$, hence $(s_0,s)\models\Phi_{\mathit{SP}}$.
+
+\emph{Every pair satisfying $\Phi_{\mathit{SP}}$ lies in $R$.} Let
+$(s_0,s)\models\Phi_{\mathit{SP}}$. Then $(s_0,s)$ satisfies some disjunct
+$PC_\pi\land\sigma_{p,\pi}$, so by the per-path invariant there is a concrete
+execution from $s_0\models P$ along $\pi$ that reaches $p$ in $s$; hence
+$(s_0,s)\in R$.
+
+The two directions show that the pairs satisfying $\Phi_{\mathit{SP}}$ are
+exactly $R$. For any $Q$ with $\{P\}\,\text{interval}\,\{Q\}$, every pair in $R$
+satisfies $Q$, so every pair satisfying $\Phi_{\mathit{SP}}$ satisfies $Q$, i.e.\
+$\Phi_{\mathit{SP}}\models Q$. Therefore
+$\Phi_{\mathit{SP}}=\mathrm{sp}(P,\text{interval})$.
+\end{proof}
+
+}
+
+\subsection{Default Precondition Generation}
+\label{sec:default-pre}
+%\DIFaddbegin
+The default precondition $\mathrm{DefaultPre}(\mathcal{F})$ is generated automatically and aims to be the weakest set of constraints under which symbolic execution can safely dereference every accessed atomic memory location in $\mathcal{F}$. A stronger precondition would unnecessarily restrict the input domain; a weaker one would cause the symbolic engine to abort at the first dereference and trigger the LLM fallback. $\mathrm{DefaultPre}$ therefore emits three kinds of facts: validity (ensuring each pointer points to allocated memory), separation (ensuring that distinct pointers point to initially disjoint memory regions), and bounds (restricting array lengths and integer values to finite, overflow‑free ranges). Together, these facts constitute the minimal precondition under which symbolic execution can safely handle every accessed location. Keeping the precondition as weak as possible is deliberate: a weaker precondition yields a larger input domain for symbolic execution, thereby enabling the resulting specification to characterize a broader range of program behaviors. 
+%\DIFaddend
+
+\DIFaddbegin
+The generator processes the function parameters: for each pointer (including those inside structs and arrays), it emits a validity fact; after all pointers are collected, it appends a single separation fact asserting that the initial memory regions of these pointers are pairwise disjoint. Bounds facts are added to keep index arithmetic and cell values within the safe range of the flattened memory model (e.g.\ $0 < \mathit{arr\_len} < \mathit{MAX\_LEN}$, $0 \le v \le \mathit{MAX\_VAL}$ for integer value $v$). This model is chosen because it lies at the intersection of the expressive power of QCP (our symbolic execution engine) and Frama-C/WP (our back-end verifier). Facts beyond validity, separation, and bounds (such as sortedness or sign constraints) are not emitted automatically, as they would unnecessarily tighten the precondition and are better left to the designer.
+\DIFaddend
+
+
+%The generator walks the parameter list. For each pointer reachable through a pointer-to-struct, an array, or a plain-pointer signature, it emits a validity fact denoting the corresponding memory location exists; for value-typed structs it recurses through each field. After all pointers are collected, a single separation fact over all of them ($p_1$,\,$p_2$,\,\ldots) is appended. The \emph{bounds} facts keep index arithmetic and cell values within the overflow-free range of the flattened-memory model: array lengths from sibling parameters are required positive and bounded (e.g.\ $0 < \mathit{arr\_len} < N$), and accessed integer cells are confined to a finite interval (e.g.\ $0 \le v \le N$). We target this flattened-memory model because it is the clear intersection of our two back-ends' expressive power: both QCP and Frama-C/WP support it well. Facts beyond validity, bounds, and separation (sortedness, sign constraints, callee-entry invariants) are not emitted automatically because they tighten the precondition past what symbolic execution requires and are better expressed by the designer.
+
+%\DIFaddbegin
+Designers may supply additional precondition clauses; these are conjoined with the auto-generated precondition into $PC_0$ at $p_0$ before symbolic execution begins. Fig.~\ref{fig:example} illustrates both modes: the validity and separation facts on \texttt{CheckCalFun} are auto-generated, while the range constraints on its array values and length field are designer supplied.
+%\DIFaddend
+
+\DIFaddbegin
+In contrast, for recursive pointer-linked data structures (linked lists, trees, recursive structs), the number of reachable memory cells is determined only at runtime (by the list length or tree depth). Therefore, the static generator cannot emit a finite set of validity/separation facts for the entire shape; instead, the shape must be captured by an inductive predicate. In this case $\mathrm{DefaultPre}$ delegates the generation of the inductive shape predicate to the LLM fallback layer (Section~\ref{sec:llm-fallback}), which proposes the predicate and the corresponding precondition. The non-recursive part (validity of the head pointer and of primitive fields) is still emitted by the static generator. The LLM-generated predicate and precondition clauses are kept only if Frama-C/WP accepts them.
+\DIFaddend
+
+ 

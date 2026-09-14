@@ -1,0 +1,59 @@
+\subsection{RQ6: How strong are \toolname's specifications versus the baselines?}
+\label{subsec:rq6-strength}
+
+\rev{Validity certifies that a specification is discharged by its verifier, but it does not rank how informative it is. We therefore compare accepted input domains (preconditions), normal-return guarantees (postconditions), and predicates at corresponding loop points (loop invariants) independently.}
+
+\smallskip
+\noindent\rev{\textbf{LLM judge and expert review.}}
+\rev{Each dimension uses a separate judge prompt and API call. Preconditions are classified by set inclusion between their accepted input domains; postconditions are compared by bidirectional implication over the common input domain; and invariants are compared at corresponding loop points. Thus, the two directional columns in Table~\ref{tab:strength_summary} mean more permissive for preconditions and logically stronger for postconditions and invariants. We do not aggregate them into an overall contract ranking. A missing precondition or postcondition denotes \texttt{true}. Expert review corrected 32 judge verdicts, shown as transitions in Table~\ref{tab:strength_summary}; any implication that cannot be established is included in Incomp. Appendix~\ref{app:prompt-strength-judge} gives the prompts, while Appendix~\ref{app:judge-audit} reports the configuration, reviewer background, and A/B-order audit.}
+
+\rev{Table~\ref{tab:strength_summary} shows that \toolname\ leads \autospec\ on postconditions and loop invariants. \autospec\ repeatedly samples the LLM and accumulates verifier-accepted \texttt{ensures} and invariant clauses, including many redundant, tautological, or trivially implied facts. \toolname\ instead supplies the local symbolic state at each generation boundary, directing the model to generate path-sensitive relations and inductive predicates while reducing redundant clauses.}
+
+\rev{In the primary ordering, the baselines more often declare broader accepted input domains, frequently through a missing or \texttt{true} precondition, whereas \toolname's default preconditions explicitly record runtime- and memory-safety requirements. We report this as a difference in declared permissiveness rather than an intrinsic quality advantage: a broader declared domain is meaningful only when the additional inputs are valid executions for which the contract remains meaningful.}
+
+\rev{Against \specgen, \toolname\ leads on loop invariants but \specgen\ leads on postconditions. The latter result also reflects the Java/JML and OpenJML stack, whose managed arrays and object semantics support high-level functional contracts without the pointer-validity and buffer side conditions required by ACSL and Frama-C/WP. We therefore treat this cross-language result as contextual evidence rather than a controlled comparison of generation algorithms.}
+
+\smallskip
+\noindent\rev{\textbf{Frama-C/WP cross-check.}}
+\rev{We cross-check the same complete \autospec--\toolname\ sets with separate Frama-C/WP harnesses: 698 pairs for preconditions and postconditions and 540 for invariants. With Frama-C 27.1, Alt-Ergo and Z3, and a five-second per-goal limit, the \toolname/baseline/equal/incomparable counts are 90/281/302/25, 297/7/310/84, and 56/47/22/415, respectively. A direction fails unless WP proves every obligation; unsupported harnesses and unresolved loop correspondence are also included in Incomp. WP cannot distinguish a genuinely false implication from a true implication whose proof is incomplete; both situations are recorded as Incomp. Formal implication checking is constrained by ATP timeouts and automation limits, which leave substantially more pairs incomparable, especially for loop invariants. The LLM judge followed by expert review can inspect the semantic relations in these unresolved cases and therefore yields a more complete and fine-grained classification, while WP serves as an independent formal cross-check. Fig.~\ref{fig:fc_vs_judge_strength} confirms the precondition and postcondition trends, while WP orders fewer invariants. We omit a WP cross-check for \specgen\ because translating Java/JML reference and array semantics into ACSL would confound the comparison.}
+
+\begin{figure}[t]
+\centering
+\rev{\scriptsize \tikz\filldraw[fill=figcontractfill,draw=figcontractstroke] (0,0) rectangle (.16,.16); \toolname\ side\quad
+\tikz\filldraw[fill=figgrayfill,draw=figgrayframe] (0,0) rectangle (.16,.16); \autospec\ side\\[-1pt]
+\tikz\filldraw[fill=figloopfill,draw=figloopstroke] (0,0) rectangle (.16,.16); Equal\quad
+\tikz\filldraw[fill=figgray!10,draw=figgrayframe] (0,0) rectangle (.16,.16); Incomparable}
+
+\newcommand{\strengthbar}[6]{%
+  \node[anchor=east,text=red,font=\scriptsize] at (-2,#1) {#2};
+  \path[draw=figcontractstroke,line width=.4pt,fill=figcontractfill] (0,#1-.24) rectangle (#3,#1+.24);
+  \path[draw=figgrayframe,line width=.4pt,fill=figgrayfill] (#3,#1-.24) rectangle (#4,#1+.24);
+  \path[draw=figloopstroke,line width=.4pt,fill=figloopfill] (#4,#1-.24) rectangle (#5,#1+.24);
+  \path[draw=figgrayframe,line width=.4pt,fill=figgray!10] (#5,#1-.24) rectangle (100,#1+.24);
+  \node[anchor=west,text=red,font=\tiny] at (102,#1) {#6};}
+\begin{tikzpicture}[x=.51mm,y=.52cm,every node/.style={font=\scriptsize}]
+  \path[use as bounding box] (-35,.05) rectangle (136,8.45);
+  \foreach \x in {0,25,50,75,100} {
+    \draw[figgrayframe!70,densely dotted] (\x,.65) -- (\x,7.75);
+    \node[anchor=north,text=red,font=\tiny] at (\x,.55) {\x\%};}
+
+  \node[anchor=west,text=red,font=\scriptsize\bfseries] at (0,8.08) {(a) Preconditions ($N=698$)};
+  \strengthbar{7.25}{Judge + expert}{13.75}{55.30}{99.86}{96/290/311/1}
+  \strengthbar{6.30}{WP}{12.89}{53.15}{96.42}{90/281/302/25}
+
+  \node[anchor=west,text=red,font=\scriptsize\bfseries] at (0,5.38) {(b) Postconditions ($N=698$)};
+  \strengthbar{4.55}{Judge + expert}{49.00}{51.58}{97.42}{342/18/320/18}
+  \strengthbar{3.60}{WP}{42.55}{43.55}{87.97}{297/7/310/84}
+
+  \node[anchor=west,text=red,font=\scriptsize\bfseries] at (0,2.68) {(c) Loop invariants ($N=540$)};
+  \strengthbar{1.85}{Judge + expert}{22.22}{31.85}{32.78}{120/52/5/363}
+  \strengthbar{.90}{WP}{10.37}{19.07}{23.15}{56/47/22/415}
+\end{tikzpicture}
+\caption{\rev{Dimension-wise relations for \autospec\ versus \toolname\ over identical data sets. A directional segment means a more permissive accepted domain for preconditions and a logically stronger predicate for postconditions or invariants. ``Judge + expert'' is the corrected judge result; WP checks the same implications. Right-hand counts follow the legend order.}}
+\label{fig:fc_vs_judge_strength}
+\end{figure}
+\let\strengthbar\relax
+
+\begin{finding}
+\rev{\textbf{Finding (RQ6).} Symbolic context changes where specification strength appears: \toolname\ yields more informative postconditions and stronger loop invariants than the compared systems, while the baselines' broader declared input domains mainly reflect safety assumptions that are not written explicitly. Cross-language postcondition differences are partly attributable to Java/JML's different semantic setting, so no single total ordering applies across all dimensions and languages.}
+\end{finding}

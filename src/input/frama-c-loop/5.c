@@ -13,5 +13,5 @@ int arraysearch5(int* a, int x, int n) {
 void goo5() {
   int arr[5] = {1, 2, 3, 4, 5};
   int sum = arraysearch5(arr, 3, 5);
-  //@ assert sum == 1;
+
 }

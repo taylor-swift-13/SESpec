@@ -1,0 +1,18 @@
+                                                                       
+extern int unknown_int(void);
+/*@
+  requires x<y;
+*/
+void loopy_413(int x, int y) {
+  
+  
+  
+  while (x<y) {
+    x=x+1;
+  }
+  {;
+
+}
+
+  return;
+}

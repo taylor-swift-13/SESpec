@@ -1,0 +1,71 @@
+\subsection{Our Approach} 
+
+
+
+
+\DIFaddbegin
+Fig.~\ref{fig:overallarchitecture} shows an overview of our approach. Given a function and an optional verification goal, the objective is to automatically generate loop invariants and function pre-/postconditions. If a verification goal is provided, these specifications should be sufficient to prove it; otherwise, they should capture useful functional relations exposed by the available symbolic states.
+Following the three design choices of Section~\ref{sec:intro}, symbolic execution drives the pipeline and computes path-sensitive symbolic information at the current boundary; \toolname\ injects these facts into invariant templates and ACSL skeletons, while a lightweight static route selects supporting examples and ACSL guidance. The LLM therefore receives both semantic facts from the current symbolic state and prompt support material matched to the program's syntactic features. The verifier then checks the candidate, and if it fails, the parsed verifier feedback is combined with the same local symbolic context to drive iterative refinement until a verifier-checked summary is produced. Each generation call is issued at a symbolic-execution boundary --- a loop, an unspecified callee, a recursive data structure, or a recursive function --- and once a verifier-checked summary is obtained, symbolic execution resumes from the same point using that summary.
+\DIFaddend
+
+ 
+
+ 
+\DIFaddbegin
+The \textbf{Function Specification Generation} process comprises four symbolic-execution-driven stages, as illustrated in Fig.~\ref{fig:overallarchitecture}, plus an \textbf{LLM-Fallback Layer} (Section~\ref{sec:llm-fallback}) that takes over whenever symbolic execution cannot produce a usable summary (self-recursive functions, recursive data structures, external calls, path explosion, floating-point arithmetic, or runtime errors). The four symbolic-execution-driven stages are described below. It begins with \textbf{Default Precondition Generation} (marked in green), which automatically produces memory-safety preconditions sufficient to start symbolic execution (node \circled{0} in Fig.~\ref{fig:example}); the procedure is detailed in Section~\ref{sec:default-pre}.
+\DIFaddend
+ 
+
+Using this precondition, the tool initiates symbolic execution from the function's entry point (node \circled{1} in Fig.~\ref{fig:example}). When a function call is encountered (node \circled{2} in Fig.~\ref{fig:example}), the current symbolic execution is paused and \textbf{Callee Specification Generation} is invoked (marked in purple in Fig.~\ref{fig:overallarchitecture}). It recursively processes the callee function to generate its specification (nodes \circled{3}--\circled{6} in Fig.~\ref{fig:example}). Upon completion, the tool returns to the call site, incorporates the generated pre-/postcondition of the callee, and resumes symbolic execution of the caller.
+Throughout this process, a call stack is maintained to support nested function calls. Functions are processed in a bottom-up order, and all generated function specifications are stored for reuse across different calling contexts.
+
+
+
+\begin{figure*}[!t]
+    \centering
+    \begin{tikzpicture}
+      \node[inner sep=0pt] (overviewfig) {\includegraphics[width=0.7\textwidth]{images/overview.png}};
+      \fill[white,opacity=0.16] (overviewfig.south west) rectangle (overviewfig.north east);
+    \end{tikzpicture}
+    \caption{Overview of Our Approach}
+    \label{fig:overallarchitecture}
+\end{figure*}
+
+When symbolic execution encounters a loop within the current function (node \circled{5} in Fig.~\ref{fig:example}), it pauses and
+transfers control to \textbf{Loop Invariant Generation} (marked in blue in Fig.~\ref{fig:overallarchitecture}). The Loop Analysis module is first invoked with the complete symbolic state at the loop entry and identifies different types of variables by analyzing the behavior of the loop body.
+In the presented example, the analysis produces the following results: the unchanged
+variables \texttt{pIp->len}, \texttt{pIp}, and \texttt{pIp->pkv}; and the inductive variables \texttt{i} and \texttt{chksum}. The loop guard \texttt{i < pIp->len} is also recorded, together with the meta-condition that determines whether the loop body is executed at least once (here, \texttt{0 < \textbackslash at(pIp, Pre)->len}). Subsequently, the tool generates parameterized invariant templates designed to capture various execution scenarios, such as whether the loop is entered, which variables remain unchanged, which variables evolve inductively, and how they behave. These templates are ACSL skeletons whose guards, unchanged-variable clauses, frame facts, and relation placeholders are derived from symbolic loop-entry and loop-body information. Below we present part of the generated templates for the motivation example (see Fig. \ref{fig:example} for the full set):
+
+
+{
+\footnotesize
+\[
+\begin{array}{@{}l@{}}
+
+  \texttt{loop invariant} \texttt{(0 < \textbackslash at(pIp, Pre)->len)} \\
+  \quad \texttt{==> PLACE\_HOLDER\_for\_i;} \\
+  \texttt{loop invariant} \texttt{(0 < \textbackslash at(pIp, Pre)->len)} \\
+  \quad \texttt{==> PLACE\_HOLDER\_for\_chksum;} \\
+  \texttt{loop invariant pIp == \textbackslash at(pIp, Pre);}
+
+\end{array}
+\]
+}
+These skeletons provide specific \texttt{PLACE\_HOLDER} tags for the LLM to populate (marked as the blue boxes in Fig.~\ref{fig:example}). Guided by these structured templates and symbolic execution results,
+the LLM produces loop invariants that capture useful relations among different types of variables. This symbolic-state-guided structure narrows the candidate space and makes key logical constraints explicit before the LLM fills the placeholders. For instance, the generated invariants correctly incorporate the loop-entry condition \texttt{(0 < \textbackslash at(pIp, Pre)->len)}---the critical logical constraint whose omission caused the pure-LLM failures in Section~\ref{sec:motivation}.
+
+\DIFaddbegin
+During Loop Invariant Generation, the verifier-guided refinement procedure is iteratively invoked to assess both the validity of the generated invariants and their usefulness for proving the given verification goal when such a goal is available. Depending on verifier feedback, different refinement strategies guide the LLM toward verifier-checked invariants. 
+\DIFaddend
+
+When symbolic execution of the callee is completed (node \circled{6} in Fig.~\ref{fig:example}), \textbf{Function Postcondition Generation} (marked in red in Fig.~\ref{fig:overallarchitecture}) is triggered. The resulting symbolic states are used to synthesize a postcondition that summarizes the callee's functional behavior. Upon completion, the generated pre-/postconditions are returned to the call site and reused as a functional summary in the caller (node \circled{7} in Fig.~\ref{fig:example}), enabling symbolic execution of the caller to resume without re-analyzing the callee's internal control flow. 
+
+
+
+
+
+
+
+\DIFaddbegin
+This example illustrates the full pipeline; goal-independent generation is evaluated separately in Section~\ref{sec:large-scale-experiment}.
+\DIFaddend

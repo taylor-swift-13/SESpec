@@ -1,0 +1,24 @@
+                                                                                          
+extern unsigned int unknown_uint(void);
+
+;
+
+void errorFn() {__loopgym_label_0: goto __loopgym_label_0;}
+/*@
+  requires count >= 0;
+*/
+void loopy_7(int count, int n){
+  int i;
+  
+  i=0;
+
+  while (i < 100 ){
+      count++;
+      i++;
+  }
+
+  {;
+
+}
+
+}

@@ -56,13 +56,16 @@ class LLMConfig:
     api_model:str = "claude-3-7-sonnet-20250219" # API model name, e.g., "gpt-4o"
     api_key:str = os.environ.get("OPENAI_API_KEY", "")
     base_url:str = "https://yunwu.ai/v1"
-    api_temperature = 0.2 # Temperature parameter for API calls
-    api_top_p=0.7
-    think_mode_enabled = False
-    # OpenAI reasoning models accept reasoning_effort in {minimal, low, medium, high}.
-    # Default low keeps the pipeline (7-17 sequential calls) fast; raise to high
-    # for one-off depth experiments via the REASONING_EFFORT env var.
-    reasoning_effort:str = os.environ.get("REASONING_EFFORT", "low")
+    api_temperature:float = 0.2 # Temperature parameter for API calls
+    api_top_p:float = 0.7
+    max_completion_tokens:int = 8192
+    # Generate this many independent postcondition candidates from the same
+    # prompt concurrently, then merge their ensures clauses.  One preserves
+    # the legacy single-call behavior.
+    postcondition_samples:int = 1
+    think_mode_enabled:bool = False
+    # Keep benchmark requests non-reasoning unless explicitly overridden.
+    reasoning_effort:str = os.environ.get("REASONING_EFFORT", "none")
     
 
 

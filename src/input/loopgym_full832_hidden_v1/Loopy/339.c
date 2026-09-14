@@ -1,0 +1,20 @@
+                                                                        
+extern unsigned int unknown_uint(void);
+
+void loopy_339(unsigned int y) {
+  unsigned int x = 0;
+  
+
+  while (x < 99) {
+    if (y % 2 == 0) {
+      x += 2;
+    } else {
+      x++;
+    }
+  }
+
+  {;
+
+}
+
+}
