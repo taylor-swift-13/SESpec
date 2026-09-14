@@ -30,45 +30,55 @@ At a program point $p$ on path $\pi$, let $\mathcal{L}^{\pi}_{p}$ denote the set
 \end{itemize}
 
 
-The symbolic execution of a program is defined as a transformation over sets of symbolic states, branching at conditional control flow points. Formally, execution begins at the function entry point $p_0$ with the initial symbolic state $(PC_0, \sigma_0)$, where $\sigma_0$ assigns an initial symbolic value to each location in the entry point location set $\mathcal{L}_{p_0}$, and $PC_0$ is the precondition constraining those initial values. For a program point $p$, let the set of all symbolic states reachable from $p_0$ be $\{(PC_{\pi_i}, \sigma_{p,\pi_i})\}_{i=1}^m$, where $\pi_i$ ranges over all paths from $p_0$ to $p$. The logical formula that characterizes all possible concrete states at $p$ is $\bigvee_{i=1}^{m} (PC_{\pi_i} \land \sigma_{p, \pi_i})$. At the entry point $p_0$, this formula simplifies to the precondition $PC_0 \wedge\sigma_0$. For any subsequent program point, the corresponding formula represents the postcondition that holds up to that point in execution.
+The symbolic execution of a program is defined as a transformation over sets of symbolic states, branching at conditional control flow points. Formally, execution begins at the function entry point $p_0$ with the initial symbolic state $(PC_0, \sigma_0)$, where $\sigma_0$ assigns an initial symbolic value to each location in the entry point location set $\mathcal{L}_{p_0}$, and $PC_0$ is the precondition constraining those initial values. For a program point $p$, let the set of all symbolic states reachable from $p_0$ be $\{(PC_{\pi_i}, \sigma_{p,\pi_i})\}_{i=1}^m$, where $\pi_i$ ranges over all paths from $p_0$ to $p$. \rev{The store $\sigma_{p,\pi}$ is a mapping, not a formula. We turn it into a formula over the tracked locations by equating each value at $p$ with its symbolic expression:}
+\[
+\rev{\rho(\sigma_{p,\pi})
+  \;\equiv\;\bigwedge_{\ell\in\operatorname{dom}(\sigma_{p,\pi})}
+  \ell^{p}=\sigma_{p,\pi}(\ell).}
+\]
+\rev{Here $\ell^p$ is the value of $\ell$ at $p$, while the expression $\sigma_{p,\pi}(\ell)$ uses initial symbolic values. An unchanged tracked cell retains its value at the starting point; access paths known to alias refer to the same cell. Locations outside the finite tracked set are outside the exact claim. The path condition $PC_\pi$ also uses initial symbolic values and includes the starting precondition. Thus the reachable state pairs at $p$, projected to the tracked locations, satisfy $\bigvee_{i=1}^{m}\bigl(PC_{\pi_i}\land\rho(\sigma_{p,\pi_i})\bigr)$. At entry, the store relation is the identity relation, so the formula is $PC_0$ together with those identity equalities.}
 
 
 We implement a symbolic execution procedure $\mathrm{SEStart}(\mathcal{F}, P, p_{\mathit{start}})$. Given a code segment $\mathcal{F}$ and a precondition $P$ (a formula representing symbolic states) at a starting point $p_{\mathit{start}}$, the procedure executes symbolically from $p_{\mathit{start}}$, exploring the feasible paths until it reaches the next program boundary (i.e. a loop entry, a function call, or the exit of $\mathcal{F}$), and returns the point $p$ at which it pauses. By construction, the segment from $p_{\mathit{start}}$ to $p$ contains no loop and no function call, so its input/output behavior can be summarized exactly.
 
   
+\rev{For an interval from $p_{\textit{start}}$ to $p_{\textit{end}}$, ``initial'' means the state at $p_{\textit{start}}$, even when it is not the function entry. In the proposition, $\mathcal L_{p_{\textit{end}}}$ denotes the same observable endpoint locations tracked on every feasible path; path-local locations are omitted. The claim concerns initial values and these common endpoint locations.}
 We first define the notion of a \emph{strongest postcondition} in the Hoare‑logic sense before stating the proposition for loop‑free segments.
 \begin{definition}{(Strongest Postcondition)}
-    For a segment $\mathcal{F}$ and a precondition $P$, a formula $\Phi$ is the strongest postcondition of $\mathcal{F}$ with respect to $P$, if 
+    For a segment $\mathcal{F}$ and a precondition $P$, \rev{a formula $\Phi$ over the tracked initial and reached state variables} is the strongest postcondition of $\mathcal{F}$ with respect to $P$, if
     \begin{itemize}
-        \item $\{P\}\,\mathcal{F}\,\{\Phi\}$ holds, i.e. if an execution of $\mathcal{F}$ from a state satisfying $P$ terminates, then the final state must satisfy $\Phi$.
+        \item $\{P\}\,\mathcal{F}\,\{\Phi\}$ holds, \rev{meaning every state pair $(s_0,s)$ reachable by executing $\mathcal{F}$ from $s_0\models P$ satisfies $\Phi$.}
 
-        \item For any $\Psi$ such that $\{P\}\,\mathcal{F}\,\{\Psi\}$ holds, we have $\Phi \Rightarrow \Psi$. 
+        \item For any $\Psi$ \rev{over the same tracked state-pair vocabulary} such that $\{P\}\,\mathcal{F}\,\{\Psi\}$ holds, we have $\Phi \Rightarrow \Psi$ \rev{as a relation over state pairs}.
     \end{itemize}
 \end{definition}
 
-Let $\mathcal{F}$ be a program segment from $p_{\textit{start}}$ to $p_{\textit{end}}$ and $P$ be a logical formula denoting the precondition. We define
-\[\textit{SP}(\mathcal{F},P,p_{\textit{start}},p_{\textit{end}}) = \bigvee_{\pi\in \textit{Path}(p_{\textit{start}},p_{\textit{end}})} (PC_\pi \land \sigma_{p_{\textit{end}},\pi})\] 
-where $\textit{Path}(p_{\textit{start}},p_{\textit{end}})$ is the set of feasible paths explored from $p_{\textit{start}}$ to $p_{\textit{end}}$ under $P$. Then we state the following proposition.
+Let $\mathcal{F}$ be a program segment from $p_{\textit{start}}$ to $p_{\textit{end}}$ and $P$ be a logical formula denoting the precondition. \rev{Write $\Pi=\textit{Path}(p_{\textit{start}},p_{\textit{end}})$ for the feasible paths explored under $P$, and $\Phi_{\mathit{SP}}=\textit{SP}(\mathcal{F},P,p_{\textit{start}},p_{\textit{end}})$. We define}
+\[
+\rev{\Phi_{\mathit{SP}}
+ = \bigvee_{\pi\in\Pi}\bigl(PC_\pi
+ \land\rho(\sigma_{p_{\textit{end}},\pi}|_{\mathcal L_{p_{\textit{end}}}})\bigr).}
+\]
+Then we state the following proposition.
 \begin{proposition} 
 \label{thm:sp-sound-complete}
  $\textit{SP}(\mathcal{F},P,p_{\textit{start}},p_{\textit{end}})$ is the \emph{strongest postcondition} of $\mathcal{F}$ with respect to $P$, if the following conditions hold:
  \begin{itemize}
-     \item[(A1)] Scope conditions: $\mathcal{F}$ contains no external calls (i.e., every called function has a definition), no loops, and every memory access is representable in the flattened model. 
-     \item[(A2)] Symbolic execution conditions: The symbolic execution procedure is path-complete, that is, it enumerates all feasible paths from $p_{\textit{start}}$ to $p_{\textit{end}}$ \rev{under $P$}. Furthermore, for each enumerated path $\pi$, the path condition $PC_\pi$ exactly characterizes the inputs that cause the concrete execution to follow $\pi$, and the symbolic store $\sigma_{p_{\textit{end}},\pi}$ exactly expresses the resulting concrete state at $p_{\textit{end}}$ as a function of the initial state, according to the flattened memory semantics. 
+     \item[(A1)] Scope conditions: $\mathcal{F}$ contains no external calls (i.e., every called function has a definition), no loops, and every memory access is representable in the flattened model. \rev{For every input satisfying $P$, execution of the interval is well-defined under the modeled C semantics: memory accesses, aliasing, and arithmetic operations are represented exactly and no undefined behavior occurs.}
+     \item[(A2)] Symbolic execution conditions: The symbolic execution procedure is path-complete, that is, it enumerates all feasible paths from $p_{\textit{start}}$ to $p_{\textit{end}}$ \rev{under $P$}. Furthermore, for each enumerated path $\pi$, the path condition $PC_\pi$ exactly characterizes the inputs that cause the concrete execution to follow $\pi$, and the symbolic store $\sigma_{p_{\textit{end}},\pi}$ exactly expresses the resulting concrete state at $p_{\textit{end}}$ as a function of the initial state, according to the flattened memory semantics. \rev{These statements concern the common endpoint locations; other endpoint locations are not characterized by the formula.}
  \end{itemize} 
 \end{proposition}
 \begin{proof}
-    Denote $\textit{SP}(\mathcal{F},P,p_{\textit{start}},p_{\textit{end}})$ by $\Phi$, according to the definition of strongest postcondition, we need to prove: (i) $\{P\}\,\mathcal{F}\,\{\Phi\}$ holds (soundness); (ii) for any $\Psi$ such that $\{P\}\,\mathcal{F}\,\{\Psi\}$ holds, we have $\Phi \Rightarrow \Psi$ (strongest).
+    Denote $\textit{SP}(\mathcal{F},P,p_{\textit{start}},p_{\textit{end}})$ by $\Phi$. \rev{We show that its satisfying state pairs are exactly the reachable pairs projected to the common endpoint locations; this establishes both soundness and maximality over those variables.}
 
-    (Soundness): Take any initial state $s_0$ satisfying $P$. Since $\mathcal{F}$ is loop-free and contains no external calls, its concrete execution from $s_0$ follows a single feasible path $\pi$ and terminates at some final state $s$. By (A2) path-completeness, the symbolic execution enumerates $\pi$. By (A1), every memory access is representable, so the flattened-memory semantics applied by the symbolic execution exactly matches the concrete semantics for all operations along $\pi$. Therefore, the path condition $PC_\pi$ exactly characterizes the inputs following $\pi$ and the symbolic store $\sigma_{p_{\textit{end}},\pi}$ exactly expresses the final state yielding $s = \sigma_{p_{\textit{end}},\pi}(s_0)$. Thus $(s_0, s)$ satisfies $PC_\pi \wedge \sigma_{p_{\textit{end}},\pi}$. This establishes $\{P\}\,\mathcal{F}\,\{\Phi\}$.
+    (Soundness): Take any initial state $s_0$ satisfying $P$. Since $\mathcal{F}$ is loop-free and contains no external calls, \rev{and (A1) excludes undefined behavior on this input,} its concrete execution follows a feasible path $\pi$ and reaches $p_{\textit{end}}$ in state $s$. By (A2) path-completeness, symbolic execution enumerates $\pi$. By (A1) and (A2), its flattened-memory transfers agree with the concrete execution on every tracked cell. \rev{Consequently, $PC_\pi$ holds and $\ell^{p_{\textit{end}}}=\sigma_{p_{\textit{end}},\pi}(\ell)$ for every $\ell\in\mathcal L_{p_{\textit{end}}}$ under the pair $(s_0,s)$. Hence this pair satisfies $PC_\pi\land\rho(\sigma_{p_{\textit{end}},\pi}|_{\mathcal L_{p_{\textit{end}}}})$ and therefore $\Phi$. This proves that every reachable pair satisfies $\Phi$.}
 
-    (Completeness): Assume $\{P\}\,\mathcal{F}\,\{\Psi\}$ holds. Let $(s_0, s)$ be an arbitrary pair satisfying $\Phi$, then there exists a path $\pi$ with $s_0$ satisfying $PC_\pi$ and $s = \sigma_{p_{\textit{end}},\pi}(s_0)$. By (A1) and (A2), the concrete execution from $s_0$ indeed follows $\pi$ and terminates at $s$. Moreover, the definition of $\textit{Path}(p_{\textit{start}},p_{\textit{end}})$ ensures that every enumerated path is feasible under $P$, hence $s_0$ satisfies $P$. From the assumption $\{P\}\,\mathcal{F}\,\{\Psi\}$ and the execution from $s_0$ terminates at $s$, we have the fact that $s$ satisfies $\Psi$. Thus $(s_0, s)$ satisfies $\Psi$. Because $(s_0, s)$ is arbitrary, this establishes
-    $\Phi \Rightarrow \Psi$.     
+    (Completeness): \rev{Let $(s_0,s)$ satisfy $\Phi$. Some feasible path $\pi$ then satisfies $PC_\pi$ and $\rho(\sigma_{p_{\textit{end}},\pi}|_{\mathcal L_{p_{\textit{end}}}})$ under this pair. Since $PC_\pi$ includes $P$, the initial state satisfies $P$. Exact path conditions and transfers in (A2), together with (A1), give a defined concrete execution along $\pi$ whose final state agrees with $s$ on the common endpoint locations. Thus the projected pair is reachable. If $\{P\}\,\mathcal{F}\,\{\Psi\}$ holds for any formula $\Psi$ over the same projected state variables, every reachable projected pair satisfies $\Psi$, so $\Phi\Rightarrow\Psi$. This proves the strongest-postcondition claim.}
 \end{proof}
 
 
  
-If symbolic execution is unexpectedly interrupted by unsupported program features, $\textit{SP}$ returns $\textit{SymExecFailed}$ and the affected task is handled by the LLM-based fallback layer (Section~\ref{sec:llm-fallback}). The fallback may still produce a verifier-checked specification, but it no longer carries the strongest-postcondition guarantee of Proposition~\ref{thm:sp-sound-complete}.
+If symbolic execution is unexpectedly interrupted by unsupported program features, $\textit{SP}$ returns $\textit{SymExecFailed}$ and the affected task is handled by the LLM-based fallback layer (Section~\ref{sec:llm-fallback}). \rev{If symbolic execution encounters undefined behavior, it reports an error instead of returning an exact strongest postcondition.} The fallback may still produce a verifier-checked specification, but it no longer carries the strongest-postcondition guarantee of Proposition~\ref{thm:sp-sound-complete}.
 
 \oomit{
 \smallskip
