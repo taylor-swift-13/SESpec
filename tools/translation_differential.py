@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "RESULTS/paper_data"
-OUT = DATA / "translation_semantics"
+OUT = DATA / "appendix_d_translation" / "semantic_checks"
 TIMEOUT = 1.5
 
 
@@ -30,9 +30,9 @@ def run(command, cwd=None, timeout=TIMEOUT):
 
 
 def parse(i):
-    source = next((DATA / "java_inputs").glob(f"{i:03d}_*.java"))
+    source = next((DATA / "benchmark" / "java_inputs").glob(f"{i:03d}_*.java"))
     js = source.read_text()
-    cs = (DATA / "c_inputs" / f"{i}.c").read_text()
+    cs = (DATA / "benchmark" / "c_inputs" / f"{i}.c").read_text()
     cm = re.search(r"^\s*(.*?)\s+foo" + str(i) + r"\s*\(([^)]*)\)\s*;", cs, re.M)
     cls = re.search(r"\bclass\s+(\w+)", js)
     if not cm or not cls or cm[1].strip() not in ("int", "void", "double", "long long", "const char *"):

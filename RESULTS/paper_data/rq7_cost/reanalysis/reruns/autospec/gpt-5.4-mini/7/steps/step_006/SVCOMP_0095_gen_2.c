@@ -1,0 +1,25 @@
+int mult(int n, int m);
+
+/*@
+requires m >= 0;
+requires n >= 0;
+requires n <= INT_MAX;
+requires m <= INT_MAX;
+behavior zero:
+  assumes m == 0;
+  ensures \result == 0;
+behavior positive:
+  assumes m > 0;
+  ensures \result == n * m;
+assigns \nothing;
+*/
+int mult(int n, int m) {
+
+    if (m < 0) {
+      return mult(n, -m);
+    }
+    if (m == 0) {
+      return 0;
+    }
+    return n + mult(n, m - 1);
+}

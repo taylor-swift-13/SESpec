@@ -14,6 +14,7 @@ import time
 from openai import OpenAI
 from judge_prompts import PROMPTS, RELATION_TO_VERDICT
 from judge_routing import ROUTING_VERSION, comparison_view, route_pair
+from paper_data_paths import resolve_path
 
 ROOT = Path(__file__).resolve().parents[1]
 PD = ROOT / 'RESULTS/paper_data'
@@ -21,7 +22,7 @@ DEFAULT_BASE_URL = 'https://yunwu.ai/v1'
 DEFAULT_JUDGE_MODEL = 'gpt-5.4-mini'
 BASE_URL = os.environ.get('JUDGE_BASE_URL', DEFAULT_BASE_URL)
 JUDGE_MODEL = os.environ.get('JUDGE_MODEL', DEFAULT_JUDGE_MODEL)
-OUT = Path(os.environ.get('JUDGE_OUTPUT_DIR', str(PD / 'judge_implication_pre_post_invariant_20260912')))
+OUT = Path(os.environ.get('JUDGE_OUTPUT_DIR', str(PD / 'rq6_strength/judge/implication_pre_post_invariant_20260912')))
 MODELS = ['gpt-4o', 'gpt-5-mini', 'gpt-5.4-mini', 'gpt-5']
 VERDICTS = ['B_stronger', 'A_stronger', 'equal', 'incomparable']
 
@@ -55,8 +56,8 @@ def identity(row):
 
 
 def prepare():
-    original = read(PD / 'judge_pairs/repaired_pairs.csv')
-    auto = read(PD / 'eval_autospec_698/manifest.csv')
+    original = read(PD / 'rq6_strength/judge/comparison_pairs/repaired_pairs.csv')
+    auto = read(PD / 'rq6_strength/expert/autospec_698/manifest.csv')
     rows = auto + [r for r in original if r['baseline'] == 'specgen']
     assert len(rows) == len({identity(r) for r in rows}) == 1371
     for baseline, counts in [('autospec', [74, 102, 242, 280]), ('specgen', [110, 133, 191, 239])]:
@@ -64,8 +65,8 @@ def prepare():
     for row in rows:
         row['pair_id'] = sha('|'.join(identity(row)).encode())[:20]
         for side in ['baseline', 'sespec']:
-            row[side + '_sha256'] = sha(Path(row[side + '_path']).read_bytes())
-        route = route_pair(Path(row['baseline_path']).read_text(), Path(row['sespec_path']).read_text(),
+            row[side + '_sha256'] = sha(resolve_path(row[side + '_path']).read_bytes())
+        route = route_pair(resolve_path(row['baseline_path']).read_text(), resolve_path(row['sespec_path']).read_text(),
                            'c' if row['baseline'] == 'autospec' else 'java',
                            row['baseline_func'], row['sespec_func'])
         row['comparison_bases'] = '|'.join(route['comparison_bases'])
@@ -82,8 +83,8 @@ def prepare():
                   routing_version=ROUTING_VERSION, routing_code_sha256=sha((ROOT / 'tools/judge_routing.py').read_bytes()),
                   prompts={basis: dict(system_prompt=system, user_template=template)
                            for basis, (system, template) in PROMPTS.items()},
-                  source_manifest_sha256=sha((PD / 'judge_pairs/repaired_pairs.csv').read_bytes()),
-                  autospec_manifest_sha256=sha((PD / 'eval_autospec_698/manifest.csv').read_bytes()))
+                  source_manifest_sha256=sha((PD / 'rq6_strength/judge/comparison_pairs/repaired_pairs.csv').read_bytes()),
+                  autospec_manifest_sha256=sha((PD / 'rq6_strength/expert/autospec_698/manifest.csv').read_bytes()))
     OUT.mkdir(exist_ok=True)
     if (OUT / 'config.json').exists():
         assert json.loads((OUT / 'config.json').read_text()) == config
@@ -177,9 +178,9 @@ def deterministic_result(row):
 
 def run_one(api, row):
     start = time.monotonic()
-    sources = {side: Path(row[side + '_path']).read_text() for side in ['baseline', 'sespec']}
+    sources = {side: resolve_path(row[side + '_path']).read_text() for side in ['baseline', 'sespec']}
     for side in ['baseline', 'sespec']:
-        if sha(Path(row[side + '_path']).read_bytes()) != row[side + '_sha256']:
+        if sha(resolve_path(row[side + '_path']).read_bytes()) != row[side + '_sha256']:
             raise RuntimeError('Frozen input changed')
     basis = row['comparison_basis']
     lang_a = 'c' if row['baseline'] == 'autospec' else 'java'

@@ -20,11 +20,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rerun_contract_judge as base
 from judge_prompts import PROMPTS
 from judge_routing import comparison_view
+from paper_data_paths import resolve_path
 
 ROOT = Path(__file__).resolve().parents[1]
 PD = ROOT / 'RESULTS/paper_data'
-SOURCE = PD / 'judge_implication_pre_post_invariant_gpt54_openlux_20260912'
-OUT = PD / 'judge_position_swap_gpt54_openlux_20260912'
+SOURCE = PD / 'rq6_strength/judge/implication_pre_post_invariant_gpt54_openlux_20260912'
+OUT = PD / 'rq6_strength/judge/position_swap_gpt54_openlux_20260912'
 MODEL = os.environ.get('JUDGE_MODEL', 'gpt-5.4')
 BASE_URL = os.environ.get('JUDGE_BASE_URL', 'https://api.openlux.ai/v1')
 
@@ -70,8 +71,8 @@ def run_one(api, row):
         return result
 
     baseline_language = 'c' if row['baseline'] == 'autospec' else 'java'
-    baseline_source = Path(row['baseline_path']).read_text()
-    sespec_source = Path(row['sespec_path']).read_text()
+    baseline_source = resolve_path(row['baseline_path']).read_text()
+    sespec_source = resolve_path(row['sespec_path']).read_text()
     spec_a = comparison_view(sespec_source, 'c', row['sespec_func'], basis)
     spec_b = comparison_view(
         baseline_source, baseline_language, row['baseline_func'], basis,

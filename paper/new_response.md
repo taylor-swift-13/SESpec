@@ -1,0 +1,35 @@
+# Draft response letter — incomplete
+
+Dear Dr. Yue and the Associate Editor,
+
+Thank you for considering the revision of manuscript TSE-2026-07-0653 and for forwarding the new review. We appreciate Reviewer 1's confirmation that their earlier questions have been addressed. Below are draft point-by-point responses to the Reviewer 2 comments for which revisions and supporting analyses are currently in place. Changes in the marked manuscript are shown in red.
+
+## Reviewer 2, Comment 1: Scope of generated preconditions
+
+We have removed the “weakest” and “minimal” characterization of the default precondition in Section III-B. The revised text calls it a *sufficient precondition for the supported symbolic-execution model*. Pairwise separation and finite value or length bounds are default generation choices, not semantic requirements of every C program. We now state explicitly that a contract containing `\separated` excludes executions in which those particular pointers alias, while this restriction does not mean the framework cannot handle aliasing in other supported cases. This limits the strongest-postcondition claim to executions satisfying the stated precondition and the supported memory model.
+
+## Reviewer 2, Comment 2: Specification-strength methodology and judge order
+
+We have revised RQ6 and its prompt appendix to compare preconditions, postconditions, and loop invariants separately. Preconditions are ordered by inclusion of their accepted input domains; postconditions are compared by implication on the common input domain; and invariants are compared at corresponding loop points. A missing `requires` or `ensures` clause is interpreted as `true`. The paper no longer infers a single overall strength ranking from a stronger postcondition on a narrower domain. Table VII and Fig. 4 report the dimension-wise results, and the full-set Frama-C/WP implication check provides a separate formal cross-check for the AutoSpec pairs. We state that WP's unresolved obligations cannot distinguish a false implication from one whose proof was not completed.
+
+The judge uses GPT-5.4, a 2,048-token output limit, no input truncation, and provider-default temperature, top-p, and reasoning effort. Appendix C records these settings and the A/B-order experiment; Appendix B gives the separate prompts. We repeated the judge decisions with the specification positions swapped and report the position-sensitive cross-language precondition result in Appendix C.
+
+**Evidence still to confirm before submission:** The current paper describes “judge + expert review” corrections, but the two independent human-rating CSVs and the adjudication CSV in the available evaluation package are unfilled. We will not present those corrections as completed human review in the final response without the underlying human annotations. The LLM-judge, order-swap, and WP analyses above are independently documented.
+
+## Reviewer 2, Comment 3: Symbolic-store encoding and undefined behavior
+
+Section III-A now distinguishes the symbolic store as a mapping from its logical encoding. The encoding function \(\rho\) turns a store into equalities between each tracked location at the program point and its symbolic expression over initial values. Proposition 1 uses this relation, along with the path condition, over the common tracked endpoint locations. Its assumptions now require exact representation of relevant memory and aliasing operations, path completeness, and defined execution under the modeled C semantics. The text also states that undefined behavior detected during symbolic execution is reported as an error; it does not yield an exact strongest postcondition. These changes make the proof's state relation and scope explicit.
+
+## Reviewer 2, Comment 4: Construction and semantic checks of SESpec-400
+
+Appendix D now describes the translation procedure and its limits. GPT-5.4 translated 250 FormalBench and 59 SpecGenBench Java programs to C; the other 91 cases are native C. The appendix specifies how primitive types, array lengths, allocation, control flow, and returns were adapted, and gives an example of a Java program excluded because it could not be translated into the supported C fragment. All 400 selected C programs compile under GCC C11.
+
+We also added a differential-execution check on all 309 Java/C pairs, with 16 deterministic inputs per pair. Of 4,944 inputs, 619 raised Java exceptions and were excluded from the normal-execution comparison. Of the remaining 4,325 inputs, 4,323 had matching observed returns and modified integer arrays. The other two inputs, both for case 112, triggered a negative-shift undefined-behavior check in C while Java defined the operation. Thus 308 of 309 pairs had no observed discrepancy on their tested inputs. We describe this as empirical evidence on the common defined-behavior domain, not a proof of unrestricted cross-language equivalence.
+
+## Reviewer 2, Comment 5: Effectiveness versus equal budget, and failure-inclusive cost
+
+Section VII's RQ4 text now identifies Table V as an effectiveness comparison under each method's reported configuration, not a compute-matched comparison. SESpec uses at most five complete generation attempts per program. The original AutoSpec study repeated each program five times with internal iterative synthesis and verification; ACInv's published analysis includes 1, 3, 5, and 10 augmentation cycles. These are different LLM-call, token, and verifier budgets, so Table V is not described as compute-normalized.
+
+We removed the former RQ7 cost table and revised Fig. 5 to stack the cost of valid and failed attempts in each bar. The new analysis covers all 400 gpt-5.4-mini programs for each of the five workflows and reports mean time, token use, and API calls per attempted program. In particular, failed runs contribute 48.1 of SESpec's 318.2 seconds per attempt, versus 519.4 of AutoSpec's 932.1 and 235.0 of SpecGen's 375.5. Dividing total time by the number of valid results yields 338.6, 1,462.1, and 758.6 seconds per obtained valid specification, respectively. We recovered archived costs where available; 39 AutoSpec runs each lacked one per-call token record, which we estimated from a corresponding same-model rerun step while retaining the other original records.
+
+Comments 6–8 and the remaining small editorial points are outside this first completed-issue draft and will be answered after their manuscript changes are made.
