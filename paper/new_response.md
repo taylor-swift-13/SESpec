@@ -34,6 +34,8 @@ We removed the former RQ7 cost table and revised Fig. 5 to stack the cost of val
 
 We agree that the prover logs do not establish that every residual failure originates in the verifier rather than in specification synthesis. We revised the RQ8 discussion and Finding accordingly. The paper now states that the observed failures manifest predominantly as SMT timeouts on complex proof obligations, and that Timeout, Unknown, and Failed outcomes cannot distinguish an incorrect generated specification from a correct but difficult obligation that the current ATP backend does not discharge. Our manual inspection of the programs, generated specifications, and unresolved obligations more often points to verifier limitations, particularly for complex loop, array, and heap reasoning, but we explicitly describe this as qualitative evidence that does not rule out synthesis errors in individual cases.
 
+This interpretation is also illustrated by the matrix-multiplication case in Appendix A and the industrial pipeline case in Section IX-E, where intended functional relations are generated but quantified array and heap-related obligations time out, causing the accepted specification to lose some functional clauses.
+
 ## Reviewer 2, Comment 7: Specification quality in the industrial case
 
 We agree that the 601/625 WP discharge rate measures verifier acceptance, rather than how much functional behavior the generated contracts capture. We therefore added a contract-level manual audit of all 14 functions in the industrial pipeline. We count a postcondition as functional only if it gives a non-vacuous relation between an output or return value and the inputs; in particular, `ensures \true` is not counted as functional behavior.
@@ -42,7 +44,7 @@ Ten functions have non-vacuous functional postconditions (`limit_abs`, `q_to_C`,
 
 ## Reviewer 2, Comment 8: OOPSLA benchmark overlap
 
-We checked the benchmark instances used in our evaluation and found no overlap between the evaluated OOPSLA and SyGuS subsets. The 133 SyGuS programs are linear-loop cases, whereas the 46 OOPSLA programs include 30 linear-loop and 16 nested/multi-loop cases. We therefore retain OOPSLA as a separate benchmark: its nested and multiple loops exercise a program class absent from our SyGuS subset and provide distinct evidence about invariant generation under more complex loop structure. Although later benchmark collections may incorporate or extend programs from earlier sources, our reported totals do not count any shared OOPSLA/SyGuS instance twice.
+We checked the benchmark instances used in our evaluation and found no overlap between the evaluated OOPSLA and SyGuS subsets, including the SyGuS/Code2Inv instances used in our comparison. The 133 SyGuS programs are linear-loop cases, whereas the 46 OOPSLA programs include 30 linear-loop and 16 nested/multi-loop cases. We therefore retain OOPSLA as a separate benchmark: its nested and multiple loops exercise a program class absent from our SyGuS subset and provide distinct evidence about invariant generation under more complex loop structure. Although later benchmark collections may incorporate or extend programs from earlier sources, our reported totals do not count any shared OOPSLA/SyGuS instance twice.
 
 ## Reviewer 2: Editorial points
 
