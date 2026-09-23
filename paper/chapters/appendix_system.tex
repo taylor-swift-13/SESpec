@@ -1,0 +1,214 @@
+\section{System Design and Prompt Construction}
+\label{sec:impl}
+
+\subsection{Execution and Verification Backbone}
+
+The implementation combines three off-the-shelf components: the QCP symbolic execution engine~\cite{wu2025qcppracticalseparationlogicbased,vst-a}, an LLM, and the Frama-C/WP automated verifier~\cite{cuoq2012frama}, and orchestrates them through a thin translation layer. Symbolic execution drives the pipeline and pauses at each loop and function call, where the LLM proposes the missing annotations from the exposed symbolic state and Frama-C/WP discharges the resulting proof obligations.
+
+
+The choice of QCP and Frama-C is motivated by their complementary strengths. QCP is used as the symbolic execution engine because it produces Coq-verified postconditions and, more importantly, exposes its symbolic state (path conditions plus symbolic stores) at arbitrary program points in a logical form that is directly reusable for specification synthesis. Crucially, QCP satisfies the symbolic-execution conditions of Proposition~\ref{thm:sp-sound-complete}, thereby providing the foundation for the strongest-postcondition guarantee on loop-free segments. Other widely used alternatives such as Klee~\cite{DBLP:conf/osdi/CadarDE08} are not built on Hoare logic and accordingly neither expose intermediate states at arbitrary locations nor present them in a logic-oriented form suitable for specification synthesis. QCP also has strong support for programs that manipulate complex data structures and ships with a library of verified inductive predicates and lemmas, which matches our goal of producing formally precise specifications. The gap QCP leaves --- it requires user-supplied loop invariants and callee pre-/postconditions, and it may emit lemmas that need additional Coq interactive proofs --- is exactly the gap filled by the other two components. The LLM proposes the missing invariants and specifications from the symbolic state QCP exposes; Frama-C/WP then discharges the resulting proof obligations automatically through SMT under the LLM-friendly ACSL surface syntax. The three components therefore split the work cleanly: QCP supplies the symbolic semantics, the LLM supplies the specification candidates, and Frama-C/WP closes the verification loop.
+
+%Stitching these three components together cleanly requires a translation layer, because each of them speaks a different annotation language: QCP consumes and emits QCPL (its native annotation language), the LLM is prompted in ACSL plus natural language, and Frama-C/WP verifies ACSL. The translator maintains a bidirectional bridge between ACSL and QCPL --- forward-translating ACSL clauses into QCPL during the $\mathrm{LoopInvGen}$ phase so that QCP can use them consistently across loop and function boundaries, and back-translating QCP's symbolic-state output into ACSL skeletons (for the LLM, paired with natural-language guidance) and into ACSL clauses (for Frama-C/WP verification). A deliberate design choice is that QCPL is never shown to the LLM: the model only ever sees ACSL plus natural-language guidance derived from the symbolic state. This avoids the well-documented failure mode of an LLM confusing two formally similar but semantically distinct annotation languages, and the skeleton-plus-prose discipline doubles as a pre-structured frame so that structural well-formedness is the translator's responsibility and the model is left to fill in the logical content of each placeholder. When verification fails, error information is translated into natural language together with its original context and routed back into the next LLM call, closing the loop without ever exposing the LLM to the verifier's internal representation either.
+
+Stitching these three components together requires a translation layer, because QCP, the LLM, and Frama‑C/WP each speak a different annotation language: QCPL (native to QCP), ACSL (native to Frama‑C/WP), and natural-language prompts (for the LLM). The translator maintains a bidirectional bridge between ACSL and QCPL: it translates ACSL clauses into QCPL so that QCP can use them across loop and function boundaries, and it converts QCP’s symbolic‑state output into ACSL skeletons (paired with natural‑language guidance for the LLM) and ACSL clauses (for Frama‑C/WP verification). A deliberate design choice is that the LLM never sees QCPL; it only operates on ACSL plus natural‑language guidance derived from the symbolic state. This avoids the common failure mode of confusing two formally similar but semantically distinct languages, and the skeleton‑plus‑prose discipline ensures structural well‑formedness before the LLM fills in the logical content. When verification fails, error information is translated back into natural language, together with its context, and routed into the next LLM call—closing the loop without exposing the verifier’s internal representation to the model either.
+
+\subsection{Prompt Construction}
+\label{sec:prompt}
+
+\noindent
+Every LLM call in \toolname\ follows a fixed template, but the concrete prompt is specialized to the input program. A lightweight static classifier inspects the source code and assigns each program to one of five routes: recursive data structure, recursive program, array, numeric, and plain, where plain is the default route for programs that do not need helper definitions. The selected route determines which worked examples, category-specific ACSL guidance, and route-specific rule fragments are inserted on top of the universal ACSL pitfalls block. Thus, the same template yields substantively different prompts for, say, a numeric recurrence and a linked-list cursor.
+
+This routing drives the five LLM call sites in the pipeline: loop invariant generation, precondition generation, postcondition/assigns generation, syntax repair, and verifier-guided semantic refinement. In addition, the symbolic executor supplies the state-dependent content of each prompt --- the variable state and the path constraints --- together with an annotation skeleton to be completed by the LLM. At refinement time, the verifier's typed error categories are additionally folded into the prompt. All prompt templates are listed in \rev{Section~\ref{app:prompts}}.
+
+\subsection{Full Prompt Templates}
+\label{app:prompts}
+
+This section lists the templates used by the main LLM call sites referenced in Section~\ref{sec:prompt}, abridged to their static skeleton and runtime slots (the verbose in-prompt admonitions are elided). Each template's static body is shown in black; runtime-injected slots appear in gray with colored tags from the shared figure palette: \DiffTag{figloop}{LOOP/SYMBOLIC} for loop-aware symbolic context, \DiffTag{figcall}{ROUTE/CALL} for route and call-site context, and \DiffTag{figcontract}{VERIFIER/SPECIFICATION} for verifier errors and specification edits.
+
+
+\PromptSubsubsection{Loop-invariant generation}{app:prompt-loop}
+
+The example below is a filled loop-invariant prompt for a small branch-then-loop program, with the long example and guidance blocks elided.
+
+\begin{tcolorbox}[promptboxcompact, title={Loop-invariant generation prompt}]
+\begin{lstlisting}[style=PromptInnerCompact]
+### Role / Task ###
+Given a C program with a loop, generate ACSL loop invariants
+that let Frama-C verify it.
+
+(*@\DiffTag{figcall}{ROUTE}\quad{\normalfont\itshape\color{gray!60!black}examples + ACSL helper policy for the matched route, omitted}@*)
+(*@\DiffTag{gray}{GUIDANCE}\quad{\normalfont\itshape\color{gray!60!black}strength / supplementary / assertion guides, omitted}@*)
+
+### Rules ###
+- Only fill the loop-invariant PLACE_HOLDERs (or add a helper block
+  before the function); keep existing annotations unchanged.
+- Use the pre-condition, not \at(var, LoopEntry).
+- Emit one self-contained ```c``` block.
+
+(*@\DiffTag{figloop}{SYMBOLIC STATE}\quad{\normalfont\itshape\color{gray!60!black}supplied by the symbolic executor}@*)
+Pre-condition:
+    (\at(a,Pre)==0 && y==0 && x==1 && a==\at(a,Pre))
+ || (\at(a,Pre)!=0 && y==0 && x==0 && a==\at(a,Pre))
+
+Loop + skeleton to complete:
+/*@
+  loop invariant (\at(a,Pre)!=0) ==> ((y<100000) ==> PLACE_HOLDER_x);
+  loop invariant (\at(a,Pre)!=0) ==>
+                 (!(y<100000) ==> (y==0 && x==0 && a==\at(a,Pre)));
+  loop invariant (\at(a,Pre)!=0) ==> (a==\at(a,Pre));
+  ... (symmetric a==0 branch omitted) ...
+*/
+while (y < 100000) { x = x + y; y = y + 1; }
+\end{lstlisting}
+\end{tcolorbox}
+
+\PromptSubsubsection{Precondition fallback}{app:prompt-pre}
+
+\begin{tcolorbox}[promptboxcompact, title={Precondition fallback prompt}]
+\begin{lstlisting}[style=PromptInnerCompact]
+### Role: ###
+Generate ONLY function-level preconditions plus supporting
+predicate/logic declarations needed by them.
+
+### Goal: ###
+Rule out Frama-C runtime errors:
+- pointer dereferences must be covered by \valid or
+  \valid_read;
+- array ranges must cover all indexed accesses;
+- inductive data structures use structural predicates from
+  examples.
+
+(*@\DiffTag{figcall}{ROUTE EXAMPLES}\color{gray!65!black}@*)
+{examples}
+
+### Output format: ###
+Output exactly one fenced ```acsl``` block:
+/*@ predicate <name>(...) = ...; */
+/*@ logic <type> <name>(...) = ...; */
+/*@
+  requires <clause>;
+*/
+
+### Hard rules: ###
+- Output only ACSL annotations.
+- Produce requires only: no ensures, assigns, or loop invariant.
+- Each predicate or logic declaration lives in its own /*@ ... */ block.
+
+Function under specification:
+{code}
+\end{lstlisting}
+\end{tcolorbox}
+
+\PromptSubsubsection{Postcondition and assignment generation}{app:prompt-post}
+
+\begin{tcolorbox}[promptboxcompact, title={Postcondition / assignment generation prompt}]
+\begin{lstlisting}[style=PromptInnerCompact]
+### Task: ###
+Transform the following C code into an ACSL-annotated version.
+
+### Rules: ###
+- Only fill ensures PLACE_HOLDER and assigns PLACE_HOLDER.
+- The input is a complete C file; callee specifications are
+  read-only context.
+- Output only the modified target function block. The
+  harness splices it back into the original file.
+- Helper predicate/logic definitions are allowed and required
+  if the target specification references a name not already defined.
+- Replace the ensures PLACE_HOLDER with as many strong, non-redundant
+  clauses as the behavior admits (typically 3-8): the closed-form
+  result, per-branch facts, and frame consequences.
+- Inline relations directly in ensures; add a predicate/logic helper
+  only when the relation is recursive or higher-order.
+
+(*@\DiffTag{figloop}{LOOP-AWARE DERIVATION}\color{gray!65!black}@*)
+{loop_guide}
+
+### ACSL pitfalls ###
+(*@\DiffTag{figcall}{UNIVERSAL + SYMBOLIC-ROUTE HINTS}\color{gray!65!black}@*)
+{category_hints}
+
+(*@\DiffTag{figloop}{RESOLVED ARRAY SIZES}\color{gray!65!black}@*)
+{array_length_facts}
+
+### C Program Code: ###
+{code}
+\end{lstlisting}
+\end{tcolorbox}
+
+\PromptSubsubsection{Syntax repair}{app:prompt-syntax}
+
+A deterministic ACSL fixer (Section~\ref{sec:refinement}) runs before this prompt and clears the common mechanical faults; the template below is the LLM fallback used only when the fixer cannot resolve the parser error.
+
+\begin{tcolorbox}[promptboxcompact, title={Syntax-repair prompt}]
+\begin{lstlisting}[style=PromptInnerCompact]
+### Role: ###
+You are an expert in C and Frama-C.
+
+### Task: ###
+Correct syntactically incorrect ACSL annotations using
+Frama-C errors.
+
+Syntax error:
+(*@\DiffTag{figcontract}{VERIFIER ERROR}\color{gray!65!black}@*)
+{error_str}
+
+C code with incorrect ACSL annotations:
+{c_code}
+
+### ACSL pitfalls ###
+(*@\DiffTag{figcall}{UNIVERSAL + SYMBOLIC-ROUTE HINTS}\color{gray!65!black}@*)
+{category_hints}
+
+### Rules: ###
+- Do not modify function bodies or signatures.
+- Only change ACSL annotations.
+- New top-level predicate/logic blocks may be added before
+  the function.
+- If an unbound logic/predicate name is reported, define it
+  or remove every clause that references it.
+\end{lstlisting}
+\end{tcolorbox}
+
+\PromptSubsubsection{Verifier-guided semantic refinement}{app:prompt-refine}
+
+Fig.~\ref{fig:prompt-refine} gives the refinement prompt used by the verifier-guided refinement loop of Section~\ref{sec:refinement}.
+
+\begin{figure}[H]
+\centering
+\begin{tcolorbox}[promptboxcompact, title={Verifier-guided refinement prompt}, width=\columnwidth]
+\begin{lstlisting}[style=PromptInnerCompact]
+### Task: ###
+Frama-C reports verification failures grouped by category. Each category
+has a different fix strategy; only relevant strategies are shown.
+
+### Categorized errors ###
+(*@\DiffTag{figcontract}{ACTIVE ERROR BUCKETS}\color{gray!65!black}@*)
+{error_str}
+
+### Per-category fix strategy ###
+(*@\DiffTag{figcontract}{ACTIVE STRATEGIES ONLY}\color{gray!65!black}@*)
+{strategy_blocks}
+
+### Current C code with annotations ###
+{c_code}
+
+(*@\DiffTag{figloop}{LOOP-AWARE DERIVATION}\color{gray!65!black}@*)
+{loop_guide}
+
+### ACSL pitfalls ###
+(*@\DiffTag{figcall}{UNIVERSAL + SYMBOLIC-ROUTE HINTS}\color{gray!65!black}@*)
+{category_hints}
+
+### Output rules ###
+- The target function's requires may be strengthened when necessary.
+(*@\DiffTag{figcontract}{EDIT MODE}\color{gray!65!black}@*)
+{output_format_block}
+- Do not modify user assert statements.
+- Do not modify correct loop invariants or correct postconditions.
+- Wrap the corrected target block, or the complete file in full-file mode,
+  in one ```c``` fenced block.
+\end{lstlisting}
+\end{tcolorbox}
+\caption{Verifier-guided semantic refinement prompt.}
+\label{fig:prompt-refine}
+\end{figure}

@@ -38,3 +38,28 @@ $\textit{nV} \gets \mathrm{FetchNonInductiveVars}(\mathcal{S})$\;
 \end{algorithm}
 
 $\mathrm{LoopAnalysis}$ (Algorithm~\ref{alg:loop-analysis}) symbolically executes a single-iteration unfolding $\mathcal{F}_{\textit{unfolded}}$ of the loop body (Lines~1--4) and then advances through it one program point at a time (Lines~5--15), exposing the update and frame facts of one iteration. The key difference from $\mathrm{FuncSpec}$ lies in the handling of nested loops: whereas the outer loop uses symbolic-execution-derived preconditions and templates to guide LLM synthesis ($\mathrm{OuterLoopLLMCall}$), an inner loop is processed purely through $\mathrm{NestedLoopLLMCall}$ (Lines~10--12), which infers its invariant directly from the code context without preconditions or templates, because a well-defined precondition is not available at the enclosing loop boundary. Nested loops are thus discharged bottom-up using the loop stack $\textit{lS}$, while function calls are handled consistently with $\mathrm{FuncSpec}$ through the call stack $\textit{cS}$ (Lines~13--14): the callee is summarized before symbolic execution of the unfolded body resumes. Once the unfolded body has been fully executed, its final postcondition is constructed and all nested loops are annotated with the invariants generated for them; this postcondition is then used to classify the unchanged variables $\textit{uV}$ and non-inductive variables $\textit{nV}$ of the outer loop (Lines~16--18).
+
+The driving $\mathrm{LoopInvGen}$ procedure (Algorithm~\ref{alg:loopinv-gen}) wraps $\mathrm{LoopAnalysis}$ with template generation ($\mathrm{LoopInvTemGen}$), a single $\mathrm{OuterLoopLLMCall}$, and a verification-and-refine pass.
+
+\begin{algorithm}[htbp]
+\caption{Loop Invariant Generation $\mathrm{LoopInvGen}$}
+\label{alg:loopinv-gen}
+\small
+\KwIn{function $\mathcal{F}$, loop entry $p_{\textit{loop}}$, loop stack $\textit{lS}$, call stack $\textit{cS}$, annotated functions $\textit{aF}$, loop precondition $P$, LLM}
+\KwOut{function $\mathcal{F}$ annotated with loop invariant $\mathcal{I}$ for the loop $\mathcal{F}_{\textit{loop}}$ at $p_{\textit{loop}}$}
+
+\tcp{\small \textit{$\mathcal{F}_{\textit{loop}}$ is the loop body at $p_{\textit{loop}}$ in $\mathcal{F}$}}
+$\mathrm{ThinkInNaturalLanguage}(\mathcal{F}_{\textit{loop}},\textit{LLM})$\;
+$\textit{lS}.\mathrm{push}(\mathcal{F}_{\textit{loop}})$\;
+$\mathcal{F}_{\textit{loop}}, \textit{uV}, \textit{nV} \gets \mathrm{LoopAnalysis}(\mathcal{F}_{\textit{loop}},P,\textit{lS},\textit{cS},\textit{aF},\textit{LLM})$\;
+$\textit{lS}.\mathrm{pop}()$\tcp*{\small \textit{$\textit{lS}$ depth is unchanged across this call}}
+$\mathcal{T} \gets \mathrm{LoopInvTemGen}(\mathcal{F}_{\textit{loop}},P,\textit{uV},\textit{nV})$\;
+$\mathcal{I} \gets \mathrm{OuterLoopLLMCall}(\mathcal{F},\mathcal{F}_{\textit{loop}},P,\mathcal{T},\textit{LLM})$\;
+$\mathcal{F} \gets (\mathcal{F},\mathcal{I})$\;
+
+\If{$\neg \mathrm{Verify}(\mathcal{F})$}{
+    $\mathcal{F} \gets \mathrm{Refine}(\mathcal{F},\mathcal{I},P,\textit{loop},\textit{LLM})$\;
+}
+
+\Return $\mathcal{F}$\;
+\end{algorithm}

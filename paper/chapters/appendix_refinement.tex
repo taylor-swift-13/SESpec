@@ -1,12 +1,67 @@
-\section{Refinement Budget Ablation}
+\section{Refinement Procedure and Budget Ablation}
 \label{app:refine-ablation}
 
-Fig.~\ref{fig:refine-ablation} isolates the effect of refinement budget on gpt-5.4-mini. The cumulative \emph{Valid} rate rises from \(24.2\%\) at \(k{=}0\) to \(60.2\%\) at \(k{=}3\), \(73.0\%\) at \(k{=}5\), and \(79.2\%\) at \(k{=}10\), and then reaches \(93.3\%\) after the final Houdini pass. The marginal gain after \(k{=}5\) is smaller, while Houdini contributes a final \(+14.1\)\,pp by pruning failing clauses from the best refinement snapshots. In contrast, the \emph{trivial refine} ablation, which uses only a plain error-plus-code prompt, reaches \(70.0\%\) under the same 10-iteration budget and final Houdini pass. This shows that differential refinement prompts and best rollback together account for roughly 23\,pp of additional validity.
+Algorithm~\ref{alg:inv-repair} gives the verifier-guided refinement procedure of Section~\ref{sec:refinement}, and Table~\ref{tab:refine-strategy} gives the category-to-strategy mapping used by its strategy-driven layer. Fig.~\ref{fig:refine-ablation} then isolates the effect of refinement budget on gpt-5.4-mini. The cumulative \emph{Valid} rate rises from \(24.2\%\) at \(k{=}0\) to \(60.2\%\) at \(k{=}3\), \(73.0\%\) at \(k{=}5\), and \(79.2\%\) at \(k{=}10\), and then reaches \(93.3\%\) after the final Houdini pass. The marginal gain after \(k{=}5\) is smaller, while Houdini contributes a final \(+14.1\)\,pp by pruning failing clauses from the best refinement snapshots. In contrast, the \emph{trivial refine} ablation, which uses only a plain error-plus-code prompt, reaches \(70.0\%\) under the same 10-iteration budget and final Houdini pass. This shows that differential refinement prompts and best rollback together account for roughly 23\,pp of additional validity.
+
+\begin{algorithm}[t]
+\caption{Verifier-Guided Refinement $\mathrm{Refine}$}
+\label{alg:inv-repair}
+\small
+\KwIn{$\mathcal{F}$ with candidate annotation  $\mathcal{A}_{0}$, symbolic context $\Gamma$, target kind $k \in \{\textit{loop},\textit{spec}\}$, \textit{LLM}}
+\KwOut{$\mathcal{F}^*$ with verifier-checked annotation $\mathcal{A}^*$}
+
+$\mathcal{A} \gets \mathcal{A}_{0}$\;
+$\mathcal{F}^{-} \gets \mathcal{F} - \mathcal{A}_{0}$\;
+
+\While{$\mathit{Errors} \gets \neg \mathrm{Verify}(\mathcal{F})$}{
+    \If{reach iteration limit}{
+        \tcp{\small \textit{Layer 3: Houdini-style pruning}}
+        $\mathcal{A} \gets \mathrm{Houdini}(\mathcal{F}^{-},\mathcal{A},\mathit{Errors})$\;
+        $\mathcal{F} \gets (\mathcal{F}^{-},\mathcal{A})$\;
+        $\textbf{break}$\;
+    }
+    \uIf{$\mathit{Errors} = \textit{syntax error}$}{
+        \tcp{\small \textit{Layer 1: syntax repair}}
+        $\mathcal{A} \gets \mathrm{RepairCallLLM}(\mathcal{A},\Gamma,\mathit{Errors})$\;
+    }
+    \Else{
+        \tcp{\small \textit{Layer 2: strategy-driven refinement or regeneration}}
+        $\mathit{guidance} \gets \mathrm{BuildGuide}(\mathrm{Classify}(\mathit{Errors},k),\Gamma)$\;
+        $\mathcal{A} \gets \mathrm{RefineCallLLM}(\mathcal{A},\Gamma,\mathit{guidance})$\;
+    }
+    $\mathcal{F} \gets (\mathcal{F}^{-},\mathcal{A})$\;
+}
+
+\Return $\mathcal{F}$\;
+\end{algorithm}
+
+\begin{table*}[t]
+\centering
+\setlength{\tabcolsep}{5pt}
+\caption{Refinement strategies by verifier-failure category.}
+\label{tab:refine-strategy}
+\begin{tabular}{@{}p{0.14\textwidth}p{0.38\textwidth}p{0.40\textwidth}@{}}
+\toprule
+\textbf{Target} & \textbf{Verifier feedback} & \textbf{Refinement strategy} \\
+\midrule
+\multirow{4}{*}{Loop invariant}
+ & Establishment (base) obligation fails & Drop or guard facts not implied by the pre-loop state. \\
+ & Preservation obligation fails & Rebuild the inductive relation from the loop body's one-step effect. \\
+ & Invariant holds but the downstream goal or assertion is unproved & Add loop-exit consequences linking the negated guard to the inductive and unchanged facts. \\
+ & Several invariants fail or the candidate is globally inconsistent & Discard the candidate and regenerate from the original template. \\
+\midrule
+\multirow{4}{*}{Function specification}
+ & Target postcondition obligation fails & Drop over-strong claims or split them into path-sensitive clauses. \\
+ & Callee-instance obligation fails at a call site & Strengthen caller-side facts before the call, or weaken an over-strong callee precondition. \\
+ & Postcondition holds but a user assertion still fails & Add the missing bridge facts to the specification or to the loop-exit facts. \\
+ & Frame (\texttt{assigns}) obligation fails & Add only the missing externally visible locations. \\
+\bottomrule
+\end{tabular}
+\end{table*}
 
 \begin{figure}[!htbp]
 \centering
-\resizebox{0.90\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm,y=0.10cm,font=\LARGE,every node/.style={text=figgraytext}]
+\begin{tikzpicture}[x=0.62cm,y=0.068cm,font=\footnotesize,every node/.style={text=figgraytext}]
   % Ours: full \toolname\ refine pipeline (SE-driven context, structured prompts,
   % rollback, ACSL fixer); trivial: minimal "fix-it" prompt, no rollback,
   % no ACSL fixer, no SE context. Both run with refine budget 10 + final Houdini.
@@ -56,7 +111,6 @@ Fig.~\ref{fig:refine-ablation} isolates the effect of refinement budget on gpt-5
   \draw[figloopstroke,line width=1pt] (7.8,11) circle (4pt);
   \node[anchor=west] at (8.5,11) {trivial refine};
 \end{tikzpicture}
-}%
 \caption{Cumulative \emph{Valid} rate on gpt-5.4-mini over 400 cases as the refinement budget \(k\) increases, for the full \toolname\ pipeline (\emph{Ours}) versus a \emph{trivial refine} baseline.}
 
 \label{fig:refine-ablation}
