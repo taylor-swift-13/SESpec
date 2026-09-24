@@ -5,14 +5,19 @@
 #   main.pdf     main body only, no red; appendix references read
 #                "Appendix X in the supplementary material" (resolved via whole.aux).
 #   appendix.pdf appendix only, no red; labels/citations resolve against whole.aux.
-#   diff.pdf     latexdiff markup version with red (not rebuilt by this script).
+#   diff.pdf     complete version with September 2026 revision marks in red
+#                (\rev spans, differences against history/v2.pdf); same content
+#                and pagination as whole.pdf, appendix refs are in-PDF jumps.
+#                The legacy latexdiff pipeline (diff.tex + diff_chapters/) is
+#                superseded by this build and kept only for reference.
 set -e
 cd "$(dirname "$0")"
 LATEX="pdflatex -interaction=nonstopmode"
 
 # Clean stale aux/bbl files (format changes break hyperref/xr parsing otherwise)
 rm -f whole.aux whole.bbl whole.log whole.out main.aux main.bbl main.log main.out \
-      appendix.aux appendix.bbl appendix.log appendix.out
+      appendix.aux appendix.bbl appendix.log appendix.out \
+      diff.aux diff.bbl diff.log diff.out
 
 # 1. whole (must be built first: main.pdf and appendix.pdf resolve through whole.aux)
 $LATEX -jobname=whole "\def\CLEANVERSION{1}\input{main.tex}"
@@ -33,4 +38,11 @@ $LATEX -jobname=appendix "\def\CLEANVERSION{1}\def\APPENDIXONLY{1}\input{main.te
 cp whole.aux appendix.aux
 $LATEX -jobname=appendix "\def\CLEANVERSION{1}\def\APPENDIXONLY{1}\input{main.tex}"
 
-echo "Built whole.pdf, main.pdf, appendix.pdf (diff.pdf untouched)."
+# 4. diff (default flags: \rev revision marks render red; full text with
+#    appendix, same as whole.pdf content)
+$LATEX -jobname=diff "\input{main.tex}"
+bibtex diff > /dev/null
+$LATEX -jobname=diff "\input{main.tex}"
+$LATEX -jobname=diff "\input{main.tex}"
+
+echo "Built whole.pdf, main.pdf, appendix.pdf, diff.pdf."
