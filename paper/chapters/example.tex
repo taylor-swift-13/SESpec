@@ -1,9 +1,7 @@
 
 \newcommand{\annotate}[1]{{\color{figloop!75!black} \mathsf{#1}}}
 
-Automating the generation of formal specifications for C code remains challenging due to the prevalence of complex language features such as loops, pointer manipulation, and data structures. Consider the code fragment shown in Fig.~\ref{fig:example}, which is adapted from a navigation component in an industrial control codebase. The code defines a struct \texttt{CheckCal} with three fields: an integer array \texttt{pkv[10]}, an integer field \texttt{len} representing the number of valid elements in the array, and an integer field \texttt{chksum} storing the sum of the array's elements. Function \texttt{foo} then invokes \texttt{CheckCalFun} on a \texttt{CheckCal} pointer \texttt{pIp}, with a verification goal annotated by \texttt{/*@ assert $\cdots$ */}; the callee sums the \texttt{len} elements of \texttt{pkv} via a loop and stores the result in \texttt{pIp->chksum}.
-This example exhibits diverse features: complex data structures (structs, arrays and pointers), a loop with inductive operations over arrays, and pointer-induced aliasing and side effects.
-Consequently, it faces the following challenges:
+Fig.~\ref{fig:example} shows a fragment adapted from an industrial navigation component. Its \texttt{CheckCal} struct contains an array \texttt{pkv[10]}, its valid length \texttt{len}, and a sum field \texttt{chksum}. The caller \texttt{foo} invokes \texttt{CheckCalFun}, which sums the valid elements into \texttt{chksum}; an assertion in \texttt{foo} states the verification goal. This example raises three challenges:
 \begin{itemize}
   \item \textbf{Loop reasoning:} The summation loop \texttt{for(; i<pIp->len; i++)} requires determining whether the initial state allows loop entry and, if it executes, establishing invariants that relate the partial sum to the processed array prefix.
   \item \textbf{Structs and pointers:} The procedures read and write struct fields through pointers, so specifications must account for aliasing and side effects: memory safety for dereferencing \texttt{pIp->pkv[i]}, the write effect on \texttt{pIp->chksum}, and frame properties for unchanged fields of \texttt{pIp}.
@@ -19,8 +17,7 @@ Consequently, it faces the following challenges:
 
 
 
-As shown in Fig.~\ref{fig:example}, the code is annotated with the full ACSL specifications enclosed in $/*@ ... */$, including preconditions (beginning with \texttt{requires}), postconditions (beginning with \texttt{ensures}), loop invariants (beginning with \texttt{loop\ invariant}), and verification goals (beginning with \texttt{assert}).
-Among these, the loop invariants, the default preconditions, and the postconditions are generated automatically by our tool \toolname, while the \texttt{assert} clause represents verification goals provided a priori, and the non-default preconditions shown on the designer-annotated \texttt{requires} lines of \texttt{CheckCalFun} in Fig.~\ref{fig:example} reflect additional requirements from the designers.
+Fig.~\ref{fig:example} annotates the example with ACSL \texttt{requires}, \texttt{ensures}, \texttt{loop invariant}, and \texttt{assert} clauses. \toolname\ generates the default preconditions, postconditions, and loop invariants; the assertion goal and additional \texttt{CheckCalFun} preconditions are supplied by the designers.
 
 
 Before presenting our method, we attempted to generate the specification for this example using GPT-4o, Claude 3.7 Sonnet, and \autospec, given both the preconditions and the verification goal. The loop invariants they produced, shown below, were all found to be incorrect:
@@ -40,7 +37,7 @@ Before presenting our method, we attempted to generate the specification for thi
 \]
 }
 
-The failures highlight common limitations of pure LLM-based approaches. First, all three state the same bounds invariant \texttt{0 <= i <= pIp->len} together with a partial-sum relation, but none guards the case in which the loop never executes (e.g., \texttt{pIp->len <= 0}): they assume loop entry, so even the well-formed clauses fail the base case. Even when we explicitly prompted GPT-4o to ``consider the case when the loop is not entered'', it still failed to produce the correct conditional invariant structure. Second, each tool invents a \emph{different} syntax for the array aggregate---\texttt{\textbackslash sum} with a lambda, with a quantified binder, or over a raw pointer---without defining it as an ACSL logic function; \texttt{\textbackslash sum} is not a construct that Frama-C/WP discharges by default, so these clauses are rejected as undefined.
+All three candidates include \texttt{0 <= i <= pIp->len} and a partial-sum relation, but omit the zero-iteration case (\texttt{pIp->len <= 0}); even a well-formed version therefore fails the base case. Explicitly prompting GPT-4o about this case did not produce a conditional invariant. Moreover, all three use \texttt{\textbackslash sum} without defining an ACSL logic function; their lambda, quantified-binder, and raw-pointer variants are rejected by Frama-C/WP.
  
 
  

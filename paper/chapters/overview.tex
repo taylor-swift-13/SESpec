@@ -9,11 +9,10 @@ Following the three design choices of Section~\ref{sec:intro}, symbolic executio
  
 
  
-The \textbf{Function Specification Generation} process comprises four symbolic-execution-driven stages, as illustrated in Fig.~\ref{fig:overallarchitecture}, plus an \textbf{LLM-Fallback Layer} (Section~\ref{sec:llm-fallback}) that takes over whenever symbolic execution cannot produce a usable summary (self-recursive functions, recursive data structures, external calls, path explosion, floating-point arithmetic, or runtime errors). The four symbolic-execution-driven stages are described below. It begins with \textbf{Default Precondition Generation} (marked in green), which automatically produces memory-safety preconditions sufficient to start symbolic execution (node \circled{0} in Fig.~\ref{fig:example}); the procedure is detailed in Section~\ref{sec:default-pre}.
+Fig.~\ref{fig:overallarchitecture} divides function-specification generation into four symbolic-execution-driven stages and an LLM fallback (Section~\ref{sec:llm-fallback}) for self-recursion, recursive data structures, external calls, path explosion, floating-point arithmetic, and runtime errors. The first stage, \textbf{Default Precondition Generation}, creates memory-safety conditions for symbolic execution (node \circled{0} in Fig.~\ref{fig:example}); Section~\ref{sec:default-pre} gives the details.
  
 
-Using this precondition, the tool initiates symbolic execution from the function's entry point (node \circled{1} in Fig.~\ref{fig:example}). When a function call is encountered (node \circled{2} in Fig.~\ref{fig:example}), the current symbolic execution is paused and \textbf{Callee Specification Generation} is invoked (marked in purple in Fig.~\ref{fig:overallarchitecture}). It recursively processes the callee function to generate its specification (nodes \circled{3}--\circled{6} in Fig.~\ref{fig:example}). Upon completion, the tool returns to the call site, incorporates the generated pre-/postcondition of the callee, and resumes symbolic execution of the caller.
-Throughout this process, a call stack is maintained to support nested function calls. Functions are processed in a bottom-up order, and all generated function specifications are stored for reuse across different calling contexts.
+From the default precondition, symbolic execution starts at function entry (node \circled{1} in Fig.~\ref{fig:example}). At a call (node \circled{2}), \toolname\ pauses to recursively generate the callee specification (nodes \circled{3}--\circled{6}), then applies that contract at the call site and resumes the caller. A call stack handles nested calls; generated specifications are stored for reuse, yielding bottom-up processing.
 
 
 
@@ -27,10 +26,7 @@ Throughout this process, a call stack is maintained to support nested function c
     \label{fig:overallarchitecture}
 \end{figure}
 
-When symbolic execution encounters a loop within the current function (node \circled{5} in Fig.~\ref{fig:example}), it pauses and
-transfers control to \textbf{Loop Invariant Generation} (marked in blue in Fig.~\ref{fig:overallarchitecture}). The Loop Analysis module is first invoked with the complete symbolic state at the loop entry and identifies different types of variables by analyzing the behavior of the loop body.
-In the presented example, the analysis produces the following results: the unchanged
-variables \texttt{pIp->len}, \texttt{pIp}, and \texttt{pIp->pkv}; and the inductive variables \texttt{i} and \texttt{chksum}. The loop guard \texttt{i < pIp->len} is also recorded, together with the meta-condition that determines whether the loop body is executed at least once (here, \texttt{0 < \textbackslash at(pIp, Pre)->len}). Subsequently, the tool generates parameterized invariant templates designed to capture various execution scenarios, such as whether the loop is entered, which variables remain unchanged, which variables evolve inductively, and how they behave. These templates are ACSL skeletons whose guards, unchanged-variable clauses, frame facts, and relation placeholders are derived from symbolic loop-entry and loop-body information. Below we present part of the generated templates for the motivation example (see Fig. \ref{fig:example} for the full set):
+At a loop (node \circled{5} in Fig.~\ref{fig:example}), symbolic execution pauses for \textbf{Loop Invariant Generation}. Loop Analysis uses the entry state and body to identify unchanged variables (\texttt{pIp->len}, \texttt{pIp}, \texttt{pIp->pkv}) and inductive variables (\texttt{i}, \texttt{chksum}). It records the guard \texttt{i < pIp->len} and the condition for at least one iteration, \texttt{0 < \textbackslash at(pIp, Pre)->len}. These facts instantiate ACSL templates with guards, frame clauses, and relation placeholders, illustrated below (the complete annotations appear in Fig.~\ref{fig:example}).
 
 
 {
