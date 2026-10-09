@@ -1,48 +1,55 @@
-#!/bin/bash
-# Builds the deliverable PDFs:
-#   whole.pdf    complete version (main body + appendix), no red revision marks;
-#                appendix references are clickable in-PDF jumps.
-#   main.pdf     main body only, no red; appendix references read
-#                "Appendix X in the supplementary material" (resolved via whole.aux).
-#   appendix.pdf appendix only, no red; labels/citations resolve against whole.aux.
-#   diff.pdf     complete version with September 2026 revision marks in red
-#                (\rev spans, differences against history/v2.pdf); same content
-#                and pagination as whole.pdf, appendix refs are in-PDF jumps.
-#                The legacy latexdiff pipeline (diff.tex + diff_chapters/) is
-#                superseded by this build and kept only for reference.
-set -e
+#!/usr/bin/env bash
+# Build all four standalone LaTeX entries and refresh split-document references.
+# Requires pdfLaTeX, BibTeX, and Python 3. No special TeX flags are necessary.
+set -euo pipefail
 cd "$(dirname "$0")"
-LATEX="pdflatex -interaction=nonstopmode"
-
-# Clean stale aux/bbl files (format changes break hyperref/xr parsing otherwise)
-rm -f whole.aux whole.bbl whole.log whole.out main.aux main.bbl main.log main.out \
-      appendix.aux appendix.bbl appendix.log appendix.out \
-      diff.aux diff.bbl diff.log diff.out
-
-# 1. whole (must be built first: main.pdf and appendix.pdf resolve through whole.aux)
-$LATEX -jobname=whole "\def\CLEANVERSION{1}\input{main.tex}"
-bibtex whole > /dev/null
-$LATEX -jobname=whole "\def\CLEANVERSION{1}\input{main.tex}"
-$LATEX -jobname=whole "\def\CLEANVERSION{1}\input{main.tex}"
-
-# 2. main (main body only, supplementary-material references)
-$LATEX -jobname=main "\def\CLEANVERSION{1}\def\NOAPPENDIX{1}\input{main.tex}"
-bibtex main > /dev/null
-$LATEX -jobname=main "\def\CLEANVERSION{1}\def\NOAPPENDIX{1}\input{main.tex}"
-$LATEX -jobname=main "\def\CLEANVERSION{1}\def\NOAPPENDIX{1}\input{main.tex}"
-
-# 3. appendix (appendix only; reseed aux from whole before every pass so that
-#    main-body labels and bibliography numbers resolve)
-cp whole.aux appendix.aux
-$LATEX -jobname=appendix "\def\CLEANVERSION{1}\def\APPENDIXONLY{1}\input{main.tex}"
-cp whole.aux appendix.aux
-$LATEX -jobname=appendix "\def\CLEANVERSION{1}\def\APPENDIXONLY{1}\input{main.tex}"
-
-# 4. diff (default flags: \rev revision marks render red; full text with
-#    appendix, same as whole.pdf content)
-$LATEX -jobname=diff "\input{main.tex}"
-bibtex diff > /dev/null
-$LATEX -jobname=diff "\input{main.tex}"
-$LATEX -jobname=diff "\input{main.tex}"
-
-echo "Built whole.pdf, main.pdf, appendix.pdf, diff.pdf."
+LATEX_BIN="${LATEX_BIN:-pdflatex}"
+BIBTEX_BIN="${BIBTEX_BIN:-bibtex}"
+if ! command -v "$BIBTEX_BIN" >/dev/null 2>&1; then
+  if command -v bibtex.original >/dev/null 2>&1; then
+    BIBTEX_BIN=bibtex.original
+  else
+    echo 'BibTeX is required. Set BIBTEX_BIN to its executable.' >&2
+    exit 1
+  fi
+fi
+pass() {
+  "$LATEX_BIN" -interaction=nonstopmode -halt-on-error -file-line-error "$1.tex" > "$1.build.txt" 2>&1 || {
+    tail -n 80 "$1.build.txt" >&2
+    return 1
+  }
+}
+with_bibliography() {
+  echo "Building $1.pdf"
+  pass "$1"
+  "$BIBTEX_BIN" "$1" > "$1.bib-build.txt" 2>&1 || {
+    cat "$1.bib-build.txt" >&2
+    return 1
+  }
+  pass "$1"
+  pass "$1"
+}
+# Do not delete references/*.tex; these snapshots support independent builds.
+rm -f {whole,main,appendix,diff}.{aux,bbl,blg,log,out,toc,lof,lot}
+with_bibliography whole
+python3 support/refresh_references.py whole
+with_bibliography main
+python3 support/refresh_references.py main
+echo 'Building appendix.pdf'
+pass appendix
+pass appendix
+python3 support/refresh_references.py appendix
+# Import the actual appendix page numbers and hyperlink targets into main.
+pass main
+pass main
+python3 support/refresh_references.py main
+# Keep cross-document page references in appendix current as well.
+pass appendix
+with_bibliography diff
+for entry in whole main appendix diff; do
+  if grep -E 'There were undefined references|Citation .* undefined|Reference .* undefined|multiply defined' "$entry.log"; then
+    echo "Unresolved or duplicated references in $entry.log" >&2
+    exit 1
+  fi
+done
+echo 'Built whole.pdf, main.pdf, appendix.pdf and blue-marked diff.pdf.'
