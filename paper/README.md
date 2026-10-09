@@ -8,10 +8,10 @@
 
 | 入口文件 | 对应章节目录 | 内容 | 本次编译页数 |
 | --- | --- | --- | --- |
-| `diff.tex` | `diff_chapters/` | 当前 v3 的完整正文和附录，原修订标记改为蓝色 | 27 |
-| `whole.tex` | `whole_chapters/` | 完整正文和附录，无修订标记 | 27 |
+| `diff.tex` | `diff_chapters/` | 当前 v3 的完整正文和附录，原修订标记改为蓝色 | 26 |
+| `whole.tex` | `whole_chapters/` | 完整正文和附录，无修订标记 | 26 |
 | `main.tex` | `chapters/` | 从新 whole 拆出的正文及完整参考文献 | 14 |
-| `appendix.tex` | `appendix_chapters/` | 从新 whole 拆出的附录 A–K | 13 |
+| `appendix.tex` | `appendix_chapters/` | 从新 whole 拆出的附录 A–K | 12 |
 
 四个入口都可直接使用 pdfLaTeX 编译，不需要通过命令行定义版本开关。
 导入项目后，将需要编译的入口设为主文件即可。对应的四份 PDF 已随项目附上。
@@ -54,8 +54,8 @@ bash build_pdfs.sh
 ## 本次检查
 
 四套文件均已实际编译。最终日志没有未定义的引用、未定义的文献或重复标签，
-PDF 中未发现 `??` 占位符。diff 与 whole 的逐页文本及页数完全一致。
-whole 与原 main 源码的无修订色编译结果逐页文本一致，未改写文章内容。
+PDF 中未发现 `??` 占位符。diff 与 whole 均为 26 页，但两套章节文件仍有
+早于本次文字修改的内容差异，不能视为逐页文本相同。
 
 原模板的字号替代、未使用的 `lettersize` 选项和一处约 6pt 的浮动页
 `Overfull \vbox` 警告仍存在；这些同样出现在原始 main 的基准编译中。
