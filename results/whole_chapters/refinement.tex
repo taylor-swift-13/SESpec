@@ -1,0 +1,29 @@
+\subsection{Verifier-Guided Specification Refinement}
+\label{sec:refinement}
+
+Candidates may fail to parse, fail Frama-C/WP proof, or prove too weak to discharge a supplied assertion. Refinement takes the annotated program $\mathcal F$, editable annotation region $\mathcal A_0$, saved symbolic context $\Gamma$, target kind $k\in\{\textit{loop},\textit{spec}\}$, and LLM; the rest of the program $\mathcal F^{-}$ stays fixed. It returns a verifier-checked $\mathcal A^*$ in $\mathcal F^*$, or the strongest verified subset found within the iteration budget.
+
+Algorithm~\supref{alg:inv-repair} (\appref{app:refine-ablation}) verifies each candidate while editing only $\mathcal A$. Syntax/type errors trigger syntax repair; proof failures are classified by role and $k$, and only present categories enter the next prompt. Success stops the loop; budget exhaustion triggers conservative Houdini pruning.
+
+Refinement has three layers:
+
+
+\textbf{Layer 1: syntax repair.}
+For syntax or type errors, the LLM receives only the annotation region and verifier error; Frama-C/WP rechecks its repair before semantic proof.
+
+\textbf{Layer 2: strategy-driven semantic refinement or regeneration.}
+For proof failures, \toolname\ selects strategies for the observed obligation types (loop, function, callee, frame, or assertion; Table~\supref{tab:refine-strategy}, \appref{app:refine-ablation}). The LLM sees each failure with its matching strategy and revises invalid clauses, strengthens insufficient ones, or regenerates a globally inconsistent region.
+
+\textbf{Layer 3: Houdini pruning.}
+At budget exhaustion, one Houdini pass removes verifier-identified failing clauses: loop invariants for loop refinement, or target \texttt{ensures} clauses and residual invariants for function refinement. It returns the strongest verifier-checked subset found.
+
+The loop and function versions differ only in the error categories selected by $\mathrm{Classify}(\mathit{Errors},k)$. The implementation also retains the best candidate by the lexicographic score
+\[
+\mathrm{Score}(\mathcal{F}) =
+\big(\mathbf{1}_{\mathrm{parse}},\,
+\tfrac{|\mathrm{Valid}(\mathit{VC})|}{|\mathit{VC}|},\,
+|C|\big),
+\]
+Here $\mathbf{1}_{\mathrm{parse}}$ is one iff the candidate parses, $\mathit{VC}$ is the candidate's verification conditions, $\mathrm{Valid}(\mathit{VC})$ the proved subset, and $C$ its retained clauses. The score prefers parseability, then proof ratio, then clause count. After two non-improving rounds ($\textit{patience}=2$), refinement resumes from the best candidate; Houdini also starts there at budget exhaustion.
+
+%The key is read from left to right, larger first: \toolname\ first keeps the candidate that is syntactically correct; if that ties, the one proving a larger fraction of the verification conditions; and if those also tie, the one with more retained clauses $|C|$.
