@@ -2,7 +2,11 @@
 
 Dear Dr. Yue and the Associate Editor,
 
-Thank you for considering the revision of manuscript TSE-2026-07-0653 and for forwarding the new review. We appreciate Reviewer 1's confirmation that their earlier questions have been addressed. Below we respond point by point to Reviewer 2's comments. Changes in the marked manuscript are shown in red.
+Thank you for considering the revision of manuscript TSE-2026-07-0653 and for forwarding the new review. We appreciate Reviewer 1's confirmation that their earlier questions have been addressed. Below we respond point by point to Reviewer 2's comments. Changes in the marked manuscript are shown in blue.
+
+## Manuscript length and organization
+
+To reduce the extent to which the revised manuscript exceeds the page limit, we have moved detailed algorithms, proofs, prompt templates, and additional experimental analyses to the appendices, while retaining the core methodological explanations in the main text. In particular, Section IV-A now states the loop-invariant generation algorithm's inputs, output, and objective, and explains its main stages and key design choices without relying on algorithm line references. The complete algorithms are provided in Appendix D. The final manuscript will cite the full version of the paper containing the complete technical details.
 
 ## Reviewer 2, Comment 1: Scope of generated preconditions
 
@@ -22,15 +26,15 @@ Section III-A now distinguishes the symbolic store as a mapping from its logical
 
 ## Reviewer 2, Comment 4: Construction and semantic checks of SESpec-400
 
-Appendix H now describes the translation procedure and its limits. GPT-5.4 translated 250 FormalBench and 59 SpecGenBench Java programs to C; the other 91 cases are native C. The appendix specifies how primitive types, array lengths, allocation, control flow, and returns were adapted, and gives an example of a Java program excluded because it could not be translated into the supported C fragment. All 400 selected C programs compile under GCC C11.
+Appendix H now describes the translation procedure and its limits. GPT-5.4 translated 250 FormalBench and 59 SpecGenBench Java programs to C; the other 91 cases are native C. The appendix specifies how primitive types, array lengths, allocation, control flow, and returns were adapted, and gives an example of a Java program excluded because it could not be translated into the supported C fragment. All 400 selected C programs compile under GCC C11. For SpecGen, we use the 309 original Java programs and Java translations of the 91 native-C SV-COMP programs, so its evaluation also covers all 400 corresponding programs.
 
-We also added a differential-execution check covering 4,325 comparable executions across all 309 Java/C pairs, using deterministic edge-case and seeded pseudorandom inputs. Of these executions, 4,323 had matching observed returns and modified integer arrays. The other two inputs, both for case 112, triggered a negative-shift undefined-behavior check in C while Java defined the operation. Thus 308 of 309 pairs had no observed discrepancy on their tested inputs. We describe this as empirical evidence on the common defined-behavior domain, not a proof of unrestricted cross-language equivalence.
+We also added a differential-execution check covering 4,325 comparable executions across the 309 program pairs translated from Java to C, using deterministic edge-case and seeded pseudorandom inputs. Of these executions, 4,323 had matching observed returns and modified integer arrays. The other two inputs, both for case 112, triggered a negative-shift undefined-behavior check in C while Java defined the operation. Thus 308 of 309 pairs had no observed discrepancy on their tested inputs. We describe this as empirical evidence on the common defined-behavior domain, not a proof of unrestricted cross-language equivalence.
 
 ## Reviewer 2, Comment 5: Effectiveness versus equal budget, and failure-inclusive cost
 
 Section V-E's RQ4 text now identifies Table IV as an effectiveness comparison under each method's reported configuration and explicitly describes the differences in their synthesis and verification budgets. SESpec uses at most five complete generation attempts per program. The original AutoSpec study repeated each program five times with internal iterative synthesis and verification; ACInv's published analysis includes 1, 3, 5, and 10 augmentation cycles. These are different LLM-call, token, and verifier budgets, so Table IV is not described as compute-normalized.
 
-We removed the former RQ7 cost table and revised Fig. 4 to stack the cost of valid and failed attempts in each bar. The analysis includes valid and failed attempts for all five workflows. Failed runs contribute 48.4 of SESpec's 316.4 seconds per attempt, versus 523.3 of AutoSpec's 933.8 and 235.7 of SpecGen's 377.2. Dividing total time by the number of valid results yields 336.7, 1,465.3, and 756.3 seconds per obtained valid specification, respectively.
+We removed the former RQ7 cost table and revised Fig. 4 to stack the cost of valid and failed attempts in each bar. The analysis includes valid and failed attempts for all five workflows. Failed runs contribute 48.4 of SESpec's 316.4 seconds per attempt, versus 523.3 of AutoSpec's 933.8 and 235.7 of SpecGen's 377.2. Dividing total time over the same 400 attempts by the corresponding valid-result counts (373, 255, and 198) yields approximately 339.3, 1,464.8, and 762.0 seconds per obtained valid specification, respectively.
 
 ## Reviewer 2, Comment 6: Scope of the RQ8 conclusion
 

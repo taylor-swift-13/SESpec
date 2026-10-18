@@ -1,7 +1,7 @@
   \subsection{Function Specification Generation Algorithm}
   \label{sec:functionsummary}
 
-  Algorithm~\ref{alg:funspec-gen} summarizes $\mathrm{FuncSpec}$: it combines symbolic execution with recursive callee-specification and loop-invariant generation, returning $\mathcal F$ with pre-/postconditions and loop invariants.
+  \rev{Given a function $\mathcal F$, a call stack $\textit{cS}$, and a collection of annotated functions $\textit{aF}$, $\mathrm{FuncSpec}$ returns $\mathcal F$ annotated with preconditions, postconditions, and loop invariants. Its purpose is to derive a function-level behavioral specification by composing symbolic summaries of loop-free fragments with callee specifications and loop invariants.}
 
   \begin{algorithm}[htbp]
   \caption{Function Specification Generation $\mathrm{FuncSpec}$}
@@ -36,22 +36,6 @@
   \Return $\mathcal{F}$\;
   \end{algorithm}
 
-  The algorithm works as follows. If $\mathcal{F}$ has already been annotated, it returns immediately (Lines~1--2); otherwise $\mathcal{F}$ is pushed onto the
-  call stack $\textit{cS}$ --- which records functions encountered during execution that still lack specifications --- and a fresh loop stack $\textit{lS}$ is
-  initialized for the nested loops of $\mathcal{F}$ (Lines~3--4). The default memory-safety precondition $P$ is then computed by $\mathrm{DefaultPre}$
-  (Section~\ref{sec:default-pre}) at the entry point $p_0$, which assigns initial symbolic values to all atomic memory locations reachable from the variables in
-  scope at $p_0$ (typically the function parameters), and symbolic execution begins from $p_0$ via $\mathrm{SEStart}$ (Lines~5--7); $\mathrm{SEStart}$ returns
-  the next pause point $p$ --- the next loop entry, callee site, or function exit. While $p$ has not reached the exit point $p_{-1}$ (Line~8), the exact
-  postcondition holding at $p$ is aggregated through $\textit{SP}$ over the covered loop-free interval from the symbolic-execution results and
-  $p_{\textit{start}}$ is reset to $p$ (Lines~9--10), after which the dispatch is by boundary kind (Lines~11--15): a loop entry triggers $\mathrm{LoopInvGen}$,
-  invoked with $P$ as the loop precondition and $p$ as the loop entry, returning $\mathcal{F}$ with the loop annotated by its invariant; a callee site triggers
-  a recursive $\mathrm{FuncSpec}$ on the callee to obtain its specification; and in either case symbolic execution then resumes from the updated
-  $p_{\textit{start}}$ under the freshly produced annotations. The two stacks together implement a compositional, bottom-up traversal: callee specifications are
-  derived first and reused across calling contexts, and nested loops are processed before their enclosing loops. When symbolic execution reaches the function
-  exit, $\textit{SP}$ aggregates the final postcondition $\mathcal{S}$, the annotated $\mathcal{F}$ is recorded in $\textit{aF}$, and $\mathcal{F}$ is popped
-  from $\textit{cS}$ and returned (Lines~16--19).
+  \rev{The process begins by constructing a default precondition (Section~\ref{sec:default-pre}) and initializing the symbolic state at the function entry. Symbolic execution then proceeds through loop-free regions, summarizing their path conditions and memory updates at the next loop entry, function call, or function exit. At a loop entry, the accumulated symbolic facts guide invariant generation; at an ordinary function call, the callee specification is reused if available or generated before execution continues. This bottom-up organization allows caller analysis to use callee specifications and enclosing-loop analysis to use annotations for nested loops. At the function exit, the final symbolic facts are aggregated into a postcondition, and the annotated function is recorded for reuse.}
 
-  Two design points are worth making explicit. First, Algorithm~\ref{alg:funspec-gen} presents the idealized symbolic-execution-driven main path. In practice, the LLM-fallback
-  layer described in Section~\ref{sec:llm-fallback} wraps this algorithm rather than being inlined into it. The fallback handles cases where symbolic execution cannot produce a usable
-  summary (self-recursive functions, recursive data structures, external calls, \emph{etc.}). Second, the loop-handling counterpart
-  $\mathrm{LoopInvGen}$ (Algorithm~\supref{alg:loopinv-gen} in \appref{app:loop-analysis}), invoked at Line~12, is also guided by symbolic execution. It instantiates invariant templates using the loop precondition $P$, the symbolic store and path conditions at the loop entry, and the unchanged and non-inductive variable sets extracted by $\mathrm{LoopAnalysis}$ (Section~\ref{sec:template}). The LLM then completes the template-specific invariant clauses, and the verifier-guided $\mathrm{Refine}$ step repairs them against Frama-C/WP feedback.
+  \rev{Two design choices support this composition. First, loop handling remains grounded in symbolic analysis: loop-entry facts and information about variable updates constrain the invariant templates, while the LLM supplies the missing predicates and verifier feedback guides refinement (Section~\ref{sec:template}). Second, the LLM fallback layer (Section~\ref{sec:llm-fallback}) surrounds this core procedure and handles cases where a usable symbolic summary cannot be obtained, including self-recursive functions, recursive data structures, and external calls. The symbolic-execution-driven core is shown in Algorithm~\ref{alg:funspec-gen}.}

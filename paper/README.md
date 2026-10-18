@@ -1,6 +1,7 @@
 # v3new
 
-本项目只基于上传压缩包中的 **v3/main.tex 和 v3/chapters/** 重组。
+本项目最初基于上传压缩包中的 **v3/main.tex 和 v3/chapters/** 重组。
+现在以 **diff.tex 和 diff_chapters/** 为唯一内容来源，其他三个版本由其生成。
 原压缩包顶层的 v1、v2 未作修改，也未复制进本项目。v3 原有的图片、
 参考文献数据库、IEEE 模板、审稿记录和 history 文件保持不变。
 
@@ -8,9 +9,9 @@
 
 | 入口文件 | 对应章节目录 | 内容 | 本次编译页数 |
 | --- | --- | --- | --- |
-| `diff.tex` | `diff_chapters/` | 当前 v3 的完整正文和附录，原修订标记改为蓝色 | 27 |
-| `whole.tex` | `whole_chapters/` | 完整正文和附录，无修订标记 | 27 |
-| `main.tex` | `chapters/` | 从新 whole 拆出的正文及完整参考文献 | 14 |
+| `diff.tex` | `diff_chapters/` | 当前 v3 的完整正文和附录，保留修订标记 | 27 |
+| `whole.tex` | `whole_chapters/` | 与 diff 内容一致的完整版，无修订标记 | 27 |
+| `main.tex` | `chapters/` | 从 whole 拆出的正文及完整参考文献 | 14 |
 | `appendix.tex` | `appendix_chapters/` | 从新 whole 拆出的附录 A–L | 13 |
 
 四个入口都可直接使用 pdfLaTeX 编译，不需要通过命令行定义版本开关。
@@ -18,10 +19,9 @@
 
 ## 修改范围
 
-旧 `diff.tex` 和旧 `diff_chapters/` 已被当前 main 内容替换，不再保留旧的
-latexdiff 内容。diff 中的修订文字以及使用修订色的图中文字均显示为蓝色。
-
-干净版共移除了原文件中的 172 处 `\rev{...}` 标记。**只移除修订标记，
+同步过程保持 `diff.tex` 和 `diff_chapters/` 原样，不改写论文内容。
+干净版移除 `\rev{...}`、`\yfp{...}`、`\wsl{...}` 的标记及修订颜色。
+**只移除修订标记，
 不删除其中的文字、公式或其他内容。** 必要的 LaTeX 分组花括号保留，以免
 其中的字号或格式声明影响后文。图表和代码示例原有的配色不属于修订标记，
 因此保持原样。
@@ -46,17 +46,28 @@ Overleaf 编译 whole。不要删除 `references/`。
 bash build_pdfs.sh
 ```
 
-该脚本先编译 whole，再刷新正文/附录之间的标签、计数器和文献编号，
-最后生成四份 PDF。四套章节文件互相独立；今后修改内容时，需要同步修改
-希望保持一致的版本。若增加了仅在附录出现的文献，也需更新
-`references/appendix_nocite.tex` 中相应的引用键。
+该脚本先运行 `support/sync_from_diff.py`，从 diff 生成其他三个入口及对应
+章节，并按附录中的引用顺序更新 `references/appendix_nocite.tex`。
+随后编译 whole，刷新正文/附录之间的标签、计数器和文献编号，生成四份 PDF。
+今后请在 diff 中修改内容；构建时会覆盖其他三个版本中偏离 diff 的修改。
+
+仅同步源文件或检查是否同步，可分别运行：
+
+```bash
+python3 support/sync_from_diff.py
+python3 support/sync_from_diff.py --check
+```
+
+生成后的四个入口仍可独立编译；直接使用 pdfLaTeX 或上传 Overleaf 时，
+不需要运行 Python。修改 diff 后应先在本地同步并重新构建，再上传更新文件。
 
 ## 本次检查
 
-四套文件均已实际编译。最终日志没有未定义的引用、未定义的文献或重复标签，
-PDF 中未发现 `??` 占位符。diff 与 whole 均为 27 页，但两套章节文件仍有
-早于本次文字修改的内容差异，不能视为逐页文本相同。
+2026-10-18：以当前 diff 为唯一内容来源完成同步与四版重编译。
 
-原模板仍有字号替代和未使用的 `lettersize` 选项警告。appendix 和 diff
-各有一处约 9.8pt 的 `Overfull \vbox` 警告，发生在强度表与案例附录的换页处；
-已检查渲染页面，文字和表格均未被裁切。
+四套文件均已实际编译。最终日志没有未定义的引用、未定义的文献或重复标签，
+PDF 中未发现 `??` 占位符。三个干净版本的源文件已按 diff 同步，
+`support/sync_from_diff.py --check` 可检查是否再次出现内容偏差。
+
+原模板仍有字号替代和未使用的 `lettersize` 选项警告；附录排版可能出现
+约 9.8pt 的 `Overfull \vbox` 警告。页数随内容排版变化，不作为固定约束。

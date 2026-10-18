@@ -3,6 +3,7 @@
 # Requires pdfLaTeX, BibTeX, and Python 3. No special TeX flags are necessary.
 set -euo pipefail
 cd "$(dirname "$0")"
+python3 support/sync_from_diff.py
 LATEX_BIN="${LATEX_BIN:-pdflatex}"
 BIBTEX_BIN="${BIBTEX_BIN:-bibtex}"
 if ! command -v "$BIBTEX_BIN" >/dev/null 2>&1; then
