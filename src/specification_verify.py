@@ -17,11 +17,13 @@ class SpecVerifier:
         self.assigns_error_list = []
         self.post_error_list = []
         self.instance_error_list = []
+        self.decreases_error_list = []
         self.loop_result = []
         self.assert_result =[]
         self.assigns_result = []
         self.post_result =[]
         self.instance_result=[]
+        self.decreases_result = []
        
 
     def print_errors(self, error_list):
@@ -112,6 +114,13 @@ class SpecVerifier:
             log_content += "No Postcond Results.\n"
         log_content += "\n"
 
+        log_content += "Recursion Decreases Results:\n"
+        log_content += f"{self.decreases_result}\n"
+        log_content += "Recursion Decreases Errors:\n"
+        for error in self.decreases_error_list:
+            log_content += f"- {error}\n"
+        log_content += "\n"
+
         # 添加分隔线
         log_content += '------------------------------------------------\n'
 
@@ -131,7 +140,7 @@ class SpecVerifier:
         
 
         # 计算总的正确率
-        combined_results = self.loop_result + self.assert_result + self.post_result
+        combined_results = self.loop_result + self.assert_result + self.post_result + self.decreases_result
         total_accuracy = calculate_accuracy(combined_results)
         
         accuracy_log = f'''
@@ -145,7 +154,7 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
         # print(accuracy_log)
         return accuracy_log
 
-    def extract_semantic_error(self,error_message):
+    def extract_semantic_error(self,error_message, file_path=None):
         # 使用正则表达式提取Filename和行号
         pattern = r'file\s+([\w\/\.\-]+),\s+line\s+(\d+)'
         match = re.search(pattern, error_message)
@@ -175,6 +184,12 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
             return error_location_msg, error_content_msg
         
         else:
+            # WP recursion goals omit the filename and report the call site.
+            call = re.search(r'Call decreases at line\s+(\d+)', error_message)
+            if call and file_path:
+                return self.extract_semantic_error(
+                    f"file {file_path}, line {call.group(1)}"
+                )
             return None, None
     
 
@@ -216,6 +231,10 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
 
     def filter_post_condition(self, contents):
         return [line for line in contents if line.strip().startswith("Goal Post-condition")]
+
+    def filter_decreases(self, contents):
+        return [line for line in contents
+                if line.strip().startswith("Goal Recursion variant")]
 
     def filter_instance(self,contents):
         return [line for line in contents if line.strip().startswith("Goal Instance")]
@@ -334,6 +353,22 @@ total_accuracy:  {total_accuracy:.2f}% ({sum(combined_results)}/{len(combined_re
                 print(self.post_result)
                 print('')
             # self.print_errors(self.post_error_list)
+
+            decreases = self.filter_decreases(contents)
+            self.decreases_result = self.check_target(decreases)
+            self.decreases_error_list = []
+            for item, valid in zip(decreases, self.decreases_result):
+                if not valid:
+                    location, code = self.extract_semantic_error(item, file_path)
+                    self.decreases_error_list.append((item.strip(), location, code))
+            if self.logger:
+                self._log_result_with_failures(
+                    'Recursion Decreases:', self.decreases_result, self.decreases_error_list
+                )
+            elif self.decreases_result:
+                print('Recursion Decreases:')
+                print(self.decreases_result)
+                self.print_errors(self.decreases_error_list)
 
             filter_instance = self.filter_instance(contents)
             self.instance_result = self.check_target(filter_instance)

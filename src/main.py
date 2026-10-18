@@ -766,11 +766,13 @@ class FunctionProcessor:
             loop_result = verifier.loop_result
             instance_result = verifier.instance_result
             assigns_result = getattr(verifier, 'assigns_result', None) or []
+            decreases_result = verifier.decreases_result
             syntax_error = verifier.syntax_error
             # `assigns` was split off from `assert_result` so it joins
             # the valid (contract-level) bucket here.
             valid_ = (all(post_result) and all(loop_result)
-                      and all(instance_result) and all(assigns_result))
+                      and all(instance_result) and all(assigns_result)
+                      and all(decreases_result))
             syntax_ = syntax_error == ''
             # satisfy gates on ACSL `/*@ assert */` presence in source only —
             # C library `assert(...)` macro calls do not count.

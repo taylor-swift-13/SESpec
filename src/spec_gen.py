@@ -1134,7 +1134,8 @@ class SpecGenerator:
             loop_result = verifier.loop_result or []
             syntax_ok = verifier.syntax_error == ''
 
-            if syntax_ok and all(post_result) and all(loop_result):
+            if (syntax_ok and all(post_result) and all(loop_result)
+                    and all(verifier.decreases_result)):
                 break  # Houdini converged — current set is verifiably valid
 
             if not syntax_ok:
@@ -1607,7 +1608,7 @@ class SpecGenerator:
             # contract is wrong. assigns lives here (not in satisfy) because
             # an assigns failure means the contract under-claims, a
             # contract-level fix.
-            total_v = post + loop + inst + assigns
+            total_v = post + loop + inst + assigns + verifier.decreases_result
             valid_ratio = (sum(1 for x in total_v if x) / len(total_v)) if total_v else 0.0
             # satisfy bucket = ACSL `/*@ assert ... */` proof obligations only.
             # If the source has no ACSL assert annotation, satisfy is vacuously
@@ -1646,6 +1647,7 @@ class SpecGenerator:
             valid = (
                 bool(post_result) and all(post_result)
                 and all(loop_result) and all(assigns_result)
+                and all(verifier.decreases_result)
             )
             syntax = syntax_error == ''
             satisfy = (not source_has_acsl_assert(content)) or all(assert_result)
@@ -1693,6 +1695,7 @@ class SpecGenerator:
                 'post': list(verifier.post_error_list or []),
                 'assigns': list(getattr(verifier, 'assigns_error_list', None) or []),
                 'instance': list(getattr(verifier, 'instance_error_list', None) or []),
+                'decreases': list(verifier.decreases_error_list or []),
                 'loop': list(verifier.loop_error_list or []),
                 'assert': list(verifier.assert_error_list or []),
             }
@@ -1770,6 +1773,7 @@ class SpecGenerator:
         ('post',     'Postcondition (ensures) failures', 'post.txt'),
         ('assigns',  'Assigns failures',                 'assigns.txt'),
         ('instance', 'Callee precondition (Instance) failures', 'instance.txt'),
+        ('decreases', 'Recursion decreases failures', 'decreases.txt'),
         ('loop',     'Loop invariant failures',          'loop.txt'),
         ('assert',   'Assertion failures',               'assert.txt'),
     ]
@@ -1784,7 +1788,7 @@ class SpecGenerator:
         "2. The input above is the complete file as context, so callee contracts "
         "are visible — but they are read-only in this refine round. Your output "
         "MUST contain the modified target function block: its `/*@ ... */` contract "
-        "(with whatever `requires`/`assigns`/`ensures` changes are needed to fix "
+        "(with whatever `requires`/`assigns`/`ensures`/`decreases` changes are needed to fix "
         "the reported errors) immediately followed by the function signature and "
         "body. Do NOT emit typedefs, callee function definitions, `#include`/"
         "headers, or `int main`. The harness splices the function block back "
